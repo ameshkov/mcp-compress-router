@@ -1,0 +1,14 @@
+# Incremental specs
+.sdd
+
+# Dependencies
+node_modules/
+
+# Build output
+build/
+
+# OS files
+.DS_Store
+
+# Logs
+*.log

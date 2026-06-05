@@ -1,0 +1,2941 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_add_comment_to_pending_review",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber", "path", "body", "subjectType"],
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "The text of the review comment"
+            },
+            "line": {
+              "type": "number",
+              "description": "The line of the blob in the pull request diff that the comment applies to. For multi-line comments, the last line of the range"
+            },
+            "path": {
+              "type": "string",
+              "description": "The relative path to the file that necessitates a comment"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "side": {
+              "enum": ["LEFT", "RIGHT"],
+              "type": "string",
+              "description": "The side of the diff to comment on. LEFT indicates the previous state, RIGHT indicates the new state"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "startLine": {
+              "type": "number",
+              "description": "For multi-line comments, the first line of the range that the comment applies to"
+            },
+            "startSide": {
+              "enum": ["LEFT", "RIGHT"],
+              "type": "string",
+              "description": "For multi-line comments, the starting side of the diff that the comment applies to. LEFT indicates the previous state, RIGHT indicates the new state"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            },
+            "subjectType": {
+              "enum": ["FILE", "LINE"],
+              "type": "string",
+              "description": "The level at which the comment is targeted"
+            }
+          }
+        },
+        "description": "Add review comment to the requester's latest pending pull request review. A pending review needs to already exist to call this (check with the user if not sure)."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_add_issue_comment",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "issue_number", "body"],
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "Comment content"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "issue_number": {
+              "type": "number",
+              "description": "Issue number to comment on"
+            }
+          }
+        },
+        "description": "Add a comment to a specific issue in a GitHub repository. Use this tool to add comments to pull requests as well (in this case pass pull request number as issue_number), but only if user is not asking specifically to add review comments."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_add_reply_to_pull_request_comment",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber", "commentId", "body"],
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "The text of the reply"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "commentId": {
+              "type": "number",
+              "description": "The ID of the comment to reply to"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            }
+          }
+        },
+        "description": "Add a reply to an existing pull request comment. This creates a new comment that is linked as a reply to the specified comment."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_assign_copilot_to_issue",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "issue_number"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "base_ref": {
+              "type": "string",
+              "description": "Git reference (e.g., branch) that the agent will start its work from. If not specified, defaults to the repository's default branch"
+            },
+            "issue_number": {
+              "type": "number",
+              "description": "Issue number"
+            },
+            "custom_instructions": {
+              "type": "string",
+              "description": "Optional custom instructions to guide the agent beyond the issue body. Use this to provide additional context, constraints, or guidance that is not captured in the issue description"
+            }
+          }
+        },
+        "description": "Assign Copilot to a specific issue in a GitHub repository.\n\nThis tool can help with the following outcomes:\n- a Pull Request created with source code changes to resolve the issue\n\n\nMore information can be found at:\n- https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent-to-work-on-tasks/about-assigning-tasks-to-copilot\n"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_create_branch",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "branch"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "branch": {
+              "type": "string",
+              "description": "Name for new branch"
+            },
+            "from_branch": {
+              "type": "string",
+              "description": "Source branch (defaults to repo default)"
+            }
+          }
+        },
+        "description": "Create a new branch in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_create_or_update_file",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "path", "content", "message", "branch"],
+          "properties": {
+            "sha": {
+              "type": "string",
+              "description": "The blob SHA of the file being replaced. Required if the file already exists."
+            },
+            "path": {
+              "type": "string",
+              "description": "Path where to create/update the file"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner (username or organization)"
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch to create/update the file in"
+            },
+            "content": {
+              "type": "string",
+              "description": "Content of the file"
+            },
+            "message": {
+              "type": "string",
+              "description": "Commit message"
+            }
+          }
+        },
+        "description": "Create or update a single file in a GitHub repository. \nIf updating, you should provide the SHA of the file you want to update. Use this tool to create or update a file in a GitHub repository remotely; do not use it for local file operations.\n\nIn order to obtain the SHA of original file version before updating, use the following git command:\ngit rev-parse <branch>:<path to file>\n\nSHA MUST be provided for existing file updates.\n"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_create_pull_request",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "title", "head", "base"],
+          "properties": {
+            "base": {
+              "type": "string",
+              "description": "Branch to merge into"
+            },
+            "body": {
+              "type": "string",
+              "description": "PR description"
+            },
+            "head": {
+              "type": "string",
+              "description": "Branch containing changes"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "draft": {
+              "type": "boolean",
+              "description": "Create as draft PR"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "title": {
+              "type": "string",
+              "description": "PR title"
+            },
+            "maintainer_can_modify": {
+              "type": "boolean",
+              "description": "Allow maintainer edits"
+            }
+          }
+        },
+        "description": "Create a new pull request in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_create_pull_request_with_copilot",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "problem_statement", "title"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name. You can guess the repository name, but confirm it with the user before proceeding."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner. You can guess the owner, but confirm it with the user before proceeding."
+            },
+            "title": {
+              "type": "string",
+              "description": "Title for the pull request that will be created"
+            },
+            "base_ref": {
+              "type": "string",
+              "description": "Git reference (e.g., branch) that the agent will start its work from. If not specified, defaults to the repository's default branch"
+            },
+            "problem_statement": {
+              "type": "string",
+              "description": "Detailed description of the task to be performed (e.g., 'Implement a feature that does X', 'Fix bug Y', etc.)"
+            }
+          }
+        },
+        "description": "Delegate a task to GitHub Copilot coding agent to perform in the background. The agent will create a pull request with the implementation. You should use this tool if the user asks to create a pull request to perform a specific task, or if the user asks Copilot to do something."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_create_repository",
+        "parameters": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "private": {
+              "type": "boolean",
+              "description": "Whether repo should be private"
+            },
+            "autoInit": {
+              "type": "boolean",
+              "description": "Initialize with README"
+            },
+            "description": {
+              "type": "string",
+              "description": "Repository description"
+            },
+            "organization": {
+              "type": "string",
+              "description": "Organization to create the repository in (omit to create in your personal account)"
+            }
+          }
+        },
+        "description": "Create a new GitHub repository in your account or specified organization"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_delete_file",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "path", "message", "branch"],
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the file to delete"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner (username or organization)"
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch to delete the file from"
+            },
+            "message": {
+              "type": "string",
+              "description": "Commit message"
+            }
+          }
+        },
+        "description": "Delete a file from a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_fork_repository",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "organization": {
+              "type": "string",
+              "description": "Organization to fork to"
+            }
+          }
+        },
+        "description": "Fork a GitHub repository to your account or specified organization"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_commit",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "sha"],
+          "properties": {
+            "sha": {
+              "type": "string",
+              "description": "Commit SHA, branch name, or tag name"
+            },
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "include_diff": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether to include file diffs and stats in the response. Default is true."
+            }
+          }
+        },
+        "description": "Get details for a commit from a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_copilot_job_status",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Job ID or pull request number"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            }
+          }
+        },
+        "description": "Get the status of a GitHub Copilot coding agent job. Use this to check if a previously submitted task has completed and to get the pull request URL once it's created. Provide the job ID (from create_pull_request_with_copilot) or pull request number (from assign_copilot_to_issue), or any pull request you want agent sessions for."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_file_contents",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "ref": {
+              "type": "string",
+              "description": "Accepts optional git refs such as `refs/tags/{tag}`, `refs/heads/{branch}` or `refs/pull/{pr_number}/head`"
+            },
+            "sha": {
+              "type": "string",
+              "description": "Accepts optional commit SHA. If specified, it will be used instead of ref"
+            },
+            "path": {
+              "type": "string",
+              "default": "/",
+              "description": "Path to file/directory"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner (username or organization)"
+            }
+          }
+        },
+        "description": "Get the contents of a file or directory from a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_label",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Label name."
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner (username or organization name)"
+            }
+          }
+        },
+        "description": "Get a specific label from a repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_latest_release",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            }
+          }
+        },
+        "description": "Get the latest release in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_me",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        },
+        "description": "Get details of the authenticated GitHub user. Use this when a request is about the user's own profile for GitHub. Or when information is missing to build other tool calls."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_release_by_tag",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "tag"],
+          "properties": {
+            "tag": {
+              "type": "string",
+              "description": "Tag name (e.g., 'v1.0.0')"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            }
+          }
+        },
+        "description": "Get a specific release by its tag name in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_tag",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "tag"],
+          "properties": {
+            "tag": {
+              "type": "string",
+              "description": "Tag name"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            }
+          }
+        },
+        "description": "Get details about a specific git tag in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_team_members",
+        "parameters": {
+          "type": "object",
+          "required": ["org", "team_slug"],
+          "properties": {
+            "org": {
+              "type": "string",
+              "description": "Organization login (owner) that contains the team."
+            },
+            "team_slug": {
+              "type": "string",
+              "description": "Team slug"
+            }
+          }
+        },
+        "description": "Get member usernames of a specific team in an organization. Limited to organizations accessible with current credentials"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_get_teams",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": "string",
+              "description": "Username to get teams for. If not provided, uses the authenticated user."
+            }
+          }
+        },
+        "description": "Get details of the teams the user is a member of. Limited to organizations accessible with current credentials"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_issue_read",
+        "parameters": {
+          "type": "object",
+          "required": ["method", "owner", "repo", "issue_number"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "The name of the repository"
+            },
+            "owner": {
+              "type": "string",
+              "description": "The owner of the repository"
+            },
+            "method": {
+              "enum": ["get", "get_comments", "get_sub_issues", "get_labels"],
+              "type": "string",
+              "description": "The read operation to perform on a single issue.\nOptions are:\n1. get - Get details of a specific issue.\n2. get_comments - Get issue comments.\n3. get_sub_issues - Get sub-issues of the issue.\n4. get_labels - Get labels assigned to the issue.\n"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "issue_number": {
+              "type": "number",
+              "description": "The number of the issue"
+            }
+          }
+        },
+        "description": "Get information about a specific issue in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_issue_write",
+        "parameters": {
+          "type": "object",
+          "required": ["method", "owner", "repo"],
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "Issue body content"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "type": {
+              "type": "string",
+              "description": "Type of this issue. Only use if the repository has issue types configured. Use list_issue_types tool to get valid type values for the organization. If the repository doesn't support issue types, omit this parameter."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "state": {
+              "enum": ["open", "closed"],
+              "type": "string",
+              "description": "New state"
+            },
+            "title": {
+              "type": "string",
+              "description": "Issue title"
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Labels to apply to this issue"
+            },
+            "method": {
+              "enum": ["create", "update"],
+              "type": "string",
+              "description": "Write operation to perform on a single issue.\nOptions are:\n- 'create' - creates a new issue.\n- 'update' - updates an existing issue.\n"
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Usernames to assign to this issue"
+            },
+            "milestone": {
+              "type": "number",
+              "description": "Milestone number"
+            },
+            "duplicate_of": {
+              "type": "number",
+              "description": "Issue number that this issue is a duplicate of. Only used when state_reason is 'duplicate'."
+            },
+            "issue_number": {
+              "type": "number",
+              "description": "Issue number to update"
+            },
+            "state_reason": {
+              "enum": ["completed", "not_planned", "duplicate"],
+              "type": "string",
+              "description": "Reason for the state change. Ignored unless state is changed."
+            }
+          }
+        },
+        "description": "Create a new or update an existing issue in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_branches",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "List branches in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_commits",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "sha": {
+              "type": "string",
+              "description": "Commit SHA, branch or tag name to list commits of. If not provided, uses the default branch of the repository. If a commit SHA is provided, will list commits up to that SHA."
+            },
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "path": {
+              "type": "string",
+              "description": "Only commits containing this file path will be returned"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "since": {
+              "type": "string",
+              "description": "Only commits after this date will be returned (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD)"
+            },
+            "until": {
+              "type": "string",
+              "description": "Only commits before this date will be returned (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD)"
+            },
+            "author": {
+              "type": "string",
+              "description": "Author username or email address to filter commits by"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "Get list of commits of a branch in a GitHub repository. Returns at least 30 results per page by default, but can return more if specified using the perPage parameter (up to 100)."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_issue_types",
+        "parameters": {
+          "type": "object",
+          "required": ["owner"],
+          "properties": {
+            "owner": {
+              "type": "string",
+              "description": "The organization owner of the repository"
+            }
+          }
+        },
+        "description": "List supported issue types for repository owner (organization)."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_issues",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "after": {
+              "type": "string",
+              "description": "Cursor for pagination. Use the endCursor from the previous page's PageInfo for GraphQL APIs."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "since": {
+              "type": "string",
+              "description": "Filter by date (ISO 8601 timestamp)"
+            },
+            "state": {
+              "enum": ["OPEN", "CLOSED"],
+              "type": "string",
+              "description": "Filter by state, by default both open and closed issues are returned when not provided"
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Filter by labels"
+            },
+            "orderBy": {
+              "enum": ["CREATED_AT", "UPDATED_AT", "COMMENTS"],
+              "type": "string",
+              "description": "Order issues by field. If provided, the 'direction' also needs to be provided."
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "direction": {
+              "enum": ["ASC", "DESC"],
+              "type": "string",
+              "description": "Order direction. If provided, the 'orderBy' also needs to be provided."
+            }
+          }
+        },
+        "description": "List issues in a GitHub repository. For pagination, use the 'endCursor' from the previous response's 'pageInfo' in the 'after' parameter."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_pull_requests",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "base": {
+              "type": "string",
+              "description": "Filter by base branch"
+            },
+            "head": {
+              "type": "string",
+              "description": "Filter by head user/org and branch"
+            },
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "sort": {
+              "enum": ["created", "updated", "popularity", "long-running"],
+              "type": "string",
+              "description": "Sort by"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "state": {
+              "enum": ["open", "closed", "all"],
+              "type": "string",
+              "description": "Filter by state"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "direction": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort direction"
+            }
+          }
+        },
+        "description": "List pull requests in a GitHub repository. If the user specifies an author, then DO NOT use this tool and use the search_pull_requests tool instead."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_releases",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "List releases in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_list_tags",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "List git tags in a GitHub repository"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_merge_pull_request",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            },
+            "commit_title": {
+              "type": "string",
+              "description": "Title for merge commit"
+            },
+            "merge_method": {
+              "enum": ["merge", "squash", "rebase"],
+              "type": "string",
+              "description": "Merge method"
+            },
+            "commit_message": {
+              "type": "string",
+              "description": "Extra detail for merge commit"
+            }
+          }
+        },
+        "description": "Merge a pull request in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_pull_request_read",
+        "parameters": {
+          "type": "object",
+          "required": ["method", "owner", "repo", "pullNumber"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "method": {
+              "enum": [
+                "get",
+                "get_diff",
+                "get_status",
+                "get_files",
+                "get_review_comments",
+                "get_reviews",
+                "get_comments",
+                "get_check_runs"
+              ],
+              "type": "string",
+              "description": "Action to specify what pull request data needs to be retrieved from GitHub. \nPossible options: \n 1. get - Get details of a specific pull request.\n 2. get_diff - Get the diff of a pull request.\n 3. get_status - Get combined commit status of a head commit in a pull request.\n 4. get_files - Get the list of files changed in a pull request. Use with pagination parameters to control the number of results returned.\n 5. get_review_comments - Get review threads on a pull request. Each thread contains logically grouped review comments made on the same code location during pull request reviews. Returns threads with metadata (isResolved, isOutdated, isCollapsed) and their associated comments. Use cursor-based pagination (perPage, after) to control results.\n 6. get_reviews - Get the reviews on a pull request. When asked for review comments, use get_review_comments method.\n 7. get_comments - Get comments on a pull request. Use this if user doesn't specifically want review comments. Use with pagination parameters to control the number of results returned.\n 8. get_check_runs - Get check runs for the head commit of a pull request. Check runs are the individual CI/CD jobs and checks that run on the PR.\n"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            }
+          }
+        },
+        "description": "Get information on a specific pull request in GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_pull_request_review_write",
+        "parameters": {
+          "type": "object",
+          "required": ["method", "owner", "repo", "pullNumber"],
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "Review comment text"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "event": {
+              "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
+              "type": "string",
+              "description": "Review action to perform."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "method": {
+              "enum": [
+                "create",
+                "submit_pending",
+                "delete_pending",
+                "resolve_thread",
+                "unresolve_thread"
+              ],
+              "type": "string",
+              "description": "The write operation to perform on pull request review."
+            },
+            "commitID": {
+              "type": "string",
+              "description": "SHA of commit to review"
+            },
+            "threadId": {
+              "type": "string",
+              "description": "The node ID of the review thread (e.g., PRRT_kwDOxxx). Required for resolve_thread and unresolve_thread methods. Get thread IDs from pull_request_read with method get_review_comments."
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            }
+          }
+        },
+        "description": "Create and/or submit, delete review of a pull request.\n\nAvailable methods:\n- create: Create a new review of a pull request. If \"event\" parameter is provided, the review is submitted. If \"event\" is omitted, a pending review is created.\n- submit_pending: Submit an existing pending review of a pull request. This requires that a pending review exists for the current user on the specified pull request. The \"body\" and \"event\" parameters are used when submitting the review.\n- delete_pending: Delete an existing pending review of a pull request. This requires that a pending review exists for the current user on the specified pull request.\n- resolve_thread: Resolve a review thread. Requires only \"threadId\" parameter with the thread's node ID (e.g., PRRT_kwDOxxx). The owner, repo, and pullNumber parameters are not used for this method. Resolving an already-resolved thread is a no-op.\n- unresolve_thread: Unresolve a previously resolved review thread. Requires only \"threadId\" parameter. The owner, repo, and pullNumber parameters are not used for this method. Unresolving an already-unresolved thread is a no-op.\n"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_push_files",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "branch", "files", "message"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "content"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "path to the file"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "file content"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "description": "Array of file objects to push, each object with path (string) and content (string)"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch to push to"
+            },
+            "message": {
+              "type": "string",
+              "description": "Commit message"
+            }
+          }
+        },
+        "description": "Push multiple files to a GitHub repository in a single commit"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_request_copilot_review",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            }
+          }
+        },
+        "description": "Request a GitHub Copilot code review for a pull request. Use this for automated feedback on pull requests, usually before requesting a human reviewer."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_run_secret_scanning",
+        "parameters": {
+          "type": "object",
+          "required": ["files", "owner", "repo"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "files": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "minItems": 1
+                }
+              ],
+              "description": "A single string or an array of strings containing file contents, snippets, or diff hunks to scan for secrets. These must be raw contents, not repository file paths."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            }
+          }
+        },
+        "description": "Scan files, content, or recent changes for secrets such as API keys, passwords, tokens, and credentials.\n\nThis tool is intended for targeted scans of specific files, snippets, or diffs provided directly as content. The files parameter accepts either a single string or an array of strings containing raw file contents or diff hunks, and returns detected secrets with their locations and related secret scanning metadata. Content must not be empty. For full repository scanning, other mechanisms are available.\n\nCaveats:\n\n- Only files within the codebase should be scanned. Files outside of the codebase should not be sent.\n- Files listed in .gitignore should be skipped."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_search_code",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "sort": {
+              "type": "string",
+              "description": "Sort field ('indexed' only)"
+            },
+            "order": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort order for results"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search query using GitHub's powerful code search syntax. Examples: 'content:Skill language:Java org:github', 'NOT is:archived language:Python OR language:go', 'repo:github/github-mcp-server'. Supports exact matching, language filters, path filters, and more."
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "Fast and precise code search across ALL GitHub repositories using GitHub's native search engine. Best for finding exact symbols, functions, classes, or specific code patterns."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_search_issues",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Optional repository name. If provided with owner, only issues for this repository are listed."
+            },
+            "sort": {
+              "enum": [
+                "comments",
+                "reactions",
+                "reactions-+1",
+                "reactions--1",
+                "reactions-smile",
+                "reactions-thinking_face",
+                "reactions-heart",
+                "reactions-tada",
+                "interactions",
+                "created",
+                "updated"
+              ],
+              "type": "string",
+              "description": "Sort field by number of matches of categories, defaults to best match"
+            },
+            "order": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort order"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Optional repository owner. If provided with repo, only issues for this repository are listed."
+            },
+            "query": {
+              "type": "string",
+              "description": "Search query using GitHub issues search syntax"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "Search for issues in GitHub repositories using issues search syntax already scoped to is:issue"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_search_pull_requests",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Optional repository name. If provided with owner, only pull requests for this repository are listed."
+            },
+            "sort": {
+              "enum": [
+                "comments",
+                "reactions",
+                "reactions-+1",
+                "reactions--1",
+                "reactions-smile",
+                "reactions-thinking_face",
+                "reactions-heart",
+                "reactions-tada",
+                "interactions",
+                "created",
+                "updated"
+              ],
+              "type": "string",
+              "description": "Sort field by number of matches of categories, defaults to best match"
+            },
+            "order": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort order"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Optional repository owner. If provided with repo, only pull requests for this repository are listed."
+            },
+            "query": {
+              "type": "string",
+              "description": "Search query using GitHub pull request search syntax"
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "Search for pull requests in GitHub repositories using issues search syntax already scoped to is:pr"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_search_repositories",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "sort": {
+              "enum": ["stars", "forks", "help-wanted-issues", "updated"],
+              "type": "string",
+              "description": "Sort repositories by field, defaults to best match"
+            },
+            "order": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort order"
+            },
+            "query": {
+              "type": "string",
+              "description": "Repository search query. Examples: 'machine learning in:name stars:>1000 language:python', 'topic:react', 'user:facebook'. Supports advanced search syntax for precise filtering."
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            },
+            "minimal_output": {
+              "type": "boolean",
+              "default": true,
+              "description": "Return minimal repository information (default: true). When false, returns full GitHub API repository objects."
+            }
+          }
+        },
+        "description": "Find GitHub repositories by name, description, readme, topics, or other metadata. Perfect for discovering projects, finding examples, or locating specific repositories across GitHub."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_search_users",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "page": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Page number for pagination (min 1)"
+            },
+            "sort": {
+              "enum": ["followers", "repositories", "joined"],
+              "type": "string",
+              "description": "Sort users by number of followers or repositories, or when the person joined GitHub."
+            },
+            "order": {
+              "enum": ["asc", "desc"],
+              "type": "string",
+              "description": "Sort order"
+            },
+            "query": {
+              "type": "string",
+              "description": "User search query. Examples: 'john smith', 'location:seattle', 'followers:>100'. Search is automatically scoped to type:user."
+            },
+            "perPage": {
+              "type": "number",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page for pagination (min 1, max 100)"
+            }
+          }
+        },
+        "description": "Find GitHub users by username, real name, or other profile information. Useful for locating developers, contributors, or team members."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_sub_issue_write",
+        "parameters": {
+          "type": "object",
+          "required": ["method", "owner", "repo", "issue_number", "sub_issue_id"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "method": {
+              "type": "string",
+              "description": "The action to perform on a single sub-issue\nOptions are:\n- 'add' - add a sub-issue to a parent issue in a GitHub repository.\n- 'remove' - remove a sub-issue from a parent issue in a GitHub repository.\n- 'reprioritize' - change the order of sub-issues within a parent issue in a GitHub repository. Use either 'after_id' or 'before_id' to specify the new position.\n\t\t\t\t"
+            },
+            "after_id": {
+              "type": "number",
+              "description": "The ID of the sub-issue to be prioritized after (either after_id OR before_id should be specified)"
+            },
+            "before_id": {
+              "type": "number",
+              "description": "The ID of the sub-issue to be prioritized before (either after_id OR before_id should be specified)"
+            },
+            "issue_number": {
+              "type": "number",
+              "description": "The number of the parent issue"
+            },
+            "sub_issue_id": {
+              "type": "number",
+              "description": "The ID of the sub-issue to add. ID is not the same as issue number"
+            },
+            "replace_parent": {
+              "type": "boolean",
+              "description": "When true, replaces the sub-issue's current parent issue. Use with 'add' method only."
+            }
+          }
+        },
+        "description": "Add a sub-issue to a parent issue in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_update_pull_request",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber"],
+          "properties": {
+            "base": {
+              "type": "string",
+              "description": "New base branch name"
+            },
+            "body": {
+              "type": "string",
+              "description": "New description"
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "draft": {
+              "type": "boolean",
+              "description": "Mark pull request as draft (true) or ready for review (false)"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "state": {
+              "enum": ["open", "closed"],
+              "type": "string",
+              "description": "New state"
+            },
+            "title": {
+              "type": "string",
+              "description": "New title"
+            },
+            "reviewers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "GitHub usernames to request reviews from"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number to update"
+            },
+            "maintainer_can_modify": {
+              "type": "boolean",
+              "description": "Allow maintainer edits"
+            }
+          }
+        },
+        "description": "Update an existing pull request in a GitHub repository."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_github_mcp_se_update_pull_request_branch",
+        "parameters": {
+          "type": "object",
+          "required": ["owner", "repo", "pullNumber"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Repository owner"
+            },
+            "pullNumber": {
+              "type": "number",
+              "description": "Pull request number"
+            },
+            "expectedHeadSha": {
+              "type": "string",
+              "description": "The expected SHA of the pull request's HEAD ref"
+            }
+          }
+        },
+        "description": "Update the branch of a pull request with the latest changes from the base branch."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-create-comment",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["rich_text", "page_id"],
+          "properties": {
+            "page_id": {
+              "type": "string",
+              "description": "The ID of the page to comment on (with or without dashes)."
+            },
+            "rich_text": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "annotations": {
+                        "type": "object",
+                        "properties": {
+                          "bold": {
+                            "type": "boolean"
+                          },
+                          "code": {
+                            "type": "boolean"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "italic": {
+                            "type": "boolean"
+                          },
+                          "underline": {
+                            "type": "boolean"
+                          },
+                          "strikethrough": {
+                            "type": "boolean"
+                          }
+                        },
+                        "description": "All rich text objects contain an annotations object that sets the styling for the rich text.",
+                        "additionalProperties": {}
+                      }
+                    },
+                    "additionalProperties": {}
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["text"],
+                        "properties": {
+                          "text": {
+                            "type": "object",
+                            "required": ["content"],
+                            "properties": {
+                              "link": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "required": ["url"],
+                                    "properties": {
+                                      "url": {
+                                        "type": "string",
+                                        "description": "The URL of the link."
+                                      }
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "An object with information about any inline link in this text, if included."
+                              },
+                              "content": {
+                                "type": "string",
+                                "maxLength": 2000,
+                                "description": "The actual text content of the text."
+                              }
+                            },
+                            "description": "If a rich text object's type value is `text`, then the corresponding text field contains an object including the text content and any inline link.",
+                            "additionalProperties": false
+                          },
+                          "type": {
+                            "enum": ["text"],
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mention"],
+                        "properties": {
+                          "type": {
+                            "enum": ["mention"],
+                            "type": "string"
+                          },
+                          "mention": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "required": ["user"],
+                                "properties": {
+                                  "type": {
+                                    "enum": ["user"],
+                                    "type": "string"
+                                  },
+                                  "user": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "description": "The ID of the user."
+                                      },
+                                      "object": {
+                                        "enum": ["user"],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "description": "Details of the user mention.",
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "object",
+                                "required": ["date"],
+                                "properties": {
+                                  "date": {
+                                    "type": "object",
+                                    "required": ["start"],
+                                    "properties": {
+                                      "end": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "format": "date",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "The end date of the date object, if any."
+                                      },
+                                      "start": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                        "description": "The start date of the date object."
+                                      },
+                                      "time_zone": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "The time zone of the date object, if any. E.g. America/Los_Angeles, Europe/London, etc."
+                                      }
+                                    },
+                                    "description": "Details of the date mention.",
+                                    "additionalProperties": false
+                                  },
+                                  "type": {
+                                    "enum": ["date"],
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "object",
+                                "required": ["page"],
+                                "properties": {
+                                  "page": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "description": "The ID of the page in the mention."
+                                      }
+                                    },
+                                    "description": "Details of the page mention.",
+                                    "additionalProperties": {}
+                                  },
+                                  "type": {
+                                    "enum": ["page"],
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "object",
+                                "required": ["database"],
+                                "properties": {
+                                  "type": {
+                                    "enum": ["database"],
+                                    "type": "string"
+                                  },
+                                  "database": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "description": "The ID of the database in the mention."
+                                      }
+                                    },
+                                    "description": "Details of the database mention.",
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "object",
+                                "required": ["template_mention"],
+                                "properties": {
+                                  "type": {
+                                    "enum": ["template_mention"],
+                                    "type": "string"
+                                  },
+                                  "template_mention": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "required": ["template_mention_date"],
+                                        "properties": {
+                                          "type": {
+                                            "enum": ["template_mention_date"],
+                                            "type": "string"
+                                          },
+                                          "template_mention_date": {
+                                            "enum": ["today", "now"],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": ["template_mention_user"],
+                                        "properties": {
+                                          "type": {
+                                            "enum": ["template_mention_user"],
+                                            "type": "string"
+                                          },
+                                          "template_mention_user": {
+                                            "enum": ["me"],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ],
+                                    "description": "Details of the template mention."
+                                  }
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "object",
+                                "required": ["custom_emoji"],
+                                "properties": {
+                                  "type": {
+                                    "enum": ["custom_emoji"],
+                                    "type": "string"
+                                  },
+                                  "custom_emoji": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "description": "The ID of the custom emoji."
+                                      },
+                                      "url": {
+                                        "type": "string",
+                                        "description": "The URL of the custom emoji."
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "description": "The name of the custom emoji."
+                                      }
+                                    },
+                                    "description": "Details of the custom emoji mention.",
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "additionalProperties": {}
+                              }
+                            ],
+                            "description": "Mention objects represent an inline mention of a database, date, link preview mention, page, template mention, or user. A mention is created in the Notion UI when a user types `@` followed by the name of the reference."
+                          }
+                        },
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "required": ["equation"],
+                        "properties": {
+                          "type": {
+                            "enum": ["equation"],
+                            "type": "string"
+                          },
+                          "equation": {
+                            "type": "object",
+                            "required": ["expression"],
+                            "properties": {
+                              "expression": {
+                                "type": "string",
+                                "description": "A KaTeX compatible string."
+                              }
+                            },
+                            "description": "Notion supports inline LaTeX equations as rich text objects with a type value of `equation`.",
+                            "additionalProperties": {}
+                          }
+                        },
+                        "additionalProperties": {}
+                      }
+                    ]
+                  }
+                ]
+              },
+              "maxItems": 100,
+              "description": "An array of rich text objects that represent the content of the comment."
+            },
+            "discussion_id": {
+              "type": "string",
+              "description": "The ID or URL of an existing discussion to reply to (e.g., discussion://pageId/blockId/discussionId)."
+            },
+            "selection_with_ellipsis": {
+              "type": "string",
+              "description": "Unique start and end snippet of the content to comment on. DO NOT provide the entire string. Instead, provide up to the first ~10 characters, an ellipsis, and then up to the last ~10 characters. Make sure you provide enough of the start and end snippet to uniquely identify the content. For example: \"# Section heading...last paragraph.\""
+            }
+          }
+        },
+        "description": "Add a comment to a page or specific content.\nCreates a new comment. Provide `page_id` to identify the page, then choose ONE targeting mode:\n- `page_id` alone: Page-level comment on the entire page\n- `page_id` + `selection_with_ellipsis`: Comment on specific block content\n- `discussion_id`: Reply to an existing discussion thread (page_id is still required)\n\nFor content targeting, use `selection_with_ellipsis` with ~10 chars from start and end: \"# Section Ti...tle content\"\n<example description=\"Page-level comment\">\n{\"page_id\": \"uuid\", \"rich_text\": [{\"text\": {\"content\": \"Comment\"}}]}\n</example>\n<example description=\"Comment on specific content\">\n{\"page_id\": \"uuid\", \"selection_with_ellipsis\": \"# Meeting No...es heading\",\n \"rich_text\": [{\"text\": {\"content\": \"Comment on this section\"}}]}\n</example>\n<example description=\"Reply to discussion\">\n{\"page_id\": \"uuid\", \"discussion_id\": \"discussion://pageId/blockId/discussionId\",\n \"rich_text\": [{\"text\": {\"content\": \"Reply\"}}]}\n</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-create-database",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["schema", "parent"],
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "The title of the new database."
+            },
+            "parent": {
+              "type": "object",
+              "required": ["page_id"],
+              "properties": {
+                "type": {
+                  "enum": ["page_id"],
+                  "type": "string"
+                },
+                "page_id": {
+                  "type": "string",
+                  "description": "The ID of the parent page (with or without dashes), for example, 195de9221179449fab8075a27c979105"
+                }
+              },
+              "description": "The parent under which to create the new database. If omitted, the database will be created as a private page at the workspace level.",
+              "additionalProperties": {}
+            },
+            "schema": {
+              "type": "string",
+              "description": "SQL DDL CREATE TABLE statement defining the database schema. Column names must be double-quoted, type options use single quotes."
+            },
+            "description": {
+              "type": "string",
+              "description": "The description of the new database."
+            }
+          }
+        },
+        "description": "Creates a new Notion database using SQL DDL syntax.\nIf no title property provided, \"Name\" is auto-added. Returns Markdown with schema, SQLite definition, and data source ID in <data-source> tag for use with update_data_source and query_data_sources tools.\nThe schema param accepts a CREATE TABLE statement defining columns.\nType syntax:\n- Simple: TITLE, RICH_TEXT, DATE, PEOPLE, CHECKBOX, URL, EMAIL, PHONE_NUMBER, STATUS, FILES\n- SELECT('opt':color, ...) / MULTI_SELECT('opt':color, ...)\n- NUMBER [FORMAT 'dollar'] / FORMULA('expression')\n- RELATION('data_source_id') — one-way relation\n- RELATION('data_source_id', DUAL) — two-way relation\n- RELATION('data_source_id', DUAL 'synced_name') — two-way with synced property name\n- RELATION('data_source_id', DUAL 'synced_name' 'synced_id') — two-way with synced name and ID (for self-relations)\n- ROLLUP('rel_prop', 'target_prop', 'function')\n- UNIQUE_ID [PREFIX 'X'] / CREATED_TIME / LAST_EDITED_TIME\n- Any column: COMMENT 'description text' Colors: default, gray, brown, orange, yellow, green, blue, purple, pink, red\n\n<example description=\"Minimal\">{\"schema\": \"CREATE TABLE (\"Name\" TITLE)\"}</example>\n<example description=\"Task DB\">{\"title\": \"Tasks\", \"schema\": \"CREATE TABLE (\"Task Name\" TITLE, \"Status\" SELECT('To Do':red, 'Done':green), \"Due Date\" DATE)\"}</example>\n<example description=\"With parent and options\">{\"parent\": {\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\"}, \"title\": \"Projects\", \"schema\": \"CREATE TABLE (\"Name\" TITLE, \"Budget\" NUMBER FORMAT 'dollar', \"Tags\" MULTI_SELECT('eng':blue, 'design':pink), \"Task ID\" UNIQUE_ID PREFIX 'PRJ')\"}</example>\n<example description=\"Self-relation (two-step: create database first, then use its data source ID with update_data_source to add self-relations)\">{\"title\": \"Tasks\", \"schema\": \"CREATE TABLE (\"Name\" TITLE, \"Parent\" RELATION('ds_id', DUAL 'Children' 'children'), \"Children\" RELATION('ds_id', DUAL 'Parent' 'parent'))\"}</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-create-pages",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["pages", "parent"],
+          "properties": {
+            "pages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "icon": {
+                    "type": "string",
+                    "description": "An emoji character (e.g. \"🚀\"), a custom emoji by name (e.g. \":rocket_ship:\"), or an external image URL. Use \"none\" to explicitly set no icon. Omit to leave unchanged."
+                  },
+                  "cover": {
+                    "type": "string",
+                    "description": "An external image URL for the page cover. Use \"none\" to explicitly set no cover. Omit to leave unchanged."
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The content of the new page, using Notion Markdown."
+                  },
+                  "properties": {
+                    "type": "object",
+                    "description": "The properties of the new page, which is a JSON map of property names to SQLite values. For pages in a database, use the SQLite schema definition shown in <database>. For pages outside of a database, the only allowed property is \"title\", which is the title of the page and is automatically shown at the top of the page as a large heading.",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "template_id": {
+                    "type": "string",
+                    "description": "The ID of a template to apply to this page. When specified, do not provide 'content' as the template will provide it. Properties can still be set alongside the template. Get template IDs from the <templates> section in the fetch tool results."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 100,
+              "description": "The pages to create."
+            },
+            "parent": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": ["page_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["page_id"],
+                      "type": "string"
+                    },
+                    "page_id": {
+                      "type": "string",
+                      "description": "The ID of the parent page (with or without dashes), for example, 195de9221179449fab8075a27c979105"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "required": ["database_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["database_id"],
+                      "type": "string"
+                    },
+                    "database_id": {
+                      "type": "string",
+                      "description": "The ID of the parent database (with or without dashes), for example, 195de9221179449fab8075a27c979105"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "required": ["data_source_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["data_source_id"],
+                      "type": "string"
+                    },
+                    "data_source_id": {
+                      "type": "string",
+                      "description": "The ID of the parent data source (collection), with or without dashes. For example, f336d0bc-b841-465b-8045-024475c079dd"
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              ],
+              "description": "The parent under which the new pages will be created. This can be a page (page_id), a database page (database_id), or a data source/collection under a database (data_source_id). If omitted, the new pages will be created as private pages at the workspace level. Use data_source_id when you have a collection:// URL from the fetch tool."
+            }
+          }
+        },
+        "description": "## Overview\nCreates one or more Notion pages, with the specified properties and content.\n## Parent\nAll pages created with a single call to this tool will have the same parent. The parent can be a Notion page (\"page_id\") or data source (\"data_source_id\"). If the parent is omitted, the pages are created as standalone, workspace-level private pages, and the person that created them can organize them later as they see fit.\nIf you have a database URL, ALWAYS pass it to the \"fetch\" tool first to get the schema and URLs of each data source under the database. You can't use the \"database_id\" parent type if the database has more than one data source, so you'll need to identify which \"data_source_id\" to use based on the situation and the results from the fetch tool (data source URLs look like collection://<data_source_id>).\nIf you know the pages should be created under a data source, do NOT use the database ID or URL under the \"page_id\" parameter; \"page_id\" is only for regular, non-database pages.\n## Content\nNotion page content is a string in Notion-flavored Markdown format.\nDon't include the page title at the top of the page's content. Only include it under \"properties\".\n**IMPORTANT**: For the complete Markdown specification, always first fetch the MCP resource at `notion://docs/enhanced-markdown-spec`. Do NOT guess or hallucinate Markdown syntax. This spec is also applicable to other tools like update-page and fetch.\n## Properties\nNotion page properties are a JSON map of property names to SQLite values.\nWhen creating pages in a database:\n- Use the correct property names from the data source schema shown in the fetch tool results.\n- Always include a title property. Data sources always have exactly one title property, but it may not be named \"title\", so, again, rely on the fetched data source schema.\n\nFor pages outside of a database:\n- The only allowed property is \"title\",\twhich is the title of the page in inline markdown format. Always include a \"title\" property.\n\n**IMPORTANT**: Some property types require expanded formats:\n- Date properties: Split into \"date:{property}:start\", \"date:{property}:end\" (optional), and \"date:{property}:is_datetime\" (0 or 1)\n- Place properties: Split into \"place:{property}:name\", \"place:{property}:address\", \"place:{property}:latitude\", \"place:{property}:longitude\", and \"place:{property}:google_place_id\" (optional)\n- Number properties: Use JavaScript numbers (not strings)\n- Checkbox properties: Use \"__YES__\" for checked, \"__NO__\" for unchecked\n\n**Special property naming**: Properties named \"id\" or \"url\" (case insensitive) must be prefixed with \"userDefined:\" (e.g., \"userDefined:URL\", \"userDefined:id\")\n## Templates\nWhen creating a page in a database, you can apply a template to pre-populate it with content and property values. Use the \"fetch\" tool on a database to see available templates in the <templates> section of each data source.\nWhen using a template:\n- Pass the template's ID as \"template_id\" in the page object.\n- Do NOT include \"content\" when using a template, as the template provides it.\n- You can still set \"properties\" alongside the template to override template defaults.\n- Template application is asynchronous. The page is created immediately but starts blank; the template content will appear shortly after.\n\n## Icon and Cover\nEach page can optionally have an icon and a cover image.\n- \"icon\": An emoji character (e.g. \"🚀\"), a custom emoji by name (e.g. \":rocket_ship:\"), or an external image URL. Use \"none\" to remove. Omit to leave unchanged.\n- \"cover\": An external image URL. Use \"none\" to remove. Omit to leave unchanged.\n\n## Examples\n\t\t<example description=\"Create a page with an icon and cover\">\n\t\t{\n\t\t\t\"pages\": [\n\t\t\t\t{\n\t\t\t\t\t\"properties\": {\"title\": \"My Page\"},\n\t\t\t\t\t\"icon\": \"🚀\",\n\t\t\t\t\t\"cover\": \"https://example.com/cover.jpg\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Create a page from a database template\">\n\t\t{\n\t\t\t\"parent\": {\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\"},\n\t\t\t\"pages\": [\n\t\t\t\t{\n\t\t\t\t\t\"template_id\": \"a5da15f6-b853-455d-8827-f906fb52db2b\",\n\t\t\t\t\t\"properties\": {\n\t\t\t\t\t\t\"Task Name\": \"New urgent bug\"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Create a standalone page with a title and content\">\n\t\t{\n\t\t\t\"pages\": [\n\t\t\t\t{\n\t\t\t\t\t\"properties\": {\"title\": \"Page title\"},\n\t\t\t\t\t\"content\": \"# Section 1 {color=\"blue\"}\nSection 1 content\n<details>\n<summary>Toggle block</summary>\n\tHidden content inside toggle\n</details>\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Create a page under a database's data source\">\n\t\t{\n\t\t\t\"parent\": {\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\"},\n\t\t\t\"pages\": [\n\t\t\t\t{\n\t\t\t\t\t\"properties\": {\n\t\t\t\t\t\t\"Task Name\": \"Task 123\",\n\t\t\t\t\t\t\"Status\": \"In Progress\",\n\t\t\t\t\t\t\"Priority\": 5,\n\t\t\t\t\t\t\"Is Complete\": \"__YES__\",\n\t\t\t\t\t\t\"date:Due Date:start\": \"2024-12-25\",\n\t\t\t\t\t\t\"date:Due Date:is_datetime\": 0\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Create a page with an existing page as a parent\">\n\t\t{\n\t\t\t\"parent\": {\"page_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"},\n\t\t\t\"pages\": [\n\t\t\t\t{\n\t\t\t\t\t\"properties\": {\"title\": \"Page title\"},\n\t\t\t\t\t\"content\": \"# Section 1\nSection 1 content\n# Section 2\nSection 2 content\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-create-view",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["database_id", "data_source_id", "name", "type"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The name of the view."
+            },
+            "type": {
+              "enum": [
+                "table",
+                "board",
+                "list",
+                "calendar",
+                "timeline",
+                "gallery",
+                "form",
+                "chart",
+                "map",
+                "dashboard"
+              ],
+              "type": "string"
+            },
+            "configure": {
+              "type": "string",
+              "description": "View configuration DSL string. Supports FILTER, SORT BY, GROUP BY, CALENDAR BY, TIMELINE BY, MAP BY, CHART, FORM, SHOW, HIDE, COVER, WRAP CELLS, and FREEZE COLUMNS directives. See notion://docs/view-dsl-spec."
+            },
+            "database_id": {
+              "type": "string",
+              "description": "The database to create a view in. Accepts a Notion URL or a bare UUID."
+            },
+            "data_source_id": {
+              "type": "string",
+              "description": "The data source (collection) ID. Accepts a collection:// URI from <data-source> tags or a bare UUID."
+            }
+          }
+        },
+        "description": "Create a new view on a Notion database.\nUse \"fetch\" first to get the database_id and data_source_id (from <data-source> tags in the response).\nSupported types: table, board, list, calendar, timeline, gallery, form, chart, map, dashboard.\nThe optional \"configure\" param accepts a DSL for filters, sorts, grouping,\nand display options. See the notion://docs/view-dsl-spec resource for full\nsyntax. Key directives:\n- FILTER \"Property\" = \"value\" — filter rows\n- SORT BY \"Property\" ASC — sort rows\n- GROUP BY \"Property\" — group by property (required for board views)\n- CALENDAR BY \"Property\" — date property (required for calendar views)\n- TIMELINE BY \"Start\" TO \"End\" — date range (required for timeline views)\n- MAP BY \"Property\" — location property (required for map views)\n- CHART column|bar|line|donut|number — chart type with optional AGGREGATE, COLOR, HEIGHT, SORT, STACK BY, CAPTION\n- FORM CLOSE|OPEN — close/open form submissions\n- FORM ANONYMOUS true|false — toggle anonymous submissions\n- FORM PERMISSIONS none|reader|editor — set submission permissions\n- SHOW \"Prop1\", \"Prop2\" — set visible properties\n- COVER \"Property\" — cover image property\n\n<example description=\"Table view\">{\"database_id\": \"abc123\", \"data_source_id\": \"def456\", \"name\": \"All Tasks\", \"type\": \"table\"}</example>\n<example description=\"Board grouped by Status\">{\"database_id\": \"abc123\", \"data_source_id\": \"def456\", \"name\": \"Task Board\", \"type\": \"board\", \"configure\": \"GROUP BY \"Status\"\"}</example>\n<example description=\"Filtered + sorted table\">{\"database_id\": \"abc123\", \"data_source_id\": \"def456\", \"name\": \"Active\", \"type\": \"table\", \"configure\": \"FILTER \"Status\" = \"In Progress\"; SORT BY \"Due Date\" ASC\"}</example>\n<example description=\"Calendar view\">{\"database_id\": \"abc123\", \"data_source_id\": \"def456\", \"name\": \"Calendar\", \"type\": \"calendar\", \"configure\": \"CALENDAR BY \"Due Date\"\"}</example>\n<example description=\"Dashboard\">{\"database_id\": \"abc123\", \"data_source_id\": \"def456\", \"name\": \"Overview\", \"type\": \"dashboard\"}</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-duplicate-page",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["page_id"],
+          "properties": {
+            "page_id": {
+              "type": "string",
+              "description": "The ID of the page to duplicate. This is a v4 UUID, with or without dashes, and can be parsed from a Notion page URL."
+            }
+          }
+        },
+        "description": "Duplicate a Notion page. The page must be within the current workspace, and you must have permission to access it. The duplication completes asynchronously, so do not rely on the new page identified by the returned ID or URL to be populated immediately. Let the user know that the duplication is in progress and that they can check back later using the 'fetch' tool or by clicking the returned URL and viewing it in the Notion app."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-fetch",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The ID or URL of the Notion page, database, or data source to fetch. Supports notion.so URLs, Notion Sites URLs (*.notion.site), raw UUIDs, and data source URLs (collection://...)."
+            },
+            "include_transcript": {
+              "type": "boolean"
+            },
+            "include_discussions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "description": "Retrieves details about a Notion entity (page, database, or data source) by URL or ID.\nProvide URL or ID in `id` parameter. Make multiple calls to fetch multiple entities.\nPages use enhanced Markdown format. For the complete specification, fetch the MCP resource at `notion://docs/enhanced-markdown-spec`.\nDatabases return all data sources (collections). Each data source has a unique ID shown in `<data-source url=\"collection://...\">` tags. You can pass a data source ID directly to this tool to fetch details about that specific data source, including its schema and properties. Use data source IDs with update_data_source and query_data_sources tools. Multi-source databases (e.g., with linked sources) will show multiple data sources.\nSet `include_discussions` to true to see discussion counts and inline discussion markers that correlate with the `get_comments` tool. The page output will include a `<page-discussions>` summary tag with discussion count, preview snippets, and `discussion://` URLs that match the discussion IDs returned by `get_comments`.\n<example>{\"id\": \"https://notion.so/workspace/Page-a1b2c3d4e5f67890\"}</example>\n<example>{\"id\": \"12345678-90ab-cdef-1234-567890abcdef\"}</example>\n<example>{\"id\": \"https://myspace.notion.site/Page-Title-abc123def456\"}</example>\n<example>{\"id\": \"page-uuid\", \"include_discussions\": true}</example>\n<example>{\"id\": \"collection://12345678-90ab-cdef-1234-567890abcdef\"}</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-get-comments",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["page_id"],
+          "properties": {
+            "page_id": {
+              "type": "string",
+              "description": "Identifier for a Notion page."
+            },
+            "discussion_id": {
+              "type": "string",
+              "description": "Fetch a specific discussion by ID or discussion URL (e.g., discussion://pageId/blockId/discussionId)."
+            },
+            "include_resolved": {
+              "type": "boolean"
+            },
+            "include_all_blocks": {
+              "type": "boolean"
+            }
+          }
+        },
+        "description": "Get comments and discussions from a Notion page.\nReturns discussions with full comment content in XML format. By default, returns page-level discussions only.\nTip: Use the `fetch` tool with `include_discussions: true` first to see where discussions are anchored in the page content, then use this tool to retrieve full discussion threads. The `discussion://` URLs in the fetch output match the discussion IDs returned here.\nParameters:\n- `include_all_blocks`: Include discussions on child blocks (default: false)\n- `include_resolved`: Include resolved discussions (default: false)\n- `discussion_id`: Fetch a specific discussion by ID or URL\n\n<example>{\"page_id\": \"page-uuid\"}</example>\n<example>{\"page_id\": \"page-uuid\", \"include_all_blocks\": true}</example>\n<example>{\"page_id\": \"page-uuid\", \"discussion_id\": \"discussion://pageId/blockId/discussionId\"}</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-get-teams",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "query": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1,
+              "description": "Optional search query to filter teams by name (case-insensitive)."
+            }
+          }
+        },
+        "description": "Retrieves a list of teams (teamspaces) in the current workspace. Shows which teams exist, user membership status, IDs, names, and roles.\nTeams are returned split by membership status and limited to a maximum of 10 results.\n<examples>\n1. List all teams (up to the limit of each type): {}\n2. Search for teams by name: {\"query\": \"engineering\"}\n3. Find a specific team: {\"query\": \"Product Design\"}\n</examples>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-get-users",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "query": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1,
+              "description": "Optional search query to filter users by name or email (case-insensitive)."
+            },
+            "user_id": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1,
+              "description": "Return only the user matching this ID. Pass \"self\" to fetch the current user."
+            },
+            "page_size": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Number of users to return per page (default: 100, max: 100)."
+            },
+            "start_cursor": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1,
+              "description": "Cursor for pagination. Use the next_cursor value from the previous response to get the next page."
+            }
+          }
+        },
+        "description": "Retrieves a list of users in the current workspace. Shows workspace members and guests with their IDs, names, emails (if available), and types (person or bot).\nSupports cursor-based pagination to iterate through all users in the workspace.\n<examples>\n1. List all users (first page): {}\n2. Search for users by name or email: {\"query\": \"john\"}\n3. Get next page of results: {\"start_cursor\": \"abc123\"}\n4. Set custom page size: {\"page_size\": 20}\n5. Fetch a specific user by ID: {\"user_id\": \"00000000-0000-4000-8000-000000000000\"}\n6. Fetch the current user: {\"user_id\": \"self\"}\n</examples>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-move-pages",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["page_or_database_ids", "new_parent"],
+          "properties": {
+            "new_parent": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": ["page_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["page_id"],
+                      "type": "string"
+                    },
+                    "page_id": {
+                      "type": "string",
+                      "description": "The ID of the parent page (with or without dashes), for example, 195de9221179449fab8075a27c979105"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "required": ["database_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["database_id"],
+                      "type": "string"
+                    },
+                    "database_id": {
+                      "type": "string",
+                      "description": "The ID of the parent database (with or without dashes), for example, 195de9221179449fab8075a27c979105"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "required": ["data_source_id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["data_source_id"],
+                      "type": "string"
+                    },
+                    "data_source_id": {
+                      "type": "string",
+                      "description": "The ID of the parent data source (collection), with or without dashes. For example, f336d0bc-b841-465b-8045-024475c079dd"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "enum": ["workspace"],
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              ],
+              "description": "The new parent under which the pages will be moved. This can be a page, the workspace, a database, or a specific data source under a database when there are multiple. Moving pages to the workspace level adds them as private pages and should rarely be used."
+            },
+            "page_or_database_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "description": "An array of up to 100 page or database IDs to move. IDs are v4 UUIDs and can be supplied with or without dashes (e.g. extracted from a <page> or <database> URL given by the \"search\" or \"fetch\" tool). Data Sources under Databases can't be moved individually."
+            }
+          }
+        },
+        "description": "Move one or more Notion pages or databases to a new parent."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-search",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["query", "filters"],
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Semantic search query over your entire Notion workspace and connected sources (Slack, Google Drive, Github, Jira, Microsoft Teams, Sharepoint, OneDrive, or Linear). For best results, don't provide more than one question per tool call. Use a separate \"search\" tool call for each search you want to perform.\nAlternatively, the query can be a substring or keyword to find users by matching against their name or email address. For example: \"john\" or \"john@example.com\""
+            },
+            "filters": {
+              "type": "object",
+              "properties": {
+                "created_date_range": {
+                  "type": "object",
+                  "properties": {
+                    "end_date": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                      "description": "The end date of the date range as an ISO 8601 date string, if any."
+                    },
+                    "start_date": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                      "description": "The start date of the date range as an ISO 8601 date string, if any."
+                    }
+                  },
+                  "description": "Optional filter to only produce search results created within the specified date range.",
+                  "additionalProperties": {}
+                },
+                "created_by_user_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "description": "Optional filter to only produce search results created by the Notion users that have the specified user IDs."
+                }
+              },
+              "description": "Optionally provide filters to apply to the search results. Only valid when query_type is 'internal'.",
+              "additionalProperties": {}
+            },
+            "page_url": {
+              "type": "string",
+              "description": "Optionally, provide the URL or ID of a page to search within. This will perform a semantic search over the content within and under the specified page. Accepts either a full page URL (e.g. https://notion.so/workspace/Page-Title-1234567890) or just the page ID (UUIDv4) with or without dashes."
+            },
+            "page_size": {
+              "type": "integer",
+              "maximum": 25,
+              "minimum": 1,
+              "description": "Maximum number of results to return (default 10). Lower values reduce response size."
+            },
+            "query_type": {
+              "enum": ["internal", "user"],
+              "type": "string"
+            },
+            "teamspace_id": {
+              "type": "string",
+              "description": "Optionally, provide the ID of a teamspace to restrict search results to. This will perform a search over content within the specified teamspace only. Accepts the teamspace ID (UUIDv4) with or without dashes."
+            },
+            "data_source_url": {
+              "type": "string",
+              "description": "Optionally, provide the URL of a Data source to search. This will perform a semantic search over the pages in the Data Source. Note: must be a Data Source, not a Database. <data-source> tags are part of the Notion flavored Markdown format returned by tools like fetch. The full spec is available in the create-pages tool description."
+            },
+            "content_search_mode": {
+              "enum": ["workspace_search", "ai_search"],
+              "type": "string"
+            },
+            "max_highlight_length": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": -9007199254740991,
+              "description": "Maximum character length for result highlights (default 200). Set to 0 to omit highlights entirely."
+            }
+          }
+        },
+        "description": "Perform a search over:\n- \"internal\": Semantic search over Notion workspace and connected sources (Slack, Google Drive, Github, Jira, Microsoft Teams, Sharepoint, OneDrive, Linear). Supports filtering by creation date and creator.\n- \"user\": Search for users by name or email.\n\nAuto-selects AI search (with connected sources) or workspace search (workspace-only, faster) based on user's access to Notion AI. Use content_search_mode to override.\nUse \"fetch\" tool for full page/database contents after getting search results. Each result's \"url\" field contains a page ID for Notion results (pass directly to fetch tool's \"id\" param) or a full URL for external connector results (Slack, Google Drive, etc.). Set page_size (default 10, max 25) and max_highlight_length (default 200, 0 to omit) as low as possible to minimize response size.\nTo search within a database: First fetch the database to get the data source URL (collection://...) from <data-source url=\"...\"> tags, then use that as data_source_url. For multi-source databases, match by view ID (?v=...) in URL or search all sources separately.\nDon't combine database URL/ID with collection:// prefix for data_source_url. Don't use database URL as page_url.\n\t\t<example description=\"Search with date range filter (only documents created in 2024)\">\n\t\t{\n\t\t\t\"query\": \"quarterly revenue report\",\n\t\t\t\"query_type\": \"internal\",\n\t\t\t\"filters\": {\n\t\t\t\t\"created_date_range\": {\n\t\t\t\t\t\"start_date\": \"2024-01-01\",\n\t\t\t\t\t\"end_date\": \"2025-01-01\"\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\t</example>\n\t\t<example description=\"Teamspace + creator filter\">\n\t\t{\"query\": \"project updates\", \"query_type\": \"internal\", \"teamspace_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"filters\": {\"created_by_user_ids\": [\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"]}}\n\t\t</example>\n\t\t<example description=\"Database with date + creator filters\">\n\t\t{\"query\": \"design review\", \"data_source_url\": \"collection://f336d0bc-b841-465b-8045-024475c079dd\", \"filters\": {\"created_date_range\": {\"start_date\": \"2024-10-01\"}, \"created_by_user_ids\": [\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\", \"b2c3d4e5-f6a7-8901-bcde-f12345678901\"]}}\n\t\t</example>\n\t\t<example description=\"User search\">\n\t\t{\"query\": \"john@example.com\", \"query_type\": \"user\"}\n\t\t</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-update-data-source",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["data_source_id"],
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "The new title of the data source."
+            },
+            "in_trash": {
+              "type": "boolean"
+            },
+            "is_inline": {
+              "type": "boolean"
+            },
+            "statements": {
+              "type": "string",
+              "description": "Semicolon-separated SQL DDL statements to update the schema. Supports ADD COLUMN, DROP COLUMN, RENAME COLUMN, ALTER COLUMN SET."
+            },
+            "description": {
+              "type": "string",
+              "description": "The new description of the data source."
+            },
+            "data_source_id": {
+              "type": "string",
+              "description": "The data source to update. Accepts a collection:// URI from <data-source> tags, a bare UUID, or a database ID (only if the database has a single data source)."
+            }
+          }
+        },
+        "description": "Update a Notion data source's schema, title, or attributes using SQL DDL statements. Returns Markdown showing updated structure and schema.\nAccepts a data source ID (collection ID from fetch response's <data-source> tag) or a single-source database ID. Multi-source databases require the specific data source ID.\nThe statements param accepts semicolon-separated DDL statements:\n- ADD COLUMN \"Name\" <type> - add a new property\n- DROP COLUMN \"Name\" - remove a property\n- RENAME COLUMN \"Old\" TO \"New\" - rename a property\n- ALTER COLUMN \"Name\" SET <type> - change type/options\n\nSame type syntax as create_database. Key types:\n- SELECT('opt':color, ...) / MULTI_SELECT('opt':color, ...)\n- NUMBER [FORMAT 'dollar'] / FORMULA('expression')\n- RELATION('ds_id') / RELATION('ds_id', DUAL) / RELATION('ds_id', DUAL 'synced_name' 'synced_id')\n- ROLLUP('rel_prop', 'target_prop', 'function') / UNIQUE_ID [PREFIX 'X']\n- Simple: TITLE, RICH_TEXT, DATE, PEOPLE, CHECKBOX, URL, EMAIL, PHONE_NUMBER, STATUS, FILES\n\n<example description=\"Add properties\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"statements\": \"ADD COLUMN \"Priority\" SELECT('High':red, 'Medium':yellow, 'Low':green); ADD COLUMN \"Due Date\" DATE\"}</example>\n<example description=\"Rename property\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"statements\": \"RENAME COLUMN \"Status\" TO \"Project Status\"\"}</example>\n<example description=\"Remove property\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"statements\": \"DROP COLUMN \"Old Property\"\"}</example>\n<example description=\"Add self-relation\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"statements\": \"ADD COLUMN \"Parent\" RELATION('f336d0bc-b841-465b-8045-024475c079dd', DUAL 'Children' 'children'); ADD COLUMN \"Children\" RELATION('f336d0bc-b841-465b-8045-024475c079dd', DUAL 'Parent' 'parent')\"}</example>\n<example description=\"Update title\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"title\": \"Project Tracker 2024\"}</example>\n<example description=\"Trash data source\">{\"data_source_id\": \"f336d0bc-b841-465b-8045-024475c079dd\", \"in_trash\": true}</example>\nNotes: Cannot delete/create title properties. Max one unique_id property. Cannot update synced databases. Use \"fetch\" first to see current schema and get the data source ID from <data-source url=\"collection://...\"> tags."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-update-page",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["page_id", "command", "properties", "content_updates"],
+          "properties": {
+            "icon": {
+              "type": "string",
+              "description": "An emoji character (e.g. \"🚀\"), a custom emoji by name (e.g. \":rocket_ship:\"), or an external image URL. Use \"none\" to remove the icon. Omit to leave unchanged. Can be set alongside any command."
+            },
+            "cover": {
+              "type": "string",
+              "description": "An external image URL for the page cover. Use \"none\" to remove the cover. Omit to leave unchanged. Can be set alongside any command."
+            },
+            "command": {
+              "enum": [
+                "update_properties",
+                "update_content",
+                "replace_content",
+                "apply_template",
+                "update_verification"
+              ],
+              "type": "string"
+            },
+            "new_str": {
+              "type": "string",
+              "description": "Required for \"replace_content\" command. The new content string to replace the entire page content with."
+            },
+            "page_id": {
+              "type": "string",
+              "description": "The ID of the page to update, with or without dashes."
+            },
+            "properties": {
+              "type": "object",
+              "description": "Required for \"update_properties\" command. A JSON object that updates the page's properties. For pages in a database, use the SQLite schema definition shown in <database>. For pages outside of a database, the only allowed property is \"title\", which is the title of the page in inline markdown format. Use null to remove a property's value.",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "template_id": {
+              "type": "string",
+              "description": "Required for \"apply_template\" command. The ID of a template to apply to this page. Template content is appended to any existing page content."
+            },
+            "content_updates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["old_str", "new_str"],
+                "properties": {
+                  "new_str": {
+                    "type": "string",
+                    "description": "The new content string to replace old_str with."
+                  },
+                  "old_str": {
+                    "type": "string",
+                    "description": "The existing content string to find and replace. Must exactly match the page content."
+                  },
+                  "replace_all_matches": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": {}
+              },
+              "maxItems": 100,
+              "description": "Required for \"update_content\" command. An array of search-and-replace operations, each with old_str (content to find) and new_str (replacement content)."
+            },
+            "verification_status": {
+              "enum": ["verified", "unverified"],
+              "type": "string"
+            },
+            "allow_deleting_content": {
+              "type": "boolean"
+            },
+            "verification_expiry_days": {
+              "type": "integer",
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "description": "Optional for \"update_verification\" command when verification_status is \"verified\". Number of days until verification expires (e.g. 7, 30, 90). Omit for indefinite verification."
+            }
+          }
+        },
+        "description": "## Overview\nUpdate a Notion page's properties or content.\n## Properties\nNotion page properties are a JSON map of property names to SQLite values.\nFor pages in a database:\n- ALWAYS use the \"fetch\" tool first to get the data source schema and the\texact property names.\n- Provide a non-null value to update a property's value.\n- Omitted properties are left unchanged.\n\n**IMPORTANT**: Some property types require expanded formats:\n- Date properties: Split into \"date:{property}:start\", \"date:{property}:end\" (optional), and \"date:{property}:is_datetime\" (0 or 1)\n- Place properties: Split into \"place:{property}:name\", \"place:{property}:address\", \"place:{property}:latitude\", \"place:{property}:longitude\", and \"place:{property}:google_place_id\" (optional)\n- Number properties: Use JavaScript numbers (not strings)\n- Checkbox properties: Use \"__YES__\" for checked, \"__NO__\" for unchecked\n\n**Special property naming**: Properties named \"id\" or \"url\" (case insensitive) must be prefixed with \"userDefined:\" (e.g., \"userDefined:URL\", \"userDefined:id\")\nFor pages outside of a database:\n- The only allowed property is \"title\",\twhich is the title of the page in inline markdown format.\n\n## Content\nNotion page content is a string in Notion-flavored Markdown format.\n**IMPORTANT**: For the complete Markdown specification, first fetch the MCP resource at `notion://docs/enhanced-markdown-spec`. Do NOT guess or hallucinate Markdown syntax.\nBefore updating a page's content with this tool, use the \"fetch\" tool first to get the existing content to find out the Markdown snippets to use in the \"update_content\" command's old_str fields.\n### Preserving Child Pages and Databases\nWhen using \"replace_content\", the operation will check if any child pages or databases would be deleted. If so, it will fail with an error listing the affected items.\nTo preserve child pages/databases, include them in new_str using `<page url=\"...\">` or `<database url=\"...\">` tags. Get the exact URLs from the \"fetch\" tool output.\n**CRITICAL**: To intentionally delete child content: if the call failed with validation and requires `allow_deleting_content` to be true, DO NOT automatically assume the content should be deleted. ALWAYS show the list of pages to be deleted and ask for user confirmation before proceeding.\n## Icon and Cover\nYou can set or remove a page's icon and cover alongside any command.\n- \"icon\": An emoji character (e.g. \"🚀\"), a custom emoji by name (e.g. \":rocket_ship:\"), or an external image URL. Use \"none\" to remove. Omit to leave unchanged.\n- \"cover\": An external image URL. Use \"none\" to remove. Omit to leave unchanged.\n\n## Examples\n\t\t<example description=\"Update page icon and cover\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_properties\",\n\t\t\t\"properties\": {\"title\": \"My Page\"},\n\t\t\t\"icon\": \"🚀\",\n\t\t\t\"cover\": \"https://example.com/cover.jpg\"\n\t\t}\n\t\t</example>\n\t\t<example description=\"Update page properties\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_properties\",\n\t\t\t\"properties\": {\n\t\t\t\t\"title\": \"New Page Title\",\n\t\t\t\t\"status\": \"In Progress\",\n\t\t\t\t\"priority\": 5,\n\t\t\t\t\"checkbox\": \"__YES__\",\n\t\t\t\t\"date:deadline:start\": \"2024-12-25\",\n\t\t\t\t\"date:deadline:is_datetime\": 0,\n\t\t\t\t\"place:office:name\": \"HQ\",\n\t\t\t\t\"place:office:latitude\": 37.7749,\n\t\t\t\t\"place:office:longitude\": -122.4194\n\t\t\t}\n\t\t}\n\t\t</example>\n\t\t<example description=\"Replace the entire content of a page\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"replace_content\",\n\t\t\t\"new_str\": \"# New Section\nUpdated content goes here\"\n\t\t}\n\t\t</example>\n\t\t<example description=\"Update specific content in a page (search-and-replace)\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_content\",\n\t\t\t\"content_updates\": [\n\t\t\t\t{\n\t\t\t\t\t\"old_str\": \"# Old Section\nOld content here\",\n\t\t\t\t\t\"new_str\": \"# New Section\nUpdated content goes here\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Insert content after a specific location\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_content\",\n\t\t\t\"content_updates\": [\n\t\t\t\t{\n\t\t\t\t\t\"old_str\": \"## Previous section\nExisting content\",\n\t\t\t\t\t\"new_str\": \"## Previous section\nExisting content\n\n## New Section\nContent to insert goes here\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n\t\t<example description=\"Multiple content updates in a single call\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_content\",\n\t\t\t\"content_updates\": [\n\t\t\t\t{\n\t\t\t\t\t\"old_str\": \"Old text 1\",\n\t\t\t\t\t\"new_str\": \"New text 1\"\n\t\t\t\t},\n\t\t\t\t{\n\t\t\t\t\t\"old_str\": \"Old text 2\",\n\t\t\t\t\t\"new_str\": \"New text 2\"\n\t\t\t\t}\n\t\t\t]\n\t\t}\n\t\t</example>\n## Templates\nYou can apply a template to an existing page using the \"apply_template\" command. The template content is appended to the page asynchronously. Get template IDs from the <templates> section in the fetch tool results for a database, or use any page ID as a template.\n\t\t<example description=\"Apply a template to an existing page\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"apply_template\",\n\t\t\t\"template_id\": \"a5da15f6-b853-455d-8827-f906fb52db2b\"\n\t\t}\n\t\t</example>\n## Verification\nYou can verify or unverify a page using the \"update_verification\" command. Verification marks a page as reviewed and up-to-date. Requires a Business or Enterprise plan (or the page must be in a wiki).\n\t\t<example description=\"Verify a page for 90 days\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_verification\",\n\t\t\t\"verification_status\": \"verified\",\n\t\t\t\"verification_expiry_days\": 90\n\t\t}\n\t\t</example>\n\t\t<example description=\"Verify a page indefinitely\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_verification\",\n\t\t\t\"verification_status\": \"verified\"\n\t\t}\n\t\t</example>\n\t\t<example description=\"Remove verification from a page\">\n\t\t{\n\t\t\t\"page_id\": \"f336d0bc-b841-465b-8045-024475c079dd\",\n\t\t\t\"command\": \"update_verification\",\n\t\t\t\"verification_status\": \"unverified\"\n\t\t}\n\t\t</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_notion_mcp_notion-update-view",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["view_id"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "New name for the view."
+            },
+            "view_id": {
+              "type": "string",
+              "description": "The view to update. Accepts a view:// URI, a Notion URL with ?v= parameter, or a bare UUID."
+            },
+            "configure": {
+              "type": "string",
+              "description": "View configuration DSL string. Supports FILTER, SORT BY, GROUP BY, CALENDAR BY, TIMELINE BY, MAP BY, CHART, FORM, SHOW, HIDE, COVER, WRAP CELLS, FREEZE COLUMNS, and CLEAR directives."
+            }
+          }
+        },
+        "description": "Update a view's name, filters, sorts, or display configuration.\nUse \"fetch\" to get view IDs from database responses. Only include fields\nyou want to change. The \"configure\" param uses the same DSL as create_view.\nUse CLEAR to remove settings:\n- CLEAR FILTER — remove all filters\n- CLEAR SORT — remove all sorts\n- CLEAR GROUP BY — remove grouping\n\nSee notion://docs/view-dsl-spec resource for full syntax.\n<example description=\"Rename\">{\"view_id\": \"abc123\", \"name\": \"Sprint Board\"}</example>\n<example description=\"Update filter\">{\"view_id\": \"abc123\", \"configure\": \"FILTER \"Status\" = \"Done\"\"}</example>\n<example description=\"Clear filter, add sort\">{\"view_id\": \"abc123\", \"configure\": \"CLEAR FILTER; SORT BY \"Created\" DESC\"}</example>\n<example description=\"Update grouping\">{\"view_id\": \"abc123\", \"configure\": \"GROUP BY \"Priority\"; SHOW \"Name\", \"Status\"\"}</example>"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceDocString",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["fileUri", "symbolName"],
+          "properties": {
+            "fileUri": {
+              "type": "string",
+              "description": "The uri of the file containing the symbol."
+            },
+            "symbolName": {
+              "type": "string",
+              "description": "The name of the symbol (function, class, method, variable) to get the docstring for. This should be the exact symbol name as it appears in the code."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get the docstring/documentation for a Python symbol. Returns the docstring content for functions, classes, methods, or variables. Use when: you need to understand what a symbol does, check documentation before using a function, explain code behavior to users, or validate symbol purpose. Example: To understand foo_bar function, provide its file URI and symbol name \"foo_bar\"."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceDocuments",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["search"],
+          "properties": {
+            "search": {
+              "type": "string",
+              "description": "Detailed question in natural language. Think of it as a prompt for an LLM. Do not use keyword search terms."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Search Pylance documentation for Python language server help, configuration guidance, feature explanations, and troubleshooting. Returns comprehensive answers about Pylance settings, capabilities, and usage. Use when users ask: How to configure Pylance? What features are available? How to fix Pylance issues?"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceFileSyntaxErrors",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot", "fileUri"],
+          "properties": {
+            "fileUri": {
+              "type": "string",
+              "description": "The uri of the file to check for syntax errors. Must be a user file in the workspace."
+            },
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Check Python file for syntax errors. Returns detailed error list with line numbers, messages, and error types. Use when: users report syntax problems, validating files before processing, debugging parse errors."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceImports",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Analyze imports across workspace user files. Returns all top-level module names imported, including resolved and unresolved imports. Use for: finding missing dependencies, understanding project dependencies, analyzing import patterns."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceInstalledTopLevelModules",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            },
+            "pythonEnvironment": {
+              "type": "string",
+              "description": "The Python environment to use. Must be a value returned by the pylancePythonEnvironments tool. If pythonEnvironment is missing, the python environment of the workspace will be used."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get available top-level modules from installed Python packages in environment. Shows what can be imported. Use for: checking if packages are installed, verifying import availability, helping users understand available modules."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceInvokeRefactoring",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["fileUri", "name"],
+          "properties": {
+            "mode": {
+              "enum": ["update", "edits", "string"],
+              "type": "string",
+              "description": "Determines the output mode: \"update\" updates the file directly, \"edits\" returns a WorkspaceEdit, \"string\" returns the updated content as a string. If omitted, \"update\" will be used as the default. The \"edits\" mode is especially useful for checking if any changes are needed (such as unused imports or import formatting issues) without modifying the file, as it will return a WorkspaceEdit only if edits are required."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name of the refactoring to invoke. This must be one of these [source.unusedImports, source.convertImportFormat, source.convertImportStar, source.convertImportToModule, source.renameShadowedStdlibImports, source.addTypeAnnotation, source.fixAll.pylance]"
+            },
+            "fileUri": {
+              "type": "string",
+              "description": "The uri of the file to invoke the refactoring."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Apply automated code refactoring to Python files. Returns refactored content (does not modify original file) unless mode is \"update\". Use for: extracting functions, organizing imports, improving code structure, applying refactoring patterns.  Optional \"mode\" parameter: \"update\" updates the file, \"edits\" returns a WorkspaceEdit, \"string\" returns updated content as string. If mode is not specified, \"update\" will be used as the default. The \"edits\" mode is helpful for determining if a file needs changes (for example, to remove unused imports or fix import formatting) without making any modifications; if no changes are needed, the result will be either an empty WorkspaceEdit or a message indicating that no text edits were found. Available refactorings: source.unusedImports: - Removes all unused import statements from a Python file. Use when imports are imported but never referenced in the code. Requires fileUri parameter pointing to a Python file with unused imports.\nsource.convertImportFormat: - Converts import statements between absolute and relative formats according to python.analysis.importFormat setting. Use when import format consistency is needed. Requires fileUri parameter pointing to a Python file with imports to convert.\nsource.convertImportStar: - Converts all wildcard imports (from module import *) to explicit imports listing all imported symbols. Use when explicit imports are preferred for better code clarity and IDE support. Requires fileUri parameter pointing to a Python file with wildcard imports.\nsource.convertImportToModule: - Converts `from module import name1, name2` (including wildcard imports) into `import module` and rewrites references to `module.name1`, `module.name2`. Use when you want module-qualified references. Requires fileUri parameter pointing to a Python file with `from ... import ...` statements.\nsource.renameShadowedStdlibImports: - Renames imported user modules that shadow standard library module names (e.g. a local calendar.py). Use to avoid import shadowing bugs. Requires fileUri parameter pointing to the importing Python file.\nsource.addTypeAnnotation: - Adds type annotations to all variables and functions in a Python file that can be inferred from their usage. Use when type hints are needed for better type checking and code clarity. Requires fileUri parameter pointing to a Python file with unannotated variables or functions.\nsource.fixAll.pylance: - Applies all available automatic code fixes from python.analysis.fixAll setting. Use when multiple code issues need to be addressed simultaneously. Requires fileUri parameter pointing to a Python file with fixable issues."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylancePythonEnvironments",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get Python environment information for workspace: current active environment and all available environments. Use for: Python environment issues, switching environments, understanding Python setup."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceRunCodeSnippet",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot", "codeSnippet"],
+          "properties": {
+            "timeout": {
+              "type": "number",
+              "minimum": 0,
+              "description": "The timeout for the code snippet execution in milliseconds. Default: 30000 (30 seconds). Note: timeout=0 means immediate cancellation."
+            },
+            "codeSnippet": {
+              "type": "string",
+              "description": "The code snippet to run."
+            },
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            },
+            "workingDirectory": {
+              "type": "string",
+              "description": "The working directory to use for the code snippet. If the code snippet is pulled from a file, this should be the directory for the file. Especially if the snippet has imports."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Execute Python code snippets directly in the workspace environment. PREFERRED over terminal commands for running Python code. This tool automatically uses the correct Python interpreter configured for the workspace, eliminates shell escaping/quoting problems that plague terminal execution, and provides clean, properly formatted output with stdout/stderr correctly interleaved. Use this instead of `python -c \"code\"` or terminal commands when running Python snippets. Ideal for: testing code, running quick scripts, validating Python expressions, checking imports, and any Python execution within the workspace context. No temporary files needed - code runs directly in memory."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceSettings",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get current Python analysis settings and configuration for a workspace. Returns all \"python.analysis.*\" settings with default vs user-configured indicators. Use for: troubleshooting configuration, checking current settings, diagnosing analysis issues."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceSyntaxErrors",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["code", "pythonVersion"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "The Python code to check for syntax errors."
+            },
+            "pythonVersion": {
+              "type": "string",
+              "description": "The version of Python to use for the syntax check. Must be a valid Python version string. ex) \"3.10\" or \"3.11.4\"."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Validate Python code snippets for syntax errors without saving to file. Returns syntax error details with line numbers and descriptions. Use for: validating generated code, checking user code snippets, pre-execution validation."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceUpdatePythonEnvironment",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot", "pythonEnvironment"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            },
+            "pythonEnvironment": {
+              "type": "string",
+              "description": "The Python environment to use. Must be either a value returned by the pylancePythonEnvironments tool or the absolute path to a Python executable."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Switch active Python environment for workspace to different Python installation or virtual environment. Updates settings and ensures subsequent operations use new environment. Use for: changing Python versions, switching to virtual environments, resolving environment issues."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceWorkspaceRoots",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "fileUri": {
+              "type": "string",
+              "description": "The uri of the file to check its workspace"
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get workspace root directories. Returns workspace root for specific file or all workspace roots if no file provided. Use for: understanding workspace structure, getting paths for other operations."
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "mcp_provides_tool_pylanceWorkspaceUserFiles",
+        "parameters": {
+          "type": "object",
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "required": ["workspaceRoot"],
+          "properties": {
+            "workspaceRoot": {
+              "type": "string",
+              "description": "The root directory uri of the workspace."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Get list of all user Python files in workspace (excludes library/dependency files). Respects python.analysis.include/exclude settings. Use for: analyzing user code, searching project files, operating on user-created Python files."
+      }
+    }
+  ]
+}

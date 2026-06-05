@@ -1,0 +1,48 @@
+{
+  "name": "mcp-compress-router",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "mcp-compress-router": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf node_modules build",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern --cache . && markdownlint-cli2 .",
+    "format:fix": "prettier --write --no-error-on-unmatched-pattern --cache . && markdownlint-cli2 --fix .",
+    "lint": "eslint src && pnpm knip",
+    "lint:fix": "eslint src --fix",
+    "knip": "knip --production",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
+    "prepare": "husky || true"
+  },
+  "files": [
+    "build"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Compress all connected MCP servers into a single router MCP to save tokens",
+  "devDependencies": {
+    "@eslint/js": "9.16.0",
+    "@types/node": "22.19.2",
+    "eslint": "9.16.0",
+    "husky": "9.1.7",
+    "knip": "6.6.2",
+    "markdownlint-cli2": "0.22.0",
+    "prettier": "3.7.4",
+    "tsx": "4.20.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.57.0",
+    "vitest": "3.2.4"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.24.3",
+    "commander": "14.0.2",
+    "zod": "3.25.76"
+  }
+}
