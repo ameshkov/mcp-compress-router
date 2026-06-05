@@ -91,7 +91,7 @@ mcp-compress-router/
 - `pnpm knip` — run Knip unused-export analysis separately
 - `pnpm format:check` — check formatting with Prettier and Markdownlint
 - `pnpm format:fix` — fix formatting issues
-- `pnpm check` — run format:check, lint, and typecheck (full CI gate)
+- `pnpm check` — run `format:check`, `lint`, and `typecheck` (full CI gate)
 - `pnpm clean` — remove `node_modules` and `build/`
 
 ## Contribution Instructions
