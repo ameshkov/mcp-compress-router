@@ -1,4 +1,4 @@
-import type { ToolCatalog } from '../utils/index.js';
+import type { ToolCatalog, Logger } from '../utils/index.js';
 import { lookupTools } from '../services/index.js';
 import { renderCompactCatalog } from '../utils/index.js';
 import { z } from 'zod';
@@ -15,10 +15,16 @@ export const GetToolSchemaInputSchema = {
  * Creates the get_tool_schema handler closure over the catalog.
  *
  * @param catalog - The immutable tool catalog built at startup.
+ * @param logger - Structured logger for diagnostic output.
  * @returns A handler function for the get_tool_schema MCP tool.
  */
-export function createGetToolSchemaHandler(catalog: ToolCatalog) {
+export function createGetToolSchemaHandler(catalog: ToolCatalog, logger: Logger) {
   return async (params: { server: string; tools: string[] }) => {
+    logger.info('get_tool_schema called', {
+      server: params.server,
+      tools: params.tools,
+    });
+
     try {
       const schemas = lookupTools(catalog, params.server, params.tools);
 
@@ -28,11 +34,18 @@ export function createGetToolSchemaHandler(catalog: ToolCatalog) {
         inputSchema: t.inputSchema,
       }));
 
+      logger.debug('get_tool_schema result', { result });
+
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      logger.error('get_tool_schema failed', {
+        server: params.server,
+        tools: params.tools,
+        error: message,
+      });
       return {
         content: [{ type: 'text' as const, text: `Error: ${message}` }],
         isError: true,

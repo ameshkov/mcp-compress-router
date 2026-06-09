@@ -1,4 +1,19 @@
 import { z } from 'zod';
+import type { ToolCatalog, Logger } from '../utils/index.js';
+import { validateArguments } from '../utils/index.js';
+import { lookupTools } from '../services/index.js';
+
+/**
+ * Signature of the downstream invocation function injected by the
+ * entry point.
+ *
+ * @public
+ */
+export type InvokeDownstreamFn = (
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+) => Promise<{ content: Array<Record<string, unknown>>; isError?: boolean }>;
 
 /**
  * Schema for invoke_tool parameters.
@@ -10,21 +25,74 @@ export const InvokeToolInputSchema = {
 };
 
 /**
- * Creates a stub invoke_tool handler.
+ * Creates the invoke_tool handler closure over the catalog and an
+ * invoker function. The handler receives only the catalog and a
+ * function — never raw transport clients.
  *
- * Full implementation is deferred to Issue 2-AFK.
- *
+ * @param catalog - The immutable tool catalog built at startup.
+ * @param invokeDownstream - Function to forward a tool call to the
+ *   correct downstream server.
+ * @param logger - Structured logger for diagnostic output.
  * @returns A handler function for the invoke_tool MCP tool.
  */
-export function createInvokeToolHandler() {
-  return async (_params: { server: string; tool: string; arguments: Record<string, unknown> }) => {
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: 'TODO: invoke_tool not yet implemented',
-        },
-      ],
-    };
+export function createInvokeToolHandler(
+  catalog: ToolCatalog,
+  invokeDownstream: InvokeDownstreamFn,
+  logger: Logger,
+) {
+  return async (params: { server: string; tool: string; arguments: Record<string, unknown> }) => {
+    logger.info('invoke_tool called', {
+      server: params.server,
+      tool: params.tool,
+    });
+    logger.debug('invoke_tool arguments', { arguments: params.arguments });
+
+    try {
+      // Validate server and tool exist in catalog
+      lookupTools(catalog, params.server, [params.tool]);
+
+      // Validate arguments against the cached input schema
+      const descriptor = catalog.toolMap.get(`${params.server}::${params.tool}`);
+      if (descriptor) {
+        const validation = validateArguments(params.arguments, descriptor.inputSchema);
+        if (!validation.valid) {
+          logger.error('invoke_tool validation failed', {
+            server: params.server,
+            tool: params.tool,
+            errors: validation.errors,
+          });
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Invalid arguments:\n${validation.errors.join('\n')}`,
+              },
+            ],
+            isError: true as const,
+          };
+        }
+      }
+
+      const result = await invokeDownstream(params.server, params.tool, params.arguments);
+
+      // Return content verbatim. The result type is looser than what
+      // the MCP SDK expects, so we cast through unknown to satisfy
+      // the handler signature while preserving the actual content
+      // structure.
+      return result as unknown as {
+        content: Array<{ type: 'text'; text: string }>;
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('invoke_tool failed', {
+        server: params.server,
+        tool: params.tool,
+        error: message,
+      });
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${message}` }],
+        isError: true as const,
+      };
+    }
   };
 }

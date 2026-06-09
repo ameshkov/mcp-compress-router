@@ -51,7 +51,19 @@ coding session with 3 MCP servers.
 ```text
 mcp-compress-router/
 ├── src/                      # Application source code
-│   ├── index.ts              # MCP server entry point (stdio transport)
+│   ├── index.ts              # MCP server entry point (stdio transport) + CLI dispatch
+│   ├── cli/                   # Management CLI subcommands
+│   │   ├── index.ts           # Barrel exports (public API)
+│   │   ├── config-io.ts       # Raw mcp.json read/write with first-use creation
+│   │   ├── config-io.test.ts  # Unit tests for config I/O
+│   │   ├── add-command.ts     # add subcommand handler
+│   │   ├── add-command.test.ts # Unit tests for add command
+│   │   ├── remove-command.ts  # remove subcommand handler
+│   │   ├── remove-command.test.ts # Unit tests for remove command
+│   │   ├── get-command.ts     # get subcommand handler
+│   │   ├── get-command.test.ts # Unit tests for get command
+│   │   ├── list-command.ts    # list subcommand handler
+│   │   └── list-command.test.ts # Unit tests for list command
 │   ├── services/             # Core business logic
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
@@ -59,24 +71,40 @@ mcp-compress-router/
 │   │   ├── catalog.ts         # Catalog Builder & Cache
 │   │   ├── config.test.ts     # Unit tests for config loading
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
-│   │   └── catalog.test.ts    # Unit tests for catalog and schema lookup
+│   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
+│   │   ├── invoker.ts         # Downstream tool invocation
+│   │   └── invoker.test.ts    # Unit tests for tool invocation
 │   ├── utils/                 # Shared utilities
 │   │   ├── index.ts           # Barrel exports (public API)
+│   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
+│   │   ├── expand-env.test.ts # Unit tests for env var expansion
 │   │   ├── text-format.ts     # Compact catalog text renderer
-│   │   └── types.ts           # Shared type definitions
+│   │   ├── types.ts           # Shared type definitions
+│   │   ├── validate-arguments.ts   # JSON Schema argument validation
+│   │   ├── validate-arguments.test.ts
+│   │   ├── open-browser.ts    # Platform-safe browser opener using spawn()
+│   │   └── open-browser.test.ts # Unit tests for browser opener
 │   └── tools/                 # Router tool handlers
 │       ├── index.ts           # Barrel exports (public API)
 │       ├── get-tool-schema.ts
 │       └── invoke-tool.ts
 ├── test/                     # Shared test infrastructure
 │   ├── fixture-server.ts     # Reusable fixture stdio downstream MCP server
+│   ├── fixture-http-server.ts # Reusable fixture HTTP downstream MCP server
 │   └── e2e/                  # End-to-end tests
-│       └── router.test.ts
+│       ├── helpers.ts         # Shared E2E utilities (fixture paths, spawn)
+│       ├── client.ts          # JSON-RPC test client over stdio
+│       ├── cli.test.ts        # E2E tests for management CLI subcommands
+│       ├── fail-fast.test.ts  # Fail-fast startup behavior tests
+│       ├── stdio.test.ts      # E2E tests with stdio downstream server
+│       ├── http.test.ts       # E2E tests with HTTP downstream server
+│       └── mixed.test.ts      # E2E tests with stdio + HTTP together
 ├── docs/                     # Documentation and assets
 │   └── assets/               # Example JSON payloads
 ├── eslint.config.mjs         # ESLint flat config
 ├── knip.config.ts            # Knip unused-export analysis config
-├── tsconfig.json             # TypeScript configuration
+├── tsconfig.json             # TypeScript configuration (production)
+├── tsconfig.test.json        # TypeScript configuration (tests, noEmit)
 ├── vitest.config.ts          # Vitest configuration
 └── package.json              # Project dependencies and scripts
 ```
@@ -84,7 +112,8 @@ mcp-compress-router/
 ## Build and Test Commands
 
 - `pnpm build` — compile TypeScript to `build/` and make executable
-- `pnpm typecheck` — check for TypeScript type errors
+- `pnpm typecheck` — check for TypeScript type errors in production
+  and test code
 - `pnpm lint` — lint source files with ESLint and check for unused
   exports with Knip
 - `pnpm lint:fix` — lint and auto-fix issues

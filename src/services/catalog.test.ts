@@ -87,11 +87,17 @@ describe('lookupTools', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('throws for unknown server', () => {
+  it('throws for unknown server listing valid servers', () => {
     expect(() => lookupTools(catalog, 'unknown', ['a'])).toThrow(/unknown/);
+    expect(() => lookupTools(catalog, 'unknown', ['a'])).toThrow(/Available servers: srv/);
   });
 
-  it('throws for unknown tool', () => {
+  it('throws for unknown tool listing valid tools', () => {
     expect(() => lookupTools(catalog, 'srv', ['unknown_tool'])).toThrow(/unknown_tool/);
+    expect(() => lookupTools(catalog, 'srv', ['unknown_tool'])).toThrow(/Valid tools: a, b/);
+  });
+
+  it('throws when one of multiple tool names is unknown — not partial', () => {
+    expect(() => lookupTools(catalog, 'srv', ['a', 'nonexistent'])).toThrow(/nonexistent/);
   });
 });
