@@ -111,13 +111,17 @@ describe('MCP Compress Router E2E — OAuth', () => {
         mcpServers: {
           github: { type: 'http', url: authFixture.url + '/mcp' },
         },
-        credentials: {
-          github: {
-            tokens: {
-              access_token: 'at-123',
-              token_type: 'Bearer',
-              refresh_token: 'rt-456',
-            },
+      }),
+    );
+    const credPath = path.join(tempDir, 'credentials.json');
+    await fs.writeFile(
+      credPath,
+      JSON.stringify({
+        github: {
+          tokens: {
+            access_token: 'at-123',
+            token_type: 'Bearer',
+            refresh_token: 'rt-456',
           },
         },
       }),
@@ -126,10 +130,15 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Removed credentials');
 
-    // Verify credentials are gone but mcpServers intact
-    const contents = await fs.readFile(configPath, 'utf-8');
-    const parsed = JSON.parse(contents);
-    expect(parsed.credentials?.github).toBeUndefined();
-    expect(parsed.mcpServers.github).toBeDefined();
+    // Verify credentials are gone from credentials.json
+    const credContents = await fs.readFile(credPath, 'utf-8');
+    const credParsed = JSON.parse(credContents);
+    expect(credParsed.github).toBeUndefined();
+
+    // Verify mcpServers intact in mcp.json
+    const configContents = await fs.readFile(configPath, 'utf-8');
+    const configParsed = JSON.parse(configContents);
+    expect(configParsed.mcpServers.github).toBeDefined();
+    expect(configParsed.credentials).toBeUndefined();
   });
 });

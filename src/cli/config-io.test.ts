@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { readConfigFile, writeConfigFile, ensureConfigDir } from './config-io.js';
+import { Logger } from '../utils/logger.js';
 import type { StoredCredentials } from '../utils/types.js';
 
 // Re-import for credential tests
@@ -116,13 +117,38 @@ describe('writeConfigFile', () => {
     expect(parsed.otherKey).toBe('keep-me');
     expect(parsed.mcpServers).toEqual(mcpServers);
   });
+
+  it('strips the credentials key but preserves other top-level keys', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {},
+        credentials: { github: { tokens: { access_token: 'secret' } } },
+        otherKey: 'keep-me',
+      }),
+    );
+
+    const mcpServers = { foo: { type: 'stdio', command: 'echo' } };
+    await writeConfigFile(configPath, mcpServers);
+
+    const contents = await fs.readFile(configPath, 'utf-8');
+    const parsed = JSON.parse(contents);
+    expect(parsed).not.toHaveProperty('credentials');
+    expect(parsed.otherKey).toBe('keep-me');
+    expect(parsed.mcpServers).toEqual(mcpServers);
+  });
 });
 
 describe('credentials', () => {
   let tempDir: string;
+  let configPath: string;
+  let credPath: string;
 
   beforeEach(async () => {
     tempDir = path.join(tmpdir(), `cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    configPath = path.join(tempDir, 'mcp.json');
+    credPath = path.join(tempDir, 'credentials.json');
     await fs.mkdir(tempDir, { recursive: true });
   });
 
@@ -141,70 +167,195 @@ describe('credentials', () => {
     },
   };
 
-  it('readCredentials returns empty object when file is empty', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    const result = await readCredentials(configPath);
-    expect(result).toEqual({});
-  });
+  describe('readCredentials', () => {
+    it('returns empty object when credentials.json does not exist', async () => {
+      const result = await readCredentials(configPath);
+      expect(result).toEqual({});
+    });
 
-  it('readCredentials returns stored credentials', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    await writeCredentials(configPath, 'github', sampleCredentials);
-    const result = await readCredentials(configPath);
-    expect(result.github).toEqual(sampleCredentials);
-  });
+    it('returns stored credentials from credentials.json', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      const result = await readCredentials(configPath);
+      expect(result.github).toEqual(sampleCredentials);
+    });
 
-  it('readCredentials throws when config file contains invalid JSON', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await fs.writeFile(configPath, 'not json {{{');
+    it('throws when credentials.json contains invalid JSON', async () => {
+      await fs.writeFile(credPath, 'not json {{{');
 
-    await expect(readCredentials(configPath)).rejects.toThrow(
-      'Failed to read credentials from config file',
-    );
-  });
-
-  it('readCredentials throws when config file is unreadable', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    await fs.chmod(configPath, 0o000);
-
-    try {
       await expect(readCredentials(configPath)).rejects.toThrow(
-        'Failed to read credentials from config file',
+        /Credentials file contains invalid JSON.*credentials\.json/,
       );
-    } finally {
-      // Restore permissions so afterEach cleanup doesn't fail
-      await fs.chmod(configPath, 0o644);
-    }
+    });
+
+    it('throws when credentials.json is unreadable', async () => {
+      await fs.writeFile(credPath, JSON.stringify({ github: sampleCredentials }));
+      await fs.chmod(credPath, 0o000);
+
+      try {
+        await expect(readCredentials(configPath)).rejects.toThrow(
+          /Failed to read credentials file.*credentials\.json/,
+        );
+      } finally {
+        await fs.chmod(credPath, 0o644);
+      }
+    });
+
+    it('throws when credentials.json is an array, not an object', async () => {
+      await fs.writeFile(credPath, '[1, 2, 3]');
+
+      await expect(readCredentials(configPath)).rejects.toThrow(
+        /Credentials file must contain a JSON object/,
+      );
+    });
   });
 
-  it('writeCredentials preserves mcpServers', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    await writeConfigFile(configPath, { test: { type: 'stdio', command: 'ls' } });
-    await writeCredentials(configPath, 'github', sampleCredentials);
-    const servers = await readConfigFile(configPath);
-    expect(servers.test).toBeDefined();
-    const creds = await readCredentials(configPath);
-    expect(creds.github).toEqual(sampleCredentials);
+  describe('writeCredentials', () => {
+    it('creates credentials.json with 0600 permissions and stores entry', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+
+      // Verify file exists at the right path
+      const raw = await fs.readFile(credPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed).toEqual({ github: sampleCredentials });
+
+      // Verify 0600 permissions (skip on Windows where chmod is a no-op)
+      if (process.platform !== 'win32') {
+        const stat = await fs.stat(credPath);
+        expect(stat.mode & 0o777).toBe(0o600);
+      }
+    });
+
+    it('merges with existing entries for other servers', async () => {
+      // Pre-create credentials.json with "github"
+      await fs.writeFile(credPath, JSON.stringify({ github: sampleCredentials }));
+
+      // Write "notion"
+      const notionCreds: StoredCredentials = {
+        tokens: { access_token: 'nt-789', token_type: 'Bearer' },
+      };
+      await writeCredentials(configPath, 'notion', notionCreds);
+
+      const result = await readCredentials(configPath);
+      expect(result.github).toEqual(sampleCredentials);
+      expect(result.notion).toEqual(notionCreds);
+    });
+
+    it('preserves existing file permissions on update', async () => {
+      // Pre-create with 0644
+      await fs.writeFile(credPath, JSON.stringify({ github: sampleCredentials }));
+
+      if (process.platform !== 'win32') {
+        await fs.chmod(credPath, 0o644);
+      }
+
+      const githubUpdated: StoredCredentials = {
+        tokens: { access_token: 'at-new', token_type: 'Bearer' },
+      };
+      await writeCredentials(configPath, 'github', githubUpdated);
+
+      if (process.platform !== 'win32') {
+        const stat = await fs.stat(credPath);
+        expect(stat.mode & 0o777).toBe(0o644);
+      }
+    });
+
+    it('does not write credentials to mcp.json', async () => {
+      // Create mcp.json first with some servers
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({ mcpServers: { github: { type: 'http', url: 'https://example.com' } } }),
+      );
+
+      await writeCredentials(configPath, 'github', sampleCredentials);
+
+      // mcp.json should remain unchanged (no credentials key)
+      const mcpRaw = await fs.readFile(configPath, 'utf-8');
+      const mcpParsed = JSON.parse(mcpRaw);
+      expect(mcpParsed).not.toHaveProperty('credentials');
+      expect(mcpParsed.mcpServers).toBeDefined();
+
+      // credentials.json should have the entry
+      const credRaw = await fs.readFile(credPath, 'utf-8');
+      const credParsed = JSON.parse(credRaw);
+      expect(credParsed.github).toEqual(sampleCredentials);
+    });
   });
 
-  it('removeCredentials deletes credentials for a server', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    await writeCredentials(configPath, 'github', sampleCredentials);
-    await writeCredentials(configPath, 'notion', sampleCredentials);
-    await removeCredentials(configPath, 'github');
-    const result = await readCredentials(configPath);
-    expect(result.github).toBeUndefined();
-    expect(result.notion).toEqual(sampleCredentials);
+  describe('writeCredentials with Logger (Windows path)', () => {
+    it('logs a warning on Windows when chmod cannot restrict permissions', async () => {
+      const logger = new Logger('info');
+      const messages: string[] = [];
+
+      // Capture stderr to collect log output
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+        const str = typeof chunk === 'string' ? chunk : String(chunk);
+        messages.push(str);
+        return true;
+      });
+
+      try {
+        await writeCredentials(configPath, 'github', sampleCredentials, logger);
+
+        if (process.platform === 'win32') {
+          const hasWarning = messages.some((m) =>
+            m.includes('File permissions cannot be restricted on Windows'),
+          );
+          expect(hasWarning).toBe(true);
+        } else {
+          // On Unix, the warning should not appear
+          const hasWarning = messages.some((m) =>
+            m.includes('File permissions cannot be restricted on Windows'),
+          );
+          expect(hasWarning).toBe(false);
+        }
+      } finally {
+        stderrSpy.mockRestore();
+        originalWrite('');
+      }
+    });
   });
 
-  it('removeCredentials is a no-op for unknown server', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await ensureConfigDir(configPath);
-    await removeCredentials(configPath, 'nonexistent');
+  describe('removeCredentials', () => {
+    it('is a no-op when credentials.json does not exist', async () => {
+      await removeCredentials(configPath, 'github');
+      // Should not throw and should not create the file
+      await expect(fs.access(credPath)).rejects.toThrow();
+    });
+
+    it('removes a server entry while preserving others', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      await writeCredentials(configPath, 'notion', sampleCredentials);
+
+      await removeCredentials(configPath, 'github');
+
+      const result = await readCredentials(configPath);
+      expect(result.github).toBeUndefined();
+      expect(result.notion).toEqual(sampleCredentials);
+    });
+
+    it('deletes the file when last entry is removed', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      await removeCredentials(configPath, 'github');
+
+      const result = await readCredentials(configPath);
+      expect(result).toEqual({});
+
+      // File should be deleted
+      await expect(fs.access(credPath)).rejects.toThrow();
+    });
+
+    it('does not affect mcp.json', async () => {
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({ mcpServers: { github: { type: 'http', url: 'https://example.com' } } }),
+      );
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      await removeCredentials(configPath, 'github');
+
+      const mcpRaw = await fs.readFile(configPath, 'utf-8');
+      const mcpParsed = JSON.parse(mcpRaw);
+      expect(mcpParsed).not.toHaveProperty('credentials');
+    });
   });
 });

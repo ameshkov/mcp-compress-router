@@ -8,7 +8,7 @@ import type { DownstreamServerConfig, StoredCredentials } from '../utils/index.j
 import { readCredentials, writeCredentials, removeCredentials } from '../cli/config-io.js';
 
 /**
- * Implements OAuthClientProvider backed by mcp.json credential storage.
+ * Implements OAuthClientProvider backed by credentials.json credential storage.
  *
  * Each instance manages credentials for one downstream server.
  * When `oauth` overrides are present in the server config, dynamic

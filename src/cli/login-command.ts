@@ -8,7 +8,7 @@ import { loadConfig } from '../services/config.js';
  * For HTTP servers, runs the OAuth authorization-code flow
  * using the SDK's OAuth client infrastructure. The flow opens
  * a browser, handles the redirect callback, exchanges the
- * authorization code for tokens, and persists them in mcp.json.
+ * authorization code for tokens, and persists them in credentials.json.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
@@ -174,5 +174,5 @@ export async function handleLogin(configPath: string, name: string): Promise<str
   // Step 5: Persist tokens
   await mgr.saveTokens(tokens);
 
-  return `Successfully authenticated server "${name}". Tokens stored in mcp.json.`;
+  return `Successfully authenticated server "${name}". Tokens stored in credentials.json.`;
 }

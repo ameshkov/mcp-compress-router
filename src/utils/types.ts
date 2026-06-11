@@ -43,7 +43,7 @@ export interface OAuthConfig {
 
 /**
  * OAuth tokens and client registration for a single downstream server,
- * persisted in mcp.json under the "credentials" top-level key.
+ * persisted in credentials.json.
  */
 export interface StoredCredentials {
   /**
@@ -64,7 +64,7 @@ export interface StoredCredentials {
 
 /**
  * Per-server stored credentials map, keyed by server name.
- * Persisted as the "credentials" top-level key in mcp.json.
+ * Persisted in credentials.json.
  */
 export type CredentialsStore = Record<string, StoredCredentials>;
 

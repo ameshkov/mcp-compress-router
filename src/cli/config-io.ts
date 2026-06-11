@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import type { Logger } from '../utils/logger.js';
 import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
 
 /**
@@ -10,6 +11,16 @@ import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
  */
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === 'string';
+}
+
+/**
+ * Derives the credentials.json path from the config path.
+ *
+ * @param configPath - Absolute path to mcp.json.
+ * @returns Absolute path to credentials.json in the same directory.
+ */
+function getCredentialsPath(configPath: string): string {
+  return path.join(path.dirname(configPath), 'credentials.json');
 }
 
 /**
@@ -79,13 +90,16 @@ export async function readConfigFile(configPath: string): Promise<McpServers> {
 
 /**
  * Writes the mcpServers object to the config file.
- * Preserves any top-level keys other than mcpServers.
+ * Preserves non-credential top-level keys other than mcpServers.
+ * Silently drops any legacy "credentials" key (credentials are now
+ * stored in credentials.json).
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param mcpServers - The mcpServers object to write.
  */
 export async function writeConfigFile(configPath: string, mcpServers: McpServers): Promise<void> {
-  // Preserve any existing top-level keys (e.g., credentials stored by OAuth flow)
+  // Preserve any existing top-level keys except credentials
+  // (credentials are stored in credentials.json)
   let existing: Record<string, unknown> = { mcpServers: {} };
   try {
     const raw = await fs.readFile(configPath, 'utf-8');
@@ -94,12 +108,16 @@ export async function writeConfigFile(configPath: string, mcpServers: McpServers
     // File doesn't exist or is invalid — start fresh
   }
 
+  // Drop legacy credentials key that may exist from before the
+  // credentials.json separation
+  delete existing.credentials;
+
   existing.mcpServers = mcpServers;
   await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + '\n');
 }
 
 /**
- * Reads the credentials object from the config file.
+ * Reads the credentials object from credentials.json.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @returns The credentials store, or empty object if the file does not exist.
@@ -107,25 +125,30 @@ export async function writeConfigFile(configPath: string, mcpServers: McpServers
  *   contains invalid JSON.
  */
 export async function readCredentials(configPath: string): Promise<CredentialsStore> {
+  const credPath = getCredentialsPath(configPath);
+
+  let raw: string;
   try {
-    const raw = await fs.readFile(configPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (
-      parsed.credentials &&
-      typeof parsed.credentials === 'object' &&
-      parsed.credentials !== null
-    ) {
-      return parsed.credentials as CredentialsStore;
-    }
+    raw = await fs.readFile(credPath, 'utf-8');
   } catch (err) {
     if (isNodeError(err) && err.code === 'ENOENT') {
-      // File doesn't exist — return empty, equivalent to no credentials.
-    } else {
-      // Permission denied, corrupt JSON, or disk I/O error — propagate.
-      throw new Error(`Failed to read credentials from config file: ${configPath}`, { cause: err });
+      return {};
     }
+    throw new Error(`Failed to read credentials file: ${credPath}`, { cause: err });
   }
-  return {};
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Credentials file contains invalid JSON: ${credPath}`, { cause: err });
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`Credentials file must contain a JSON object: ${credPath}`);
+  }
+
+  return parsed as CredentialsStore;
 }
 
 /**
@@ -140,45 +163,95 @@ export async function writeCredentials(
   configPath: string,
   name: string,
   credentials: StoredCredentials,
+  logger?: Logger,
 ): Promise<void> {
-  let existing: Record<string, unknown> = { mcpServers: {} };
+  const credPath = getCredentialsPath(configPath);
+
+  // Read existing store (or start fresh)
+  let store: CredentialsStore = {};
   try {
-    const raw = await fs.readFile(configPath, 'utf-8');
-    existing = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // Start fresh
+    const raw = await fs.readFile(credPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed === 'object' && parsed !== null) {
+      store = parsed as CredentialsStore;
+    }
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      // File does not exist — will be created below
+    } else {
+      throw new Error(`Failed to read credentials file for writing: ${credPath}`, { cause: err });
+    }
   }
 
-  const creds: Record<string, unknown> =
-    existing.credentials && typeof existing.credentials === 'object'
-      ? { ...(existing.credentials as Record<string, unknown>) }
-      : {};
-  creds[name] = credentials;
+  // Merge in the new/updated entry
+  store[name] = credentials;
 
-  existing.credentials = creds;
-  await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + '\n');
+  // Determine if this is a first-time creation
+  let isNewFile = false;
+  try {
+    await fs.access(credPath);
+  } catch {
+    isNewFile = true;
+  }
+
+  // Write the store
+  await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
+
+  // On first creation, set restrictive permissions (owner read/write only)
+  if (isNewFile) {
+    try {
+      await fs.chmod(credPath, 0o600);
+    } catch {
+      // chmod is a no-op on Windows; if it somehow fails on Unix, log a warning
+      if (logger) {
+        logger.info(
+          `Warning: Failed to set restrictive permissions on new credentials file: ${credPath}`,
+        );
+      }
+    }
+
+    // On Windows, verify chmod did something; if not, log a warning
+    if (process.platform === 'win32' && logger) {
+      logger.info(
+        `Warning: File permissions cannot be restricted on Windows. ` +
+          `Credentials stored in: ${credPath}`,
+      );
+    }
+  }
 }
 
 /**
  * Removes credentials for a server from the config file.
  * No-op if the server has no stored credentials.
+ * Deletes the credentials file when the last entry is removed.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name.
  */
 export async function removeCredentials(configPath: string, name: string): Promise<void> {
-  let existing: Record<string, unknown> = { mcpServers: {} };
+  const credPath = getCredentialsPath(configPath);
+
+  let store: CredentialsStore = {};
   try {
-    const raw = await fs.readFile(configPath, 'utf-8');
-    existing = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return;
+    const raw = await fs.readFile(credPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed === 'object' && parsed !== null) {
+      store = parsed as CredentialsStore;
+    }
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      // File does not exist — nothing to remove
+      return;
+    }
+    throw new Error(`Failed to read credentials file for removal: ${credPath}`, { cause: err });
   }
 
-  if (existing.credentials && typeof existing.credentials === 'object') {
-    const creds = { ...(existing.credentials as Record<string, unknown>) };
-    delete creds[name];
-    existing.credentials = creds;
-    await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + '\n');
+  delete store[name];
+
+  if (Object.keys(store).length === 0) {
+    // No remaining entries — delete the file entirely
+    await fs.unlink(credPath);
+  } else {
+    await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
   }
 }

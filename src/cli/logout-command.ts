@@ -9,7 +9,7 @@ import {
  * Handles the `logout <name>` subcommand.
  *
  * Attempts to revoke tokens with the authorization server (best-effort),
- * then removes stored credentials from mcp.json.
+ * then removes stored credentials from credentials.json.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to log out from.
