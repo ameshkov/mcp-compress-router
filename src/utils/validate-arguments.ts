@@ -55,6 +55,70 @@ function coerceValue(value: unknown, targetType: JsonType): unknown {
 }
 
 /**
+ * Validates a single property value against its schema definition.
+ *
+ * Checks type correctness and coerces string values to the expected type
+ * when possible. Mutates `args` in-place on successful coercion and
+ * pushes error messages into `errors` on validation failures.
+ *
+ * @param key - The property name.
+ * @param value - The raw value for the property.
+ * @param propSchema - The JSON Schema definition for this property.
+ * @param required - List of required property names.
+ * @param args - The arguments object (mutated on coercion).
+ * @param errors - Accumulator for validation error messages.
+ */
+function checkProperty(
+  key: string,
+  value: unknown,
+  propSchema: Record<string, unknown>,
+  required: string[],
+  args: Record<string, unknown>,
+  errors: string[],
+): void {
+  // If the value is missing (undefined) but not required, skip type check
+  if (value === undefined && !required.includes(key)) {
+    return;
+  }
+
+  const expectedType = propSchema.type as JsonType | undefined;
+  if (!expectedType) return;
+
+  // Coerce string values to the expected type (e.g., "true" → boolean,
+  // "42" → number) to accommodate common LLM encoding mistakes.
+  const coerced = coerceValue(value, expectedType);
+  if (coerced !== value) {
+    args[key] = coerced;
+  }
+  if (!TYPE_CHECKERS[expectedType]?.(coerced)) {
+    const actualType = Array.isArray(coerced) ? 'array' : typeof coerced;
+    errors.push(`Wrong type for "${key}": expected ${expectedType}, got ${actualType}`);
+  }
+}
+
+/**
+ * Builds a human-readable summary of the expected schema shape
+ * for inclusion in validation error messages.
+ *
+ * @param properties - The `properties` map from the input schema.
+ * @param required - List of required property names.
+ * @returns A formatted string describing each property and its type.
+ */
+function summarizeSchema(
+  properties: Record<string, Record<string, unknown>>,
+  required: string[],
+): string {
+  const propDescriptions = Object.keys(properties)
+    .map((k) => {
+      const prop = properties[k];
+      const req = required.includes(k) ? ' (required)' : ' (optional)';
+      return `  - ${k}: ${prop.type ?? 'any'}${req}`;
+    })
+    .join('\n');
+  return `Expected shape:\n${propDescriptions}`;
+}
+
+/**
  * Validates a plain arguments object against a JSON Schema
  * `inputSchema` from a downstream MCP tool.
  *
@@ -115,39 +179,11 @@ export function validateArguments(
       }
       continue;
     }
-
-    // If the value is missing (undefined) but not required, skip type check
-    if (value === undefined && !required.includes(key)) {
-      continue;
-    }
-
-    const expectedType = propSchema.type as JsonType | undefined;
-    if (expectedType) {
-      // Coerce string values to the expected type (e.g., "true" → boolean,
-      // "42" → number) to accommodate common LLM encoding mistakes.
-      const coerced = coerceValue(value, expectedType);
-      if (coerced !== value) {
-        args[key] = coerced;
-      }
-      if (!TYPE_CHECKERS[expectedType]?.(coerced)) {
-        const actualType = Array.isArray(coerced) ? 'array' : typeof coerced;
-        errors.push(`Wrong type for "${key}": expected ${expectedType}, got ${actualType}`);
-      }
-    }
+    checkProperty(key, value, propSchema, required, args, errors);
   }
 
   if (errors.length > 0) {
-    // Build a human-readable schema summary
-    const propDescriptions = Object.keys(properties)
-      .map((k) => {
-        const prop = properties[k];
-        const req = required.includes(k) ? ' (required)' : ' (optional)';
-        return `  - ${k}: ${prop.type ?? 'any'}${req}`;
-      })
-      .join('\n');
-
-    const summary = `Expected shape:\n${propDescriptions}`;
-    return { valid: false, errors: [...errors, summary] };
+    return { valid: false, errors: [...errors, summarizeSchema(properties, required)] };
   }
 
   return { valid: true };

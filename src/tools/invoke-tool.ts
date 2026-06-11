@@ -25,6 +25,48 @@ export const InvokeToolInputSchema = {
 };
 
 /**
+ * Validates invocation arguments against the tool's cached input
+ * schema. Returns an error response when validation fails, or null
+ * when arguments are valid.
+ *
+ * @param catalog - The immutable tool catalog.
+ * @param server - The downstream server name.
+ * @param tool - The tool name.
+ * @param args - The arguments to validate.
+ * @param logger - Structured logger for diagnostic output.
+ * @returns A validation error response, or null when valid.
+ */
+function validateInvokeArgs(
+  catalog: ToolCatalog,
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+  logger: Logger,
+): { content: Array<{ type: 'text'; text: string }>; isError: true } | null {
+  const descriptor = catalog.toolMap.get(`${server}::${tool}`);
+  if (descriptor) {
+    const validation = validateArguments(args, descriptor.inputSchema);
+    if (!validation.valid) {
+      logger.error('invoke_tool validation failed', {
+        server,
+        tool,
+        errors: validation.errors,
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Invalid arguments:\n${validation.errors.join('\n')}`,
+          },
+        ],
+        isError: true as const,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Creates the invoke_tool handler closure over the catalog and an
  * invoker function. The handler receives only the catalog and a
  * function — never raw transport clients.
@@ -52,26 +94,14 @@ export function createInvokeToolHandler(
       lookupTools(catalog, params.server, [params.tool]);
 
       // Validate arguments against the cached input schema
-      const descriptor = catalog.toolMap.get(`${params.server}::${params.tool}`);
-      if (descriptor) {
-        const validation = validateArguments(params.arguments, descriptor.inputSchema);
-        if (!validation.valid) {
-          logger.error('invoke_tool validation failed', {
-            server: params.server,
-            tool: params.tool,
-            errors: validation.errors,
-          });
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Invalid arguments:\n${validation.errors.join('\n')}`,
-              },
-            ],
-            isError: true as const,
-          };
-        }
-      }
+      const validationError = validateInvokeArgs(
+        catalog,
+        params.server,
+        params.tool,
+        params.arguments,
+        logger,
+      );
+      if (validationError) return validationError;
 
       const result = await invokeDownstream(params.server, params.tool, params.arguments);
 

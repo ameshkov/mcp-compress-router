@@ -45,77 +45,7 @@ export async function connectAndDiscover(
   getAuthProvider?: (server: DownstreamServerConfig) => OAuthClientProvider | undefined,
 ): Promise<DiscoveryResult> {
   const results = await Promise.all(
-    servers.map(async (server) => {
-      const client = new Client(
-        { name: 'mcp-compress-router', version: '1.0.0' },
-        { capabilities: {} },
-      );
-
-      logger.info(`Connecting to downstream server "${server.name}"`, {
-        server: server.name,
-        type: server.type,
-      });
-
-      let transport;
-      if (server.type === 'stdio') {
-        if (!server.command) {
-          throw new Error(`Server "${server.name}" (stdio) is missing command`);
-        }
-        transport = new StdioClientTransport({
-          command: server.command,
-          args: server.args,
-          env: server.env,
-        });
-      } else {
-        // http or streamable-http
-        if (!server.url) {
-          throw new Error(`Server "${server.name}" (${server.type}) is missing url`);
-        }
-        const requestInit: RequestInit = {};
-        if (server.headers) {
-          requestInit.headers = server.headers as Record<string, string>;
-        }
-        const authProvider = getAuthProvider?.(server);
-        transport = new StreamableHTTPClientTransport(new URL(server.url), {
-          requestInit: Object.keys(requestInit).length > 0 ? requestInit : undefined,
-          authProvider,
-        });
-      }
-
-      try {
-        await client.connect(transport);
-        const listResult = await client.listTools();
-
-        logger.info(`Connected to "${server.name}" — ${listResult.tools.length} tools discovered`, {
-          server: server.name,
-          toolCount: listResult.tools.length,
-          tools: listResult.tools.map((t) => t.name),
-        });
-
-        const tools: ToolDescriptor[] = listResult.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema as Record<string, unknown>,
-        }));
-
-        return {
-          server: {
-            name: server.name,
-            description: server.description,
-            tools,
-          },
-          client,
-        };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error(`Failed to connect to server "${server.name}"`, {
-          server: server.name,
-          type: server.type,
-          error: message,
-        });
-        throw new Error(`Failed to connect to server "${server.name}": ${message}`);
-      }
-    }),
+    servers.map((server) => connectSingleServer(server, logger, getAuthProvider)),
   );
 
   const serversList: DiscoveredServer[] = [];
@@ -127,4 +57,103 @@ export async function connectAndDiscover(
   }
 
   return { servers: serversList, clients };
+}
+
+/**
+ * Connects to a single downstream server and discovers its tools.
+ *
+ * @param server - Downstream server configuration.
+ * @param logger - Structured logger for diagnostic output.
+ * @param getAuthProvider - Optional factory to provide OAuth credentials.
+ * @returns The discovered server data and live client connection.
+ * @throws If the server cannot be connected or tools cannot be listed.
+ */
+async function connectSingleServer(
+  server: DownstreamServerConfig,
+  logger: Logger,
+  getAuthProvider?: (s: DownstreamServerConfig) => OAuthClientProvider | undefined,
+): Promise<{ server: DiscoveredServer; client: Client }> {
+  const client = new Client(
+    { name: 'mcp-compress-router', version: '1.0.0' },
+    { capabilities: {} },
+  );
+
+  logger.info(`Connecting to downstream server "${server.name}"`, {
+    server: server.name,
+    type: server.type,
+  });
+
+  const transport = createTransport(server, getAuthProvider);
+
+  try {
+    await client.connect(transport);
+    const listResult = await client.listTools();
+
+    logger.info(`Connected to "${server.name}" — ${listResult.tools.length} tools discovered`, {
+      server: server.name,
+      toolCount: listResult.tools.length,
+      tools: listResult.tools.map((t) => t.name),
+    });
+
+    const tools: ToolDescriptor[] = listResult.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema as Record<string, unknown>,
+    }));
+
+    return {
+      server: {
+        name: server.name,
+        description: server.description,
+        tools,
+      },
+      client,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Failed to connect to server "${server.name}"`, {
+      server: server.name,
+      type: server.type,
+      error: message,
+    });
+    throw new Error(`Failed to connect to server "${server.name}": ${message}`);
+  }
+}
+
+/**
+ * Creates the appropriate transport for a downstream server config.
+ *
+ * @param server - Downstream server configuration.
+ * @param getAuthProvider - Optional factory to provide OAuth credentials.
+ * @returns A configured transport instance (stdio or HTTP).
+ * @throws If required configuration (command or url) is missing.
+ */
+function createTransport(
+  server: DownstreamServerConfig,
+  getAuthProvider?: (s: DownstreamServerConfig) => OAuthClientProvider | undefined,
+): StdioClientTransport | StreamableHTTPClientTransport {
+  if (server.type === 'stdio') {
+    if (!server.command) {
+      throw new Error(`Server "${server.name}" (stdio) is missing command`);
+    }
+    return new StdioClientTransport({
+      command: server.command,
+      args: server.args,
+      env: server.env,
+    });
+  }
+
+  // http or streamable-http
+  if (!server.url) {
+    throw new Error(`Server "${server.name}" (${server.type}) is missing url`);
+  }
+  const requestInit: RequestInit = {};
+  if (server.headers) {
+    requestInit.headers = server.headers as Record<string, string>;
+  }
+  const authProvider = getAuthProvider?.(server);
+  return new StreamableHTTPClientTransport(new URL(server.url), {
+    requestInit: Object.keys(requestInit).length > 0 ? requestInit : undefined,
+    authProvider,
+  });
 }

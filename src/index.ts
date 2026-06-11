@@ -12,7 +12,8 @@ import {
   OAuthCredentialManager,
 } from './services/index.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
-import type { DownstreamServerConfig } from './utils/index.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { DownstreamServerConfig, ToolCatalog } from './utils/index.js';
 import {
   createGetToolSchemaHandler,
   buildGetToolSchemaDescription,
@@ -64,22 +65,36 @@ export function collectEnv(
   return { ...previous, [key]: val };
 }
 
-async function runRouter(configPath: string | undefined, verbose: boolean) {
-  const logger = new Logger(verbose ? 'debug' : 'info');
+/**
+ * Wraps a CLI action handler with error handling.
+ * On success, writes the result to stdout. On error, writes to stderr
+ * and exits with code 1.
+ */
+function guardedAction<T extends unknown[]>(
+  fn: (...args: T) => Promise<string | undefined>,
+): (...args: T) => Promise<void> {
+  return async (...args: T) => {
+    try {
+      const result = await fn(...args);
+      if (result) {
+        process.stdout.write(result + '\n');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  };
+}
 
-  logger.info('Starting mcp-compress-router', {
-    verbose,
-    config: configPath ?? '(default)',
-  });
-
-  const resolved = resolveConfigPath(configPath);
-  logger.info('Loading configuration', { path: resolved });
-
-  const servers = await loadConfig(resolved);
-  logger.info('Configuration loaded', { serverCount: servers.length });
-
-  // Create OAuth credential managers for HTTP servers that have stored
-  // credentials or oauth overrides, so the transport can handle auth.
+/**
+ * Creates OAuth credential managers for HTTP servers that have stored
+ * credentials or oauth overrides, so the transport can handle auth.
+ */
+async function buildAuthProviders(
+  resolved: string,
+  servers: DownstreamServerConfig[],
+): Promise<Map<string, OAuthClientProvider>> {
   const authProviders = new Map<string, OAuthClientProvider>();
   for (const server of servers) {
     if (server.type === 'http' || server.type === 'streamable-http') {
@@ -91,27 +106,18 @@ async function runRouter(configPath: string | undefined, verbose: boolean) {
       }
     }
   }
+  return authProviders;
+}
 
-  const getAuthProvider = (server: DownstreamServerConfig) => authProviders.get(server.name);
-
-  logger.info('Connecting to downstream servers', {
-    servers: servers.map((s) => s.name),
-  });
-  const { servers: discovered, clients } = await connectAndDiscover(
-    servers,
-    logger,
-    getAuthProvider,
-  );
-  logger.info('Tools discovered', {
-    servers: discovered.map((d) => ({
-      name: d.name,
-      toolCount: d.tools.length,
-      tools: d.tools.map((t) => t.name),
-    })),
-  });
-
-  const catalog = buildCatalog(discovered);
-
+/**
+ * Creates the MCP server, registers router tools, and starts the
+ * stdio transport.
+ */
+async function startRouterServer(
+  catalog: ToolCatalog,
+  clients: Map<string, Client>,
+  logger: Logger,
+): Promise<void> {
   const router = new McpServer({
     name: 'mcp-compress-router',
     version: '1.0.0',
@@ -146,15 +152,44 @@ async function runRouter(configPath: string | undefined, verbose: boolean) {
   logger.info('Server started on stdio');
 }
 
-async function main() {
-  const program = new Command();
+async function runRouter(configPath: string | undefined, verbose: boolean) {
+  const logger = new Logger(verbose ? 'debug' : 'info');
 
-  program
-    .name('mcp-compress-router')
-    .description('Compress all connected MCP servers into a single router MCP');
+  logger.info('Starting mcp-compress-router', {
+    verbose,
+    config: configPath ?? '(default)',
+  });
 
-  // --- Management subcommands ---
+  const resolved = resolveConfigPath(configPath);
+  logger.info('Loading configuration', { path: resolved });
 
+  const servers = await loadConfig(resolved);
+  logger.info('Configuration loaded', { serverCount: servers.length });
+
+  const authProviders = await buildAuthProviders(resolved, servers);
+  const getAuthProvider = (server: DownstreamServerConfig) => authProviders.get(server.name);
+
+  logger.info('Connecting to downstream servers', {
+    servers: servers.map((s) => s.name),
+  });
+  const { servers: discovered, clients } = await connectAndDiscover(
+    servers,
+    logger,
+    getAuthProvider,
+  );
+  logger.info('Tools discovered', {
+    servers: discovered.map((d) => ({
+      name: d.name,
+      toolCount: d.tools.length,
+      tools: d.tools.map((t) => t.name),
+    })),
+  });
+
+  const catalog = buildCatalog(discovered);
+  await startRouterServer(catalog, clients, logger);
+}
+
+function registerAddCommand(program: Command): void {
   program
     .command('add <name> <commandOrUrl> [rest...]')
     .description('Add a downstream MCP server to the configuration')
@@ -162,10 +197,10 @@ async function main() {
     .option('--transport <type>', 'transport type (stdio or http)', 'stdio')
     .option('--header <header>', 'HTTP header (Key: Value)', collectHeaders, {})
     .option('-e, --env <env>', 'environment variable (KEY=value)', collectEnv, {})
-    .action(async (name, commandOrUrl, rest, options) => {
-      try {
+    .action(
+      guardedAction(async (name, commandOrUrl, rest, options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleAdd(configPath, {
+        return handleAdd(configPath, {
           name,
           transport: options.transport,
           commandOrUrl,
@@ -173,97 +208,76 @@ async function main() {
           env: Object.keys(options.env).length > 0 ? options.env : undefined,
           headers: Object.keys(options.header).length > 0 ? options.header : undefined,
         });
-        process.stdout.write(result + '\n');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+      }),
+    );
+}
 
+function registerRemoveCommand(program: Command): void {
   program
     .command('remove <name>')
     .description('Remove a downstream MCP server from the configuration')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
-    .action(async (name, options) => {
-      try {
+    .action(
+      guardedAction(async (name, options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleRemove(configPath, name);
-        process.stdout.write(result + '\n');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+        return handleRemove(configPath, name);
+      }),
+    );
+}
 
+function registerGetCommand(program: Command): void {
   program
     .command('get <name>')
     .description('Show details for a configured downstream MCP server')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
-    .action(async (name, options) => {
-      try {
+    .action(
+      guardedAction(async (name, options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleGet(configPath, name);
-        process.stdout.write(result + '\n');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+        return handleGet(configPath, name);
+      }),
+    );
+}
 
+function registerListCommand(program: Command): void {
   program
     .command('list')
     .description('List all configured downstream MCP servers')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
-    .action(async (options) => {
-      try {
+    .action(
+      guardedAction(async (options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleList(configPath);
-        if (result) {
-          process.stdout.write(result + '\n');
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+        return handleList(configPath);
+      }),
+    );
+}
 
+function registerLoginCommand(program: Command): void {
   program
     .command('login <name>')
     .description('Authenticate a downstream server using OAuth')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
-    .action(async (name, options) => {
-      try {
+    .action(
+      guardedAction(async (name, options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleLogin(configPath, name);
-        process.stdout.write(result + '\n');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+        return handleLogin(configPath, name);
+      }),
+    );
+}
 
+function registerLogoutCommand(program: Command): void {
   program
     .command('logout <name>')
     .description('Revoke and remove OAuth credentials for a downstream server')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
-    .action(async (name, options) => {
-      try {
+    .action(
+      guardedAction(async (name, options) => {
         const configPath = resolveConfigPath(options.config);
-        const result = await handleLogout(configPath, name);
-        process.stdout.write(result + '\n');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`Error: ${message}\n`);
-        process.exit(1);
-      }
-    });
+        return handleLogout(configPath, name);
+      }),
+    );
+}
 
-  // --- Router mode (default, no subcommand) ---
+function registerRouterCommand(program: Command): void {
   program
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .option('-v, --verbose', 'enable debug-level logging to stderr')
@@ -271,6 +285,22 @@ async function main() {
       const verbose = options.verbose || process.env.MCP_COMPRESS_ROUTER_VERBOSE === 'true';
       await runRouter(options.config, verbose);
     });
+}
+
+async function main() {
+  const program = new Command();
+
+  program
+    .name('mcp-compress-router')
+    .description('Compress all connected MCP servers into a single router MCP');
+
+  registerAddCommand(program);
+  registerRemoveCommand(program);
+  registerGetCommand(program);
+  registerListCommand(program);
+  registerLoginCommand(program);
+  registerLogoutCommand(program);
+  registerRouterCommand(program);
 
   await program.parseAsync();
 }

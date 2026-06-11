@@ -130,10 +130,10 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Removed credentials');
 
-    // Verify credentials are gone from credentials.json
-    const credContents = await fs.readFile(credPath, 'utf-8');
-    const credParsed = JSON.parse(credContents);
-    expect(credParsed.github).toBeUndefined();
+    // Verify credentials file is deleted when last entry removed
+    await expect(fs.readFile(credPath, 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
 
     // Verify mcpServers intact in mcp.json
     const configContents = await fs.readFile(configPath, 'utf-8');

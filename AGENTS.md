@@ -245,6 +245,21 @@ All code MUST meet documentation and style requirements before merge:
   export is excluded (e.g., "Exported for tests only; not part of the
   public module API"). Do NOT use `@internal` to silence legitimate
   unused-export warnings — remove the export instead.
+- **File size limit**: Source files SHOULD stay within 300 lines of code.
+  When approaching or exceeding this limit, refactor by extracting related
+  logic into separate modules, utility files, or dedicated service files.
+  **Do NOT** compress code, remove blank lines, or abandon consistent
+  formatting to squeeze more lines in — formatting is managed by Prettier
+  and must remain uniform across the codebase.
+  Exceptions: auto-generated files and database migration files.
+- **Function size limit**: Functions SHOULD stay within 50 lines of code.
+  When approaching or exceeding this limit, break the function into
+  smaller, named helper functions with single, clear responsibilities.
+  **Do NOT** condense logic into dense one-liners, inline multiple
+  statements on a single line, or strip whitespace to fit the limit —
+  formatting is managed by Prettier and must not be sacrificed for
+  brevity.
+  Exceptions: auto-generated files and database migration files.
 
 **Rationale**: Consistent documentation and tooling enforcement prevents
 technical debt accumulation and ensures codebase navigability.

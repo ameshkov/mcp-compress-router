@@ -1,5 +1,6 @@
 export type {
   DownstreamServerConfig,
+  OAuthConfig,
   ServerTransportType,
   ToolDescriptor,
   ToolCatalog,
