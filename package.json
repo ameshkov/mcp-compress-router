@@ -23,9 +23,9 @@
   "files": [
     "build"
   ],
-  "keywords": [],
+  "keywords": ["mcp", "copilot", "codex", "claude"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "Compress all connected MCP servers into a single router MCP to save tokens",
   "devDependencies": {
     "@eslint/js": "9.16.0",
