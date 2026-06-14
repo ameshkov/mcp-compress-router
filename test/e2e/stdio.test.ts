@@ -22,6 +22,7 @@ describe('MCP Compress Router E2E — stdio', () => {
           command: fixture.command,
           args: fixture.args,
           description: 'A test fixture server',
+          env: { MCP_E2E_PROPAGATED: 'reached-the-child' },
         },
       },
     };
@@ -264,6 +265,28 @@ describe('MCP Compress Router E2E — stdio', () => {
     expect(result.content[0]).toEqual({
       type: 'text',
       text: 'hello from e2e',
+    });
+  });
+
+  it('stdio env field propagates to the downstream child process', async () => {
+    const resp = await client.sendRequest('tools/call', {
+      name: 'invoke_tool',
+      arguments: {
+        server: 'fixture',
+        tool: 'echo_env',
+        arguments: { name: 'MCP_E2E_PROPAGATED' },
+      },
+    });
+
+    expect(resp.error).toBeUndefined();
+
+    const result = resp.result as {
+      content: Array<{ type: string; text: string }>;
+    };
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toEqual({
+      type: 'text',
+      text: 'reached-the-child',
     });
   });
 

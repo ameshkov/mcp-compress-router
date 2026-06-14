@@ -36,10 +36,10 @@ describe('connectAndDiscover', () => {
     const { servers } = await connectAndDiscover([config], new Logger('error'));
     expect(servers).toHaveLength(1);
     expect(servers[0].name).toBe('fixture');
-    expect(servers[0].tools).toHaveLength(5);
+    expect(servers[0].tools).toHaveLength(6);
 
     const toolNames = servers[0].tools.map((t) => t.name).sort();
-    expect(toolNames).toEqual(['add', 'crash', 'echo', 'failing_tool', 'multi_block']);
+    expect(toolNames).toEqual(['add', 'crash', 'echo', 'echo_env', 'failing_tool', 'multi_block']);
 
     const echoTool = servers[0].tools.find((t) => t.name === 'echo')!;
     expect(echoTool.description).toBe('Returns the input message unchanged.');
@@ -68,6 +68,29 @@ describe('connectAndDiscover', () => {
     expect(content[0]).toMatchObject({
       type: 'text',
       text: 'hello',
+    });
+  });
+
+  it('propagates the configured env map to the spawned child process', async () => {
+    const resolved = await resolveCommand();
+    const config: DownstreamServerConfig = {
+      name: 'fixture',
+      type: 'stdio',
+      command: resolved.command,
+      args: resolved.args,
+      env: { MCP_UNIT_PROPAGATED: 'reached-the-child' },
+    };
+
+    const { clients } = await connectAndDiscover([config], new Logger('error'));
+    const client = clients.get('fixture')!;
+    const result = await client.callTool({
+      name: 'echo_env',
+      arguments: { name: 'MCP_UNIT_PROPAGATED' },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]).toMatchObject({
+      type: 'text',
+      text: 'reached-the-child',
     });
   });
 

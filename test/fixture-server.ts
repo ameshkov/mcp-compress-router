@@ -110,6 +110,26 @@ async function main() {
     },
   );
 
+  server.registerTool(
+    'echo_env',
+    {
+      title: 'Echo Environment Variable',
+      description:
+        'Returns the value of the requested environment variable, ' +
+        'or an empty string when it is unset. Used to verify that a ' +
+        'configured `env` map reaches the spawned child process.',
+      inputSchema: {
+        name: z.string().describe('The environment variable name to read.'),
+      },
+    },
+    async (params) => {
+      const value = process.env[params.name] ?? '';
+      return {
+        content: [{ type: 'text' as const, text: value }],
+      };
+    },
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
