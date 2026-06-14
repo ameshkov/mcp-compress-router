@@ -4,6 +4,9 @@
 # Dependencies
 node_modules/
 
+# VSCode config
+.vscode
+
 # Build output
 build/
 

@@ -20,6 +20,7 @@ describe('openBrowser', () => {
   afterEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(process, 'platform', { value: originalPlatform });
+    delete process.env.MCP_COMPRESS_ROUTER_BROWSER;
   });
 
   it('macOS: spawns "open" with the URL as argument', async () => {
@@ -66,5 +67,43 @@ describe('openBrowser', () => {
     mockChild.emit('error', error);
 
     await expect(promise).rejects.toThrow('ENOENT');
+  });
+
+  it('uses the MCP_COMPRESS_ROUTER_BROWSER override when set', async () => {
+    process.env.MCP_COMPRESS_ROUTER_BROWSER = 'node /path/to/mock.js --headless';
+
+    const promise = openBrowser('https://example.com');
+    mockChild.emit('spawn');
+    await promise;
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledWith('node', [
+      '/path/to/mock.js',
+      '--headless',
+      'https://example.com',
+    ]);
+  });
+
+  it('MCP_COMPRESS_ROUTER_BROWSER takes precedence over the platform default', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    process.env.MCP_COMPRESS_ROUTER_BROWSER = 'firefox';
+
+    const promise = openBrowser('https://example.com');
+    mockChild.emit('spawn');
+    await promise;
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledWith('firefox', ['https://example.com']);
+  });
+
+  it('ignores a blank MCP_COMPRESS_ROUTER_BROWSER and uses the platform default', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    process.env.MCP_COMPRESS_ROUTER_BROWSER = '   ';
+
+    const promise = openBrowser('https://example.com');
+    mockChild.emit('spawn');
+    await promise;
+
+    expect(spawn).toHaveBeenCalledWith('xdg-open', ['https://example.com']);
   });
 });

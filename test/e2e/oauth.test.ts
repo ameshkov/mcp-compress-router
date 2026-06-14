@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { routerPath } from './helpers.js';
+import { routerPath, browserMockPath } from './helpers.js';
 import { createAuthFixtureServer } from '../fixture-auth-server.js';
 import type { AuthFixtureServer } from '../fixture-auth-server.js';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 
 describe('MCP Compress Router E2E — OAuth', () => {
   let authFixture: AuthFixtureServer;
@@ -34,16 +34,47 @@ describe('MCP Compress Router E2E — OAuth', () => {
   });
 
   // Helper: run a CLI subcommand of mcp-compress-router
-  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+  function runCli(
+    args: string[],
+    options: { extraEnv?: NodeJS.ProcessEnv; timeout?: number } = {},
+  ): { stdout: string; stderr: string; exitCode: number } {
     const result = spawnSync('node', [routerPath, ...args], {
-      env: { ...process.env, MCP_COMPRESS_ROUTER_HOME: tempDir },
-      timeout: 10000,
+      env: { ...process.env, MCP_COMPRESS_ROUTER_HOME: tempDir, ...options.extraEnv },
+      timeout: options.timeout ?? 10000,
     });
     return {
       stdout: result.stdout.toString().trim(),
       stderr: result.stderr.toString().trim(),
       exitCode: result.status ?? -1,
     };
+  }
+
+  // Async CLI runner. The auth fixture server runs in-process, so the
+  // OAuth success flow (which makes HTTP requests back to that fixture)
+  // cannot use spawnSync — it would block this worker's event loop and
+  // deadlock the fixture. spawn keeps the loop free to serve requests.
+  function runCliAsync(
+    args: string[],
+    options: { extraEnv?: NodeJS.ProcessEnv; timeout?: number } = {},
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    return new Promise((resolve, reject) => {
+      const child = spawn('node', [routerPath, ...args], {
+        env: { ...process.env, MCP_COMPRESS_ROUTER_HOME: tempDir, ...options.extraEnv },
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: -1 });
+      }, options.timeout ?? 10000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: code ?? -1 });
+      });
+      child.on('error', reject);
+    });
   }
 
   it('login for unknown server name returns guided error with no servers', () => {
@@ -141,4 +172,37 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(configParsed.mcpServers.github).toBeDefined();
     expect(configParsed.credentials).toBeUndefined();
   });
+
+  it('login completes the OAuth success flow and stores tokens', async () => {
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          authsrv: { type: 'http', url: authFixture.url + '/mcp' },
+        },
+      }),
+    );
+
+    // Drive the "browser" step with a headless mock that follows the OAuth
+    // authorize URL redirects, delivering the authorization code back to the
+    // login command's local callback server.
+    const result = await runCliAsync(['login', 'authsrv', '--config', configPath], {
+      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+      timeout: 20000,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Successfully authenticated');
+    expect(result.stdout).toContain('authsrv');
+    expect(result.stdout).toContain('credentials.json');
+
+    // The full flow (discover -> register -> authorize -> exchange) must
+    // have persisted real tokens in credentials.json.
+    const credPath = path.join(tempDir, 'credentials.json');
+    const creds = JSON.parse(await fs.readFile(credPath, 'utf-8'));
+    expect(creds.authsrv).toBeDefined();
+    expect(creds.authsrv.tokens.access_token).toMatch(/^at-/);
+    expect(creds.authsrv.tokens.refresh_token).toMatch(/^rt-/);
+    expect(creds.authsrv.tokens.token_type).toBe('Bearer');
+  }, 25000);
 });

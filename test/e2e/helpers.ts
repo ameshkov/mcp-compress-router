@@ -13,6 +13,9 @@ export const fixturePath = path.resolve(__dirname, '..', 'fixture-server.ts');
 /** Absolute path to the compiled router entry point. */
 export const routerPath = path.resolve(__dirname, '..', '..', 'build', 'index.js');
 
+/** Absolute path to the headless browser mock for OAuth E2E tests. */
+export const browserMockPath = path.resolve(__dirname, '..', 'browser-mock.js');
+
 /** Check whether a file exists at the given path. */
 export async function nodeExists(cmd: string): Promise<boolean> {
   try {

@@ -5,6 +5,25 @@ MCP, saving up to 99% on token overhead. Instead of sending every tool
 from every server to the LLM on every request, it exposes just two tools:
 `get_tool_schema` and `invoke_tool`.
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Configuration](#configuration)
+    - [The mcp.json Format](#the-mcpjson-format)
+    - [Credential Storage](#credential-storage)
+- [Adding MCP Servers](#adding-mcp-servers)
+    - [Adding a stdio Server](#adding-a-stdio-server)
+    - [Adding an HTTP Server](#adding-an-http-server)
+    - [OAuth Login](#oauth-login)
+- [Managing Servers](#managing-servers)
+- [Connecting to Coding Agents](#connecting-to-coding-agents)
+    - [Claude Desktop](#claude-desktop)
+    - [VS Code with Copilot or Continue](#vs-code-with-copilot-or-continue)
+    - [Cursor](#cursor)
+    - [How It Works for the Agent](#how-it-works-for-the-agent)
+- [Verbose Logging](#verbose-logging)
+- [Next Steps](#next-steps)
+
 ## Installation
 
 Install globally via npm:
@@ -68,9 +87,25 @@ Each server entry supports these fields:
 | `url` | For HTTP | The HTTP endpoint of the MCP server |
 | `headers` | No | HTTP headers to include in requests |
 | `description` | No | A human-readable description of the server |
+| `oauth` | No | OAuth overrides for HTTP servers (see below) |
 
 All string fields support `${VAR}` and `${VAR:-default}` environment
 variable expansion.
+
+The optional `oauth` field (HTTP servers only) supplies a pre-registered
+OAuth client instead of relying on dynamic client registration, and can
+override the requested scope:
+
+```json
+"oauth": {
+  "clientId": "${MY_CLIENT_ID}",
+  "clientSecret": "${MY_CLIENT_SECRET}",
+  "scope": "read write"
+}
+```
+
+Only `clientId` is required within `oauth`; `clientSecret` and `scope`
+are optional.
 
 ### Credential Storage
 
@@ -144,7 +179,17 @@ This opens your browser to complete the OAuth flow. The default timeout
 is 120 seconds; you can increase it with the
 `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` environment variable.
 
-To revoke credentials:
+For headless environments or CI, override the browser command with the
+`MCP_COMPRESS_ROUTER_BROWSER` environment variable. Set it to the
+executable plus any arguments; the authorization URL is appended as a
+single final argument, and no shell is used:
+
+```bash
+MCP_COMPRESS_ROUTER_BROWSER="node /path/to/headless-browser.js" \
+  mcp-compress-router login my-http
+```
+
+To remove stored credentials:
 
 ```bash
 mcp-compress-router logout my-http
