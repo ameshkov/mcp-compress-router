@@ -15,3 +15,13 @@ build/
 
 # Logs
 *.log
+
+# Local environment (secrets)
+.env
+
+# Local MCP config (gitignored so secrets stay local)
+mcp.json
+mcp.jsonc
+
+# Local development router home (configs, secrets, OAuth tokens)
+/dev-home/

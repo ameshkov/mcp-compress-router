@@ -1,9 +1,12 @@
 /// <reference types="node" />
 
+import * as path from 'node:path';
+import dotenv from 'dotenv';
 import { Command } from 'commander';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
+  resolveConfigDir,
   resolveConfigPath,
   loadConfig,
   connectAndDiscover,
@@ -160,7 +163,7 @@ async function runRouter(configPath: string | undefined, verbose: boolean) {
     config: configPath ?? '(default)',
   });
 
-  const resolved = resolveConfigPath(configPath);
+  const resolved = await resolveConfigPath(configPath);
   logger.info('Loading configuration', { path: resolved });
 
   const servers = await loadConfig(resolved);
@@ -199,7 +202,7 @@ function registerAddCommand(program: Command): void {
     .option('-e, --env <env>', 'environment variable (KEY=value)', collectEnv, {})
     .action(
       guardedAction(async (name, commandOrUrl, rest, options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleAdd(configPath, {
           name,
           transport: options.transport,
@@ -219,7 +222,7 @@ function registerRemoveCommand(program: Command): void {
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (name, options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleRemove(configPath, name);
       }),
     );
@@ -232,7 +235,7 @@ function registerGetCommand(program: Command): void {
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (name, options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleGet(configPath, name);
       }),
     );
@@ -245,7 +248,7 @@ function registerListCommand(program: Command): void {
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleList(configPath);
       }),
     );
@@ -258,7 +261,7 @@ function registerLoginCommand(program: Command): void {
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (name, options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleLogin(configPath, name);
       }),
     );
@@ -271,7 +274,7 @@ function registerLogoutCommand(program: Command): void {
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (name, options) => {
-        const configPath = resolveConfigPath(options.config);
+        const configPath = await resolveConfigPath(options.config);
         return handleLogout(configPath, name);
       }),
     );
@@ -288,6 +291,10 @@ function registerRouterCommand(program: Command): void {
 }
 
 async function main() {
+  // Load .env from the config directory before any config resolution
+  // or env var expansion.
+  dotenv.config({ path: path.join(resolveConfigDir(), '.env') });
+
   const program = new Command();
 
   program

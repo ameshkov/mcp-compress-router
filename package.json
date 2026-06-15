@@ -23,7 +23,12 @@
   "files": [
     "build"
   ],
-  "keywords": ["mcp", "copilot", "codex", "claude"],
+  "keywords": [
+    "mcp",
+    "copilot",
+    "codex",
+    "claude"
+  ],
   "author": "",
   "license": "MIT",
   "description": "Compress all connected MCP servers into a single router MCP to save tokens",
@@ -43,6 +48,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.24.3",
     "commander": "14.0.2",
+    "dotenv": "17.4.2",
+    "jsonc-parser": "3.3.1",
     "zod": "3.25.76"
   }
 }

@@ -73,6 +73,26 @@ describe('readConfigFile', () => {
     await expect(readConfigFile(configPath)).rejects.toThrow('Failed to parse');
   });
 
+  it('parses JSONC files with comments and trailing commas', async () => {
+    const configPath = path.join(tempDir, 'mcp.jsonc');
+    const config = `{
+      // A comment
+      "mcpServers": {
+        "foo": {
+          "type": "stdio",
+          "command": "echo",
+          "args": ["hello",],
+        },
+      },
+    }`;
+    await fs.writeFile(configPath, config);
+
+    const result = await readConfigFile(configPath);
+    expect(result).toEqual({
+      foo: { type: 'stdio', command: 'echo', args: ['hello'] },
+    });
+  });
+
   it('throws if the file has no mcpServers key', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await fs.writeFile(configPath, JSON.stringify({ other: true }));

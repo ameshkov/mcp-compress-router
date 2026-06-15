@@ -78,6 +78,9 @@ mcp-compress-router/
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
 │   │   ├── expand-env.test.ts # Unit tests for env var expansion
+│   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing
+│   │   │                        commas)
+│   │   ├── parse-jsonc.test.ts # Unit tests for parseJsonc
 │   │   ├── text-format.ts     # Compact catalog text renderer
 │   │   ├── types.ts           # Shared type definitions
 │   │   ├── validate-arguments.ts   # JSON Schema argument validation
@@ -100,9 +103,15 @@ mcp-compress-router/
 │       ├── http.test.ts       # E2E tests with HTTP downstream server
 │       └── mixed.test.ts      # E2E tests with stdio + HTTP together
 ├── docs/                     # Documentation and assets
+│   ├── getting-started.md    # Quick-start and installation guide
+│   ├── configuration.md      # Full configuration & env var reference
 │   └── assets/               # Example JSON payloads
+├── DEVELOPMENT.md            # Local setup & manual testing guide
+├── .env                      # Local environment (gitignored)
+├── .env.example              # Environment variable template (committed)
 ├── eslint.config.mjs         # ESLint flat config
 ├── knip.config.ts            # Knip unused-export analysis config
+├── mcp.example.jsonc         # Example JSONC config template (committed)
 ├── tsconfig.json             # TypeScript configuration (production)
 ├── tsconfig.test.json        # TypeScript configuration (tests, noEmit)
 ├── vitest.config.ts          # Vitest configuration
@@ -246,11 +255,24 @@ All code MUST meet documentation and style requirements before merge:
   public module API"). Do NOT use `@internal` to silence legitimate
   unused-export warnings — remove the export instead.
 - **File size limit**: Source files SHOULD stay within 300 lines of code.
-  When approaching or exceeding this limit, refactor by extracting related
-  logic into separate modules, utility files, or dedicated service files.
-  **Do NOT** compress code, remove blank lines, or abandon consistent
-  formatting to squeeze more lines in — formatting is managed by Prettier
-  and must remain uniform across the codebase.
+  When a file approaches or exceeds this limit — or fails the ESLint
+  `max-lines` gate (500 lines) — your FIRST and default response MUST be
+  to **split the file into several smaller, cohesive files**, each with a
+  single, clear responsibility (extract related functions, types, or
+  constants into dedicated modules, utilities, or services, and
+  re-export them through the barrel). Treat the limit as a signal that
+  the file is doing too much, not as a quota to optimize against. You
+  MUST attempt a split before any other tactic; only fall back if you can
+  articulate a concrete reason a split would hurt clarity. For test
+  files, split a large `*.test.ts` into multiple focused `*.test.ts`
+  files grouped by the behavior they verify — multiple test files per
+  source module are explicitly allowed. **Do NOT** satisfy the limit by
+  making the existing code shorter: no condensing tests into table-driven
+  blocks purely to save lines, no shortening of identifiers, string
+  literals, or file paths, no merging statements onto one line, and no
+  removing blank lines, comments, or JSDoc. Formatting is managed by
+  Prettier and must stay uniform — readability and clarity always win
+  over line count.
   Exceptions: auto-generated files and database migration files.
 - **Function size limit**: Functions SHOULD stay within 50 lines of code.
   When approaching or exceeding this limit, break the function into
@@ -329,6 +351,11 @@ Configuration and documentation MUST stay synchronized with code:
   configuration MUST update relevant documentation.
 - **Structure tracking**: Changes to project structure MUST update the
   Project Structure section in `AGENTS.md`.
+- **JSONC config support**: Configuration files support JSONC (comments
+  and trailing commas). Use `.jsonc` extension for hand-edited configs.
+  CLI management commands write plain `.json` (comments cannot
+  round-trip). A `.env` file in cwd is auto-loaded at startup — secrets
+  should go there, not in the config file.
 
 **Rationale**: Stale documentation causes onboarding friction and
 operational incidents.

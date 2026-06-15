@@ -42,17 +42,31 @@ Requires **Node.js 22 or later**.
 
 ## Configuration
 
-All configuration lives in a single JSON file. By default, the router
-looks for `~/.local/share/mcp-compress-router/mcp.json`. You can override
-this path with:
+All configuration lives in a JSON(C) file. By default, the router
+looks for a platform-specific location (preferring `mcp.jsonc` over
+`mcp.json` when both exist):
+
+- **Windows:** `%APPDATA%\mcp-compress-router\`
+- **macOS:** `~/Library/Application Support/mcp-compress-router/`
+- **Linux:** `~/.local/share/mcp-compress-router/`
+
+You can override this path with:
 
 - The `-c, --config` flag on any command, or
 - The `MCP_COMPRESS_ROUTER_HOME` environment variable (points to a
-  directory containing `mcp.json`).
+  directory containing the config file).
 
-### The mcp.json Format
+Both `.json` and `.jsonc` formats are supported. JSONC allows
+comments and trailing commas for hand-edited files. CLI management
+commands (`add`, `remove`) write plain `.json`.
 
-```json
+A `.env` file in the **configuration directory** is loaded automatically
+at startup (see
+[Configuration File Location](./configuration.md#configuration-file-location)),
+so you can keep secrets out of your config and reference them via
+[`${VAR}` syntax](./configuration.md#variable-expansion).
+
+```jsonc
 {
   "mcpServers": {
     "github": {

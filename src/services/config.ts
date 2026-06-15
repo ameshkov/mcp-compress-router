@@ -2,28 +2,102 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
 import type { DownstreamServerConfig, OAuthConfig, ServerTransportType } from '../utils/index.js';
-import { expandEnvField } from '../utils/index.js';
+import { expandEnvField, parseJsonc } from '../utils/index.js';
 
 /** Recognized MCP transport types. */
 const VALID_TYPES = new Set<string>(['stdio', 'http', 'streamable-http']);
+
+/** Per-application directory name used inside the user data folder. */
+const APP_DIR_NAME = 'mcp-compress-router';
+
+/**
+ * Resolves the base configuration directory.
+ *
+ * Priority: (1) MCP_COMPRESS_ROUTER_HOME env var, (2) the
+ * platform-specific default (see {@link defaultConfigDir}). This is a
+ * synchronous function that only reads environment variables and
+ * performs path operations.
+ *
+ * @returns The absolute path to the configuration directory.
+ */
+export function resolveConfigDir(): string {
+  return process.env.MCP_COMPRESS_ROUTER_HOME ?? defaultConfigDir();
+}
+
+/**
+ * Returns the platform-specific default configuration directory.
+ *
+ * - Windows (`win32`): `%APPDATA%\mcp-compress-router` (falls back to
+ *   `%USERPROFILE%\AppData\Roaming\mcp-compress-router` when `APPDATA`
+ *   is unset).
+ * - macOS (`darwin`): `~/Library/Application Support/mcp-compress-router`.
+ * - Linux and other Unixes: `~/.local/share/mcp-compress-router`
+ *   (XDG Base Directory style).
+ *
+ * The function is pure and side-effect free so it can be unit tested
+ * for every platform regardless of the host the tests run on.
+ *
+ * @param platform - The Node platform identifier. Defaults to the host's.
+ * @param home - The user home directory. Defaults to the host's.
+ * @param appData - The Windows `%APPDATA%` path. Defaults to the env var.
+ * @returns The absolute path to the default configuration directory.
+ * @internal Exported for tests only; not part of the public module API.
+ */
+export function defaultConfigDir(
+  platform: NodeJS.Platform = process.platform,
+  home: string = os.homedir(),
+  appData: string | undefined = process.env.APPDATA,
+): string {
+  switch (platform) {
+    case 'win32':
+      return path.join(appData ?? path.join(home, 'AppData', 'Roaming'), APP_DIR_NAME);
+    case 'darwin':
+      return path.join(home, 'Library', 'Application Support', APP_DIR_NAME);
+    default:
+      return path.join(home, '.local', 'share', APP_DIR_NAME);
+  }
+}
 
 /**
  * Resolves the configuration file path.
  *
  * Priority: (1) explicit path argument, (2) MCP_COMPRESS_ROUTER_HOME env var,
- * (3) default ~/.local/share/mcp-compress-router/mcp.json.
+ * (3) the platform-specific default (see {@link defaultConfigDir}). Within the
+ * resolved directory, `mcp.jsonc` is preferred over `mcp.json` when both exist.
+ * If neither exists, returns `mcp.json` (created on first use).
  *
  * @param explicitPath - An explicit config path, or undefined.
  * @returns The resolved absolute path to the config file.
  */
-export function resolveConfigPath(explicitPath: string | undefined): string {
+export async function resolveConfigPath(explicitPath: string | undefined): Promise<string> {
   if (explicitPath !== undefined) {
     return explicitPath;
   }
-  const home =
-    process.env.MCP_COMPRESS_ROUTER_HOME ??
-    path.join(os.homedir(), '.local', 'share', 'mcp-compress-router');
-  return path.join(home, 'mcp.json');
+  return resolveDirectoryConfig(resolveConfigDir());
+}
+
+/**
+ * Returns the existing mcp.jsonc or mcp.json path from a directory,
+ * preferring jsonc. When neither file exists, returns mcp.json.
+ */
+async function resolveDirectoryConfig(dir: string): Promise<string> {
+  const jsoncPath = path.join(dir, 'mcp.jsonc');
+  const jsonPath = path.join(dir, 'mcp.json');
+  if (await pathExists(jsoncPath)) return jsoncPath;
+  if (await pathExists(jsonPath)) return jsonPath;
+  return jsonPath;
+}
+
+/**
+ * Checks whether a file exists at the given path.
+ */
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -229,7 +303,7 @@ export async function loadConfig(configPath: string): Promise<DownstreamServerCo
   const raw = await fs.readFile(configPath, 'utf-8');
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseJsonc(raw, configPath);
   } catch {
     throw new Error(`Failed to parse config file: ${configPath}`);
   }

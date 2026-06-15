@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Logger } from '../utils/logger.js';
 import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
+import { parseJsonc } from '../utils/index.js';
 
 /**
  * Type guard for Node.js system errors that carry a `code` property.
@@ -76,7 +77,7 @@ export async function readConfigFile(configPath: string): Promise<McpServers> {
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseJsonc(raw, configPath);
   } catch {
     throw new Error(`Failed to parse config file: ${configPath}`);
   }
@@ -103,7 +104,7 @@ export async function writeConfigFile(configPath: string, mcpServers: McpServers
   let existing: Record<string, unknown> = { mcpServers: {} };
   try {
     const raw = await fs.readFile(configPath, 'utf-8');
-    existing = JSON.parse(raw) as Record<string, unknown>;
+    existing = parseJsonc(raw, configPath) as Record<string, unknown>;
   } catch {
     // File doesn't exist or is invalid — start fresh
   }

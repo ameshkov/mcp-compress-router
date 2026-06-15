@@ -1,0 +1,26 @@
+{
+  // MCP Compress Router example configuration (JSONC — comments allowed).
+  // Copy to mcp.jsonc (or mcp.json) and edit. Both are gitignored.
+  // Uses ${VAR} expansion against the environment (including .env).
+  "mcpServers": {
+    // stdio example — command and env via env vars
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_TOKEN": "${GITHUB_PERSONAL_TOKEN}"
+      },
+      "description": "GitHub API tools"
+    },
+    // http example — bearer token via env var
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MY_SERVER_TOKEN}"
+      },
+      "description": "My custom MCP server"
+    }
+  }
+}
