@@ -55,7 +55,6 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    * Must be called before startAuthorization so the redirect_uri is correct.
    *
    * @param port - The actual port the callback server is listening on.
-   * @public
    */
   setActualPort(port: number): void {
     this._actualPort = port;

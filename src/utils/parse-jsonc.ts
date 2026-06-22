@@ -12,7 +12,6 @@ import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
  *   from (e.g. a file path), used in error messages.
  * @returns The parsed value.
  * @throws Error when the text contains unrecoverable syntax errors.
- * @public
  */
 export function parseJsonc(text: string, context: string): unknown {
   const errors: ParseError[] = [];

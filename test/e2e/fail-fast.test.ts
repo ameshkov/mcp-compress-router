@@ -129,4 +129,23 @@ describe('MCP Compress Router — fail-fast startup', () => {
       await fs.rm(failTempDir, { recursive: true, force: true });
     }
   });
+
+  it('exits non-zero when config contains zero servers', async () => {
+    const failTempDir = path.join(tmpdir(), `mcp-e2e-empty-${Date.now()}`);
+    await fs.mkdir(failTempDir, { recursive: true });
+
+    const config = { mcpServers: {} };
+
+    const configPath = path.join(failTempDir, 'mcp.json');
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    try {
+      const { exitCode, stderr } = await spawnRouter(configPath, failTempDir);
+
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toContain('no downstream MCP servers');
+    } finally {
+      await fs.rm(failTempDir, { recursive: true, force: true });
+    }
+  });
 });

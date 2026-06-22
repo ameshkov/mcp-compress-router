@@ -69,7 +69,8 @@ mcp-compress-router/
 │   │   ├── config.ts          # Configuration loader
 │   │   ├── discovery.ts       # Downstream Connection Manager
 │   │   ├── catalog.ts         # Catalog Builder & Cache
-│   │   ├── config.test.ts     # Unit tests for config loading
+│   │   ├── config.test.ts     # Unit tests for config path resolution
+│   │   ├── config-load.test.ts # Unit tests for config loading
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
 │   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
 │   │   ├── invoker.ts         # Downstream tool invocation
@@ -254,6 +255,11 @@ All code MUST meet documentation and style requirements before merge:
   export is excluded (e.g., "Exported for tests only; not part of the
   public module API"). Do NOT use `@internal` to silence legitimate
   unused-export warnings — remove the export instead.
+- **`@public` tag usage**: Knip treats `@public` as a built-in tag that
+  suppresses unused-export warnings. Add `@public` **only** to exported
+  symbols that are part of the package's public API but are NOT
+  reachable from the entry point through internal imports (Knip would
+  otherwise report them as unused).
 - **File size limit**: Source files SHOULD stay within 300 lines of code.
   When a file approaches or exceeds this limit — or fails the ESLint
   `max-lines` gate (500 lines) — your FIRST and default response MUST be

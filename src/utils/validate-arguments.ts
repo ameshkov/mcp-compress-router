@@ -136,8 +136,6 @@ function summarizeSchema(
  * @param args - The arguments object to validate. May be mutated.
  * @param inputSchema - The JSON Schema object from the tool descriptor.
  * @returns A validation result.
- *
- * @public
  */
 export function validateArguments(
   args: Record<string, unknown>,

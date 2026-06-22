@@ -25,8 +25,6 @@ interface LogEntry {
 /**
  * A lightweight structured logger that writes timestamped JSON lines
  * to stderr with configurable level filtering.
- *
- * @public
  */
 export class Logger {
   private currentLevel: LogLevel;

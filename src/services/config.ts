@@ -297,7 +297,8 @@ function parseServerEntry(
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @returns An array of validated DownstreamServerConfig objects.
- * @throws If the file is missing, invalid JSON, or contains duplicate names.
+ * @throws If the file is missing, invalid JSON, contains duplicate names,
+ *   or contains zero servers (the router has nothing to route).
  */
 export async function loadConfig(configPath: string): Promise<DownstreamServerConfig[]> {
   const raw = await fs.readFile(configPath, 'utf-8');
@@ -323,6 +324,13 @@ export async function loadConfig(configPath: string): Promise<DownstreamServerCo
 
   for (const [name, entry] of Object.entries(mcpServers as Record<string, unknown>)) {
     servers.push(parseServerEntry(name, entry, names));
+  }
+
+  if (servers.length === 0) {
+    throw new Error(
+      'Configuration contains no downstream MCP servers. Add at least one ' +
+        'server before starting the router (e.g. via the "add" subcommand).',
+    );
   }
 
   return servers;

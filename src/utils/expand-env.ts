@@ -35,8 +35,6 @@ const ENV_REF_RE = /\$\{([A-Za-z_]\w*)(?::-(.*?))?\}/g;
  * @returns The expanded string.
  * @throws {ExpandEnvError} When a `${VAR}` reference has no default and
  *   the variable is not set in the environment.
- *
- * @public
  */
 export function expandEnvField(value: string, context: string): string {
   return value.replace(ENV_REF_RE, (match, varName: string, defaultVal: string | undefined) => {

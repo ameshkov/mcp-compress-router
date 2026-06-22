@@ -12,7 +12,6 @@ import { spawn, type SpawnOptions } from 'node:child_process';
  * flows in headless and CI environments.
  *
  * @param url - The URL to open.
- * @public
  */
 export async function openBrowser(url: string): Promise<void> {
   const customBrowser = process.env.MCP_COMPRESS_ROUTER_BROWSER;
