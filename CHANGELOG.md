@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.0.1] - 2026-06-23
+
 ### Changed
 
 - Release workflow now publishes via npm Trusted Publishers (tokenless
@@ -38,5 +40,6 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.0.1...HEAD
+[v1.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.0
