@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.0.2] - 2026-06-23
+
 ### Changed
 
 - Merged the release workflow into `ci.yml`. Publishing to npm now
@@ -47,6 +49,7 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.0.1...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.0.2...HEAD
+[v1.0.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.2
 [v1.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.0
