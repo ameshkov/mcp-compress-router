@@ -38,7 +38,7 @@ Or with pnpm:
 pnpm add -g mcp-compress-router
 ```
 
-Requires **Node.js 22 or later**.
+Requires **Node.js 24 or later**.
 
 ## Configuration
 

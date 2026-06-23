@@ -9,7 +9,7 @@
     "mcp-compress-router": "./build/index.js"
   },
   "engines": {
-    "node": ">=22",
+    "node": ">=24",
     "pnpm": ">=10"
   },
   "packageManager": "pnpm@10.14.0",
@@ -52,7 +52,7 @@
   "author": "Andrey Meshkov <am@adguard.com>",
   "devDependencies": {
     "@eslint/js": "9.16.0",
-    "@types/node": "22.19.2",
+    "@types/node": "24.13.2",
     "eslint": "9.16.0",
     "husky": "9.1.7",
     "knip": "6.6.2",

@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Release workflow now publishes via npm Trusted Publishers (tokenless
+  OIDC) instead of an `NPM_TOKEN` secret. The release job was bumped to
+  Node.js 24 to satisfy the npm CLI 11.5.1+ requirement for Trusted
+  Publishers (Node 22 bundles npm 10.x, which is too old). Provenance is
+  generated automatically from the existing `id-token: write`
+  permission.
+- Minimum supported Node.js runtime raised from 22 to 24. Updated the
+  `engines.node` constraint, CI workflow, `@types/node`, and all
+  documentation accordingly.
+
 ## [v1.0.0] - 2026-06-23
 
 ### Added

@@ -27,7 +27,7 @@ repository. For installation as an end user, see
 
 ## Prerequisites
 
-- **Node.js 22 or later** (check with `node --version`).
+- **Node.js 24 or later** (check with `node --version`).
 - **pnpm 10 or later** (install with `corepack enable && corepack prepare
   pnpm@latest --activate`, then verify with `pnpm --version`).
 - A terminal running from the **repository root** for all commands below.
@@ -218,7 +218,7 @@ an official interactive tool for testing MCP servers over stdio. It is the
 fastest way to call `get_tool_schema` and `invoke_tool` by hand and read
 their JSON output. No coding agent required.
 
-> Requires Node.js 22+. The inspector now prints a **session token** to the
+> Requires Node.js 24+. The inspector now prints a **session token** to the
 > console and auto-opens the browser with it pre-filled, so you usually do
 > not need to copy it manually.
 

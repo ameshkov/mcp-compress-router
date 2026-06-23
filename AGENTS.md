@@ -39,7 +39,7 @@ coding session with 3 MCP servers.
 | Field | Value |
 | --- | --- |
 | Language | TypeScript 5.9, ES2022 target, strict mode |
-| Runtime | Node.js 22+ |
+| Runtime | Node.js 24+ |
 | Package Manager | pnpm 10+ |
 | Framework | MCP SDK (`@modelcontextprotocol/sdk`) |
 | Linting | ESLint 9.x + typescript-eslint |

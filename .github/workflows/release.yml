@@ -4,12 +4,15 @@ name: Release
 # (e.g. `v1.2.3`) is pushed. The tag version MUST match the version
 # declared in package.json, otherwise the job fails fast.
 #
-# Setup required in the repository:
-#   1. npm automation access token (recommended, "Automation" type or a
-#      fine-grained token with publish permission) stored as the secret
-#      `NPM_TOKEN` (Settings -> Secrets and variables -> Actions).
-#   2. The package is published as public (`publishConfig.access: public`
-#      in package.json), so no first-time manual publish is required.
+# Publishing is tokenless via npm Trusted Publishers (OIDC). Setup:
+#   1. On npmjs.com, link the package to this repo's trusted publisher:
+#      repository = ameshkov/mcp-compress-router, workflow filename
+#      = release.yml (Environment optional).
+#   2. The job uses Node.js 24, which bundles npm 11.x (npm 11.5.1+ is
+#      required by Trusted Publishers).
+#   3. `id-token: write` (job permission) and a `repository.url` in
+#      package.json matching the GitHub repo are required for npm to
+#      generate provenance. No NPM_TOKEN secret is needed.
 #
 # To cut a release locally:
 #   git tag v1.2.3
@@ -55,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
@@ -68,10 +71,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # No token needed: npm authenticates via OIDC (Trusted Publishers).
+      # Provenance is generated automatically from the id-token permission.
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build npm package tarball
         run: npm pack
