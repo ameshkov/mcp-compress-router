@@ -8,22 +8,6 @@ and this project adheres to
 
 ## [Unreleased]
 
-### Added
-
-- npm publishing support: GitHub Actions Release workflow that publishes
-  to the npm registry on version tags (`v*`), with version-match
-  verification, full quality gate, npm provenance, and an auto-generated
-  GitHub release.
-- CI workflow that runs the full quality gate on push and pull requests.
-- `package.json` publishing metadata (`repository`, `homepage`, `bugs`,
-  `engines`, `publishConfig`, expanded keywords, author).
-
-### Changed
-
-- Fixed `main` entry point to point at `build/index.js`.
-- Added a Node.js shebang to the CLI entry point so the `bin` is
-  executable when installed via npm.
-
 ## [v1.0.0] - 2026-06-23
 
 ### Added
@@ -41,3 +25,6 @@ and this project adheres to
   downstream servers requiring authorization.
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
+
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.0.0...HEAD
+[v1.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.0
