@@ -122,9 +122,9 @@ describe('OAuthCredentialManager', () => {
     });
   });
 
-  it('saveTokens preserves cached authRequirement', async () => {
+  it('saveTokens sets authRequirement to oauth after successful token exchange', async () => {
     await writeCredentials(configPath, server.name, {
-      authRequirement: 'oauth',
+      authRequirement: 'none',
       checkedAt: '2026-06-22T12:00:00Z',
     });
 
@@ -132,8 +132,11 @@ describe('OAuthCredentialManager', () => {
     await mgr.saveTokens({ access_token: 'at-456', token_type: 'Bearer' });
 
     const store = await readCredentials(configPath);
+    // After a successful OAuth token exchange, the auth requirement
+    // is updated to 'oauth' with a fresh timestamp, overriding any
+    // stale value (e.g. 'none' from a failed startup probe).
     expect(store[server.name]?.authRequirement).toBe('oauth');
-    expect(store[server.name]?.checkedAt).toBe('2026-06-22T12:00:00Z');
+    expect(store[server.name]?.checkedAt).toBeDefined();
     expect(store[server.name]?.tokens?.access_token).toBe('at-456');
   });
 

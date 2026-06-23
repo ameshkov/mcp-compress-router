@@ -87,7 +87,10 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       clientRegistration: clientInformation as Record<string, unknown>,
       // Preserve existing tokens; omit when none (tokens is optional).
       ...(creds?.tokens ? { tokens: creds.tokens } : {}),
-      ...this._preserveAuthMetadata(creds),
+      // Successful OAuth client registration proves the server supports
+      // OAuth. Override any stale cached requirement.
+      authRequirement: 'oauth',
+      checkedAt: new Date().toISOString(),
     };
     await writeCredentials(this._configPath, this._server.name, updated);
   }
@@ -111,7 +114,11 @@ export class OAuthCredentialManager implements OAuthClientProvider {
         scope: tokens.scope,
         token_type: tokens.token_type,
       },
-      ...this._preserveAuthMetadata(creds),
+      // A successful OAuth token exchange proves the server supports
+      // OAuth. Override any stale cached requirement (e.g. 'none' from
+      // a failed startup probe) with 'oauth'.
+      authRequirement: 'oauth',
+      checkedAt: new Date().toISOString(),
     };
     await writeCredentials(this._configPath, this._server.name, updated);
   }
@@ -152,19 +159,6 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       return;
     }
     await removeCredentials(this._configPath, this._server.name);
-  }
-
-  /**
-   * Builds a fragment carrying the cached auth-requirement metadata so
-   * it survives token/client-registration updates.
-   */
-  private _preserveAuthMetadata(
-    creds: StoredCredentials | undefined,
-  ): Pick<StoredCredentials, 'authRequirement' | 'checkedAt'> {
-    const preserved: Pick<StoredCredentials, 'authRequirement' | 'checkedAt'> = {};
-    if (creds?.authRequirement) preserved.authRequirement = creds.authRequirement;
-    if (creds?.checkedAt) preserved.checkedAt = creds.checkedAt;
-    return preserved;
   }
 
   private async _loadCredentials(): Promise<StoredCredentials | undefined> {

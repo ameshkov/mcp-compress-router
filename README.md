@@ -1,7 +1,14 @@
 # MCP Compressing Router
 
-Compress all connected MCP into a single router MCP and save up to 99% on
-tokens.
+<p align="center">
+    Compress all connected MCP into a single router MCP and save up to 99% on
+    tokens.
+</p>
+
+<p align="center">
+    <img src="docs/assets/mcp-compress-router.png"
+         alt="MCP Compress Router" width="600"/>
+</p>
 
 ## The Problem
 
