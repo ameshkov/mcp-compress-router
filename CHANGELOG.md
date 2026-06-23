@@ -8,6 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Merged the release workflow into `ci.yml`. Publishing to npm now
+  runs as a `publish` job in CI that depends on the `check` (quality
+  gates) job, gated to tag pushes only (`v*`). The standalone
+  `release.yml` was removed.
+
 ## [v1.0.1] - 2026-06-23
 
 ### Changed

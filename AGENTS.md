@@ -116,8 +116,7 @@ mcp-compress-router/
 ├── .env.example              # Environment variable template (committed)
 ├── .github/                  # GitHub Actions workflows
 │   └── workflows/
-│       ├── ci.yml            # Quality gate on push and pull requests
-│       └── release.yml       # npm publish on version tags (v*)
+        └── ci.yml            # Quality gate + npm publish on version tags
 ├── eslint.config.mjs         # ESLint flat config
 ├── knip.config.ts            # Knip unused-export analysis config
 ├── mcp.example.jsonc         # Example JSONC config template (committed)
