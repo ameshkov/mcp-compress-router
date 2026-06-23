@@ -108,7 +108,6 @@ mcp-compress-router/
 │       ├── http.test.ts       # E2E tests with HTTP downstream server
 │       └── mixed.test.ts      # E2E tests with stdio + HTTP together
 ├── docs/                     # Documentation and assets
-│   ├── getting-started.md    # Quick-start and installation guide
 │   ├── configuration.md      # Full configuration & env var reference
 │   └── assets/               # Example JSON payloads
 ├── DEVELOPMENT.md            # Local setup & manual testing guide

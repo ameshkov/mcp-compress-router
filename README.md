@@ -10,6 +10,25 @@
          alt="MCP Compress Router" width="600"/>
 </p>
 
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+    - [Config File Location](#config-file-location)
+    - [Adding Downstream Servers](#adding-downstream-servers)
+    - [OAuth](#oauth)
+    - [Custom Headers](#custom-headers)
+    - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
+- [Connecting Coding Agents](#connecting-coding-agents)
+    - [Opencode](#opencode)
+    - [Claude Code](#claude-code)
+    - [Codex](#codex)
+    - [GitHub Copilot](#github-copilot)
+- [How It Works](#how-it-works)
+
 ## The Problem
 
 When you have multiple MCPs every request to the LLM will include ALL their
@@ -49,3 +68,341 @@ an average coding session will be about **$0.032175** so we saved about
 
 This is just a basic example with just 3 MCP servers, the more MCP servers you
 have, the more you save.
+
+## Prerequisites
+
+- **Node.js 24 or later** — the router runs on Node.js and is launched
+  via `npx`, so no separate install step is needed.
+- **A coding agent that supports stdio MCP servers** — this covers
+  virtually every modern coding agent (opencode, Claude Code, Codex,
+  GitHub Copilot, Cursor, etc.). The router exposes itself as a single
+  stdio MCP server, so any agent that can spawn a local MCP process
+  works.
+
+## Quick Start
+
+The router is published on npm as
+[`mcp-compress-router`](https://www.npmjs.com/package/mcp-compress-router).
+You do not need to install it — just run it with `npx`:
+
+```bash
+npx mcp-compress-router add github -- npx -y @modelcontextprotocol/server-github
+```
+
+This registers a downstream MCP server named `github` and writes it to
+your [config file](#config-file-location). Repeat for every MCP server you
+want to compress.
+
+Then point your [coding agent](#connecting-coding-agents) at the router:
+
+```bash
+npx mcp-compress-router
+```
+
+When started without a subcommand, the router runs the MCP server over
+stdio and exposes exactly two tools (`get_tool_schema`,
+`invoke_tool`) to the agent.
+
+## Configuration
+
+The router reads its configuration from a single JSON(C) file that lists
+every downstream MCP server to compress. You can edit this file by hand
+or use the `add` / `remove` / `get` / `list` CLI commands.
+
+### Config File Location
+
+By default, the config file lives in a platform-specific directory
+(`mcp.jsonc` is preferred over `mcp.json` when both exist):
+
+- **Windows:** `%APPDATA%\mcp-compress-router\`
+- **macOS:** `~/Library/Application Support/mcp-compress-router/`
+- **Linux:** `~/.local/share/mcp-compress-router/`
+
+You can override this with:
+
+- The `-c, --config <path>` flag on any command, or
+- The `MCP_COMPRESS_ROUTER_HOME` environment variable (points to a
+  directory containing the config file).
+
+If the file does not exist when a management command runs, it is created
+automatically with an empty `{ "mcpServers": {} }` body.
+
+A `.env` file in the **same directory** is loaded automatically at
+startup, so you can keep secrets out of the config (see
+[Secrets and Variable Expansion](#secrets-and-variable-expansion)).
+
+> **Note on `-c` and credential storage:** when you override the config
+> path with `-c /some/dir/mcp.json`, both `credentials.json` (OAuth
+> tokens) and `mcp.json` live in `/some/dir/` — i.e. next to the config
+> file you specified. The `.env` file, however, is loaded from the
+> [configuration directory](#config-file-location) resolved by
+> `MCP_COMPRESS_ROUTER_HOME` or the platform default, *not* from beside
+> the explicit `-c` path. To co-locate `.env` with a custom config, set
+> `MCP_COMPRESS_ROUTER_HOME` to the same directory.
+
+### Adding Downstream Servers
+
+Use the `add` command to register a downstream MCP server.
+
+**stdio server** (a local process):
+
+```bash
+npx mcp-compress-router add github -- npx -y @modelcontextprotocol/server-github
+
+# With environment variables
+npx mcp-compress-router add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
+  -- npx -y @modelcontextprotocol/server-github
+```
+
+**HTTP server** (a remote endpoint; transport auto-detected from the
+URL):
+
+```bash
+npx mcp-compress-router add my-http https://localhost:3100/mcp
+
+# With a custom header
+npx mcp-compress-router add my-http \
+  --header "Authorization: Bearer mytoken" \
+  https://localhost:3100/mcp
+```
+
+This produces a config file that looks like:
+
+```jsonc
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_TOKEN": "ghp_xxx" },
+      "description": "GitHub API tools"
+    },
+    "my-http": {
+      "type": "http",
+      "url": "https://localhost:3100/mcp",
+      "headers": { "Authorization": "Bearer mytoken" }
+    }
+  }
+}
+```
+
+Both `.json` and `.jsonc` (JSON with comments and trailing commas) are
+supported. CLI commands write plain `.json`; hand-edited files may use
+`.jsonc`.
+
+Other management commands:
+
+```bash
+npx mcp-compress-router list            # list all servers + auth status
+npx mcp-compress-router get my-http     # show one server's config
+npx mcp-compress-router remove my-http  # remove a server
+```
+
+### OAuth
+
+HTTP servers that require OAuth are supported. When you `add` an HTTP
+server, the router probes it for OAuth metadata and starts the login
+flow automatically if OAuth is advertised. You can also trigger it
+manually:
+
+```bash
+npx mcp-compress-router login my-http
+```
+
+This opens your browser to complete the authorization-code flow. Tokens
+are stored in a separate `credentials.json` in the same directory as
+`mcp.json` (with `0600` permissions on Unix), so you can safely
+share or version-control `mcp.json` without exposing tokens. Add
+`credentials.json` to your `.gitignore`.
+
+By default the router uses
+[Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591).
+If your server requires a pre-registered client, add an `oauth` block to
+the server entry (in `mcp.json`):
+
+```jsonc
+"my-http": {
+  "type": "http",
+  "url": "https://example.com/mcp",
+  "oauth": {
+    "clientId": "${MY_CLIENT_ID}",
+    "clientSecret": "${MY_CLIENT_SECRET}",
+    "scope": "read write"
+  }
+}
+```
+
+Only `clientId` is required; `clientSecret` and `scope` are optional.
+
+Other OAuth commands:
+
+```bash
+npx mcp-compress-router logout my-http  # remove stored credentials
+```
+
+For headless or CI environments, override the browser with the
+`MCP_COMPRESS_ROUTER_BROWSER` environment variable. The authorization
+URL is appended as a single final argument (no shell):
+
+```bash
+MCP_COMPRESS_ROUTER_BROWSER="node /path/to/headless-browser.js" \
+  npx mcp-compress-router login my-http
+```
+
+The default login timeout is 120 seconds; override it with
+`MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS`.
+
+### Custom Headers
+
+For HTTP servers that authenticate with a static API key or bearer
+token instead of OAuth, use the `headers` field. You can set it via the
+CLI or directly in `mcp.json`:
+
+```bash
+npx mcp-compress-router add my-http \
+  --header "Authorization: Bearer mytoken" \
+  --header "X-Custom: value" \
+  https://example.com/mcp
+```
+
+```jsonc
+"my-http": {
+  "type": "http",
+  "url": "https://example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${MY_SERVER_TOKEN}",
+    "X-Custom": "value"
+  }
+}
+```
+
+Header values support
+[variable expansion](#secrets-and-variable-expansion), so you can keep
+the actual token out of the config file.
+
+### Secrets and Variable Expansion
+
+Every string field in a server entry (`command`, `args`, `env`,
+`headers`, `url`, `oauth.*`) is expanded against the process
+environment at load time. Two syntaxes are supported:
+
+| Syntax | Behavior |
+| --- | --- |
+| `${VAR}` | Replaced with the value of `VAR`. Throws if unset. |
+| `${VAR:-default}` | Replaced with `VAR` when set and non-empty, otherwise `default`. |
+
+Put your secrets in a `.env` file next to `mcp.json`:
+
+```bash
+# <config directory>/.env
+GITHUB_PERSONAL_TOKEN=ghp_abc123
+MY_SERVER_TOKEN=secret-token
+```
+
+Shell environment variables always take precedence over `.env` values.
+
+## Connecting Coding Agents
+
+Once your downstream servers are configured, connect your agent to the
+router the same way you would connect any other MCP server — by
+pointing it at `npx mcp-compress-router`. The examples below assume the
+default [config location](#config-file-location); pass `-c <path>` if
+you use a custom one.
+
+### Opencode
+
+Add the router to your `opencode.json` under `mcp`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "compress-router": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-compress-router"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Claude Code
+
+Add this to a project-level `.mcp.json` in your workspace root, or to
+your user-level config (applies to every project):
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "compress-router": {
+      "command": "npx",
+      "args": ["-y", "mcp-compress-router"]
+    }
+  }
+}
+```
+
+### Codex
+
+Add a `[mcp_servers.compress-router]` table to your Codex config (note
+the snake_case key). The config path is `~/.codex/config.toml` on
+macOS/Linux, or `%USERPROFILE%\.codex\config.toml` on Windows; you can
+also scope it to a single project via `.codex/config.toml` in trusted
+projects.
+
+```toml
+[mcp_servers.compress-router]
+command = "npx"
+args = ["-y", "mcp-compress-router"]
+enabled = true
+```
+
+### GitHub Copilot
+
+Add this to `.vscode/mcp.json` in your workspace (project-level, applies
+only to that workspace), or to your **user-level** MCP settings which
+apply across every workspace: open the Command Palette →
+`Preferences: Open User Settings (JSON)` and add the same `servers`
+block under the `mcp` key. Project-level and user-level entries are
+merged, with project-level taking precedence.
+
+```json
+{
+  "servers": {
+    "compress-router": {
+      "command": "npx",
+      "args": ["-y", "mcp-compress-router"]
+    }
+  }
+}
+```
+
+## How It Works
+
+Once connected, the agent sees exactly **two tools**:
+
+- **`get_tool_schema(server, tools)`** — Retrieves the JSON parameter
+  schema for one or more tools on a downstream MCP server. The tool's
+  description includes a compact listing of all servers and their
+  available tool names.
+- **`invoke_tool(server, tool, arguments)`** — Forwards a tool call to
+  the downstream MCP server and returns the result.
+
+The typical workflow:
+
+1. The agent reads the compact catalog from the `get_tool_schema`
+   description and identifies which tools it needs.
+2. It calls `get_tool_schema` to learn the exact parameters.
+3. It calls `invoke_tool` to execute a tool, validated against the
+   cached schema.
+
+This replaces thousands of tokens of tool listings with a compact ~900
+token catalog, regardless of how many downstream servers you have.
+
+For the full configuration and environment variable reference, see
+[configuration.md](docs/configuration.md).

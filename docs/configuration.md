@@ -2,8 +2,8 @@
 
 This document is a complete reference for every configuration option
 and environment variable supported by MCP Compress Router. For a
-quick-start guide, see
-[Getting Started](./getting-started.md).
+quick-start guide, see the
+[README](../README.md).
 
 ## Table of Contents
 

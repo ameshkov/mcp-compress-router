@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Usage instructions to the README: quick start with `npx`,
+  prerequisites, config file location, downstream server configuration,
+  OAuth, custom headers, secrets via `${VAR}` expansion, and agent
+  connection examples for opencode, Claude Code, Codex, and GitHub
+  Copilot. Clarified where `credentials.json` is stored when overriding
+  the config path with `-c`.
+
+### Removed
+
+- `docs/getting-started.md`. Its content is now covered by the README;
+  cross-references in `configuration.md`, `DEVELOPMENT.md`, and
+  `AGENTS.md` were updated to point to the README instead.
+
 ## [v1.0.2] - 2026-06-23
 
 ### Changed

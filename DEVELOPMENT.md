@@ -2,8 +2,8 @@
 
 How to set up, run, and manually test MCP Compress Router on your own
 machine. This guide assumes you are working inside a clone of the
-repository. For installation as an end user, see
-[Getting Started](./docs/getting-started.md) instead.
+repository. For installation as an end user, see the
+[README](./README.md) instead.
 
 ## Table of Contents
 
