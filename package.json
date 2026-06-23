@@ -1,10 +1,26 @@
 {
   "name": "mcp-compress-router",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Compress all connected MCP servers into a single router MCP to save tokens",
+  "license": "MIT",
   "type": "module",
+  "main": "build/index.js",
   "bin": {
     "mcp-compress-router": "./build/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ameshkov/mcp-compress-router.git"
+  },
+  "homepage": "https://github.com/ameshkov/mcp-compress-router#readme",
+  "bugs": {
+    "url": "https://github.com/ameshkov/mcp-compress-router/issues"
   },
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
@@ -27,11 +43,11 @@
     "mcp",
     "copilot",
     "codex",
-    "claude"
+    "claude",
+    "model-context-protocol",
+    "router"
   ],
-  "author": "",
-  "license": "MIT",
-  "description": "Compress all connected MCP servers into a single router MCP to save tokens",
+  "author": "Andrey Meshkov <am@adguard.com>",
   "devDependencies": {
     "@eslint/js": "9.16.0",
     "@types/node": "22.19.2",

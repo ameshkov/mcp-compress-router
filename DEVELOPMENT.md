@@ -22,6 +22,7 @@ repository. For installation as an end user, see
     - [Option 3: Raw JSON-RPC over stdio](#option-3-raw-json-rpc-over-stdio)
     - [What to Verify](#what-to-verify)
 - [Code Quality Gates](#code-quality-gates)
+- [Releasing](#releasing)
 - [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
@@ -433,6 +434,52 @@ fail to find `build/index.js`.
 
 A Husky pre-commit hook is installed by `pnpm install` (see the `prepare`
 script in `package.json`); it runs automatically when you commit.
+
+## Releasing
+
+Releases are published to the npm registry automatically by the
+[Release workflow](.github/workflows/release.yml) whenever a version tag
+is pushed.
+
+### One-time setup
+
+1. **npm access token.** Create an *Automation* (or fine-grained with
+   publish permission) access token at
+   [npmjs.com -> Access Tokens](https://www.npmjs.com/settings/ameshkov/tokens).
+2. **Add the repository secret.** In
+   `Settings -> Secrets and variables -> Actions -> New repository
+   secret`, add a secret named `NPM_TOKEN` with the token from step 1.
+3. The package is published as **public** (see `publishConfig` in
+   `package.json`), so no first-time manual publish is required.
+
+### Cutting a release
+
+1. Make sure `CHANGELOG.md` is up to date under the `[Unreleased]`
+   section.
+2. Bump the `version` field in `package.json` following
+   [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+3. Commit the version bump and tag it with a `v` prefix:
+
+   ```bash
+   git add package.json CHANGELOG.md
+   git commit -m "Release v1.2.3"
+   git tag v1.2.3
+   git push origin master v1.2.3
+   ```
+
+The workflow verifies that the tag version matches `package.json`, runs
+the full quality gate, builds, publishes to npm with provenance, and
+creates a GitHub release linking to `CHANGELOG.md` with the npm tarball
+attached.
+
+### Notes
+
+- The tag version **must** match `package.json` exactly, or the job
+  fails fast.
+- npm
+  [provenance](https://docs.npmjs.com/generating-provenance-statements)
+  is enabled, so each published version links back to its source
+  commit and build.
 
 ## Troubleshooting
 
