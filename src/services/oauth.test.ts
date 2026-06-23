@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { OAuthCredentialManager } from './oauth.js';
+import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 describe('OAuthCredentialManager', () => {
@@ -96,6 +97,44 @@ describe('OAuthCredentialManager', () => {
     await mgr.clearTokens();
     expect(await mgr.tokens()).toBeUndefined();
     expect(await mgr.clientInformation()).toBeUndefined();
+  });
+
+  it('clearTokens preserves cached authRequirement on logout', async () => {
+    // Seed a fully authenticated entry that also carries a cached
+    // auth requirement.
+    await writeCredentials(configPath, server.name, {
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+      tokens: { access_token: 'at-123', token_type: 'Bearer' },
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.clearTokens();
+
+    expect(await mgr.tokens()).toBeUndefined();
+    expect(await mgr.clientInformation()).toBeUndefined();
+
+    // The entry survives with only the cached auth requirement.
+    const store = await readCredentials(configPath);
+    expect(store[server.name]).toEqual({
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+  });
+
+  it('saveTokens preserves cached authRequirement', async () => {
+    await writeCredentials(configPath, server.name, {
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveTokens({ access_token: 'at-456', token_type: 'Bearer' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.authRequirement).toBe('oauth');
+    expect(store[server.name]?.checkedAt).toBe('2026-06-22T12:00:00Z');
+    expect(store[server.name]?.tokens?.access_token).toBe('at-456');
   });
 
   it('uses oauth overrides when provided', () => {

@@ -31,9 +31,11 @@ to compress into the router. At startup the router:
    in string fields. Before resolution, a `.env` file in the current
    working directory is loaded automatically (see
    [Environment Variables](#environment-variables)).
-3. Connects to every downstream server, discovers their tools, and
+3. Probes each HTTP server for OAuth support and caches the result in
+   `credentials.json` (see [Credential Storage](#credential-storage)).
+4. Connects to every downstream server, discovers their tools, and
    builds a compact catalog.
-4. Exposes two tools (`get_tool_schema` and `invoke_tool`) on a stdio
+5. Exposes two tools (`get_tool_schema` and `invoke_tool`) on a stdio
    transport.
 
 Configuration never appears in the tool catalog sent to the LLM. Only
@@ -208,10 +210,10 @@ Remove stored credentials with `logout <name>`.
 
 ## Credential Storage
 
-OAuth tokens and client registration records are stored in a separate
-`credentials.json` file located in the same directory as `mcp.json`.
-The router manages this file automatically — you do not edit it by
-hand.
+OAuth tokens, client registration records, and cached auth-requirement
+metadata are stored in a separate `credentials.json` file located in
+the same directory as `mcp.json`. The router manages this file
+automatically — you do not edit it by hand.
 
 ```json
 {
@@ -219,6 +221,8 @@ hand.
     "clientRegistration": {
       "client_id": "..."
     },
+    "authRequirement": "oauth",
+    "checkedAt": "2026-06-22T12:00:00Z",
     "tokens": {
       "access_token": "...",
       "refresh_token": "...",
@@ -226,15 +230,27 @@ hand.
       "scope": "read write",
       "token_type": "Bearer"
     }
+  },
+  "public-api": {
+    "authRequirement": "none",
+    "checkedAt": "2026-06-22T12:00:01Z"
   }
 }
 ```
 
+- `authRequirement` — cached result of the OAuth metadata probe
+  (`"oauth"`, `"none"`, or `"unknown"`). Set at router startup and on
+  `add`.
+- `checkedAt` — ISO-8601 timestamp of the last probe.
+- An entry without `tokens` represents a server that was probed but
+  never logged in (or was since logged out). `logout` strips tokens but
+  preserves `authRequirement`, so the server still appears in `list`
+  with its auth status.
 - On Unix systems, `credentials.json` is created with `0600`
   permissions (owner read/write only).
 - On Windows, file permissions cannot be restricted; the router logs a
   warning and stores the file in the same directory.
-- When the last entry is removed (via `logout`), the file is deleted.
+- When the last entry is removed entirely, the file is deleted.
 - The `clientRegistration` field is omitted when OAuth overrides
   (`oauth.clientId`) are used.
 
@@ -261,10 +277,11 @@ A `.env` file in the **configuration directory** (see
 [Configuration File Location](#configuration-file-location)) is loaded
 at startup. The configuration directory is determined by the same
 priority as the config file: `MCP_COMPRESS_ROUTER_HOME` if set,
-otherwise the default home directory.
+otherwise the platform-specific default (see
+[Configuration File Location](#configuration-file-location)).
 
 ```bash
-# ~/.local/share/mcp-compress-router/.env
+# <configuration directory>/.env
 GITHUB_PERSONAL_TOKEN=ghp_abc123
 MY_SERVER_TOKEN=secret-token
 ```
@@ -358,7 +375,30 @@ Prints the raw configuration for a single server.
 
 ### `list`
 
-Prints the names and transport types of every configured server.
+Prints a table of every configured server with its transport type,
+command or URL, and auth status. Auth status is read entirely from
+local files (`mcp.json` and `credentials.json`) — no network access.
+
+```text
+Configuration was loaded from /home/user/.config/mcp-compress-router/mcp.json
+
+Name      Type  CommandOrUrl                                   Auth
+github    http  https://api.github.com/mcp                     requires login
+notion    http  https://api.notion.com/mcp                     authenticated
+my-api    http  https://example.com/mcp                        public
+local-fs  stdio npx -y @modelcontextprotocol/server-filesystem none
+```
+
+The `Auth` column values:
+
+| Value | Meaning |
+| --- | --- |
+| `none` | stdio server (no auth possible) |
+| `header` | HTTP server with a static `Authorization` header |
+| `authenticated` | HTTP server advertising OAuth with stored tokens |
+| `requires login` | HTTP server advertising OAuth without tokens |
+| `public` | HTTP server that does not advertise OAuth |
+| `unknown` | HTTP server whose OAuth support could not be determined |
 
 ### `login <name>`
 

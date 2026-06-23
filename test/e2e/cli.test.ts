@@ -3,7 +3,14 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { spawn } from 'node:child_process';
-import { fixturePath, routerPath, resolveFixtureCommand } from './helpers.js';
+import type * as http from 'node:http';
+import {
+  fixturePath,
+  routerPath,
+  resolveFixtureCommand,
+  createHttpFixtureServer,
+  getHttpFixtureUrl,
+} from './helpers.js';
 
 /** Spawn a CLI subcommand and capture stdout/stderr. */
 function runCli(
@@ -33,15 +40,20 @@ function runCli(
 
 describe('CLI management commands', () => {
   let homeDir: string;
+  let httpServer: http.Server;
+  let httpUrl: string;
 
   beforeAll(async () => {
     homeDir = path.join(
       os.tmpdir(),
       `mcp-cli-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
+    httpServer = (await createHttpFixtureServer()).server;
+    httpUrl = getHttpFixtureUrl(httpServer);
   });
 
   afterAll(async () => {
+    httpServer.close();
     await fs.rm(homeDir, { recursive: true, force: true });
   });
 
@@ -52,11 +64,8 @@ describe('CLI management commands', () => {
   });
 
   it('add then get then list then remove lifecycle', async () => {
-    // Add an HTTP server
-    const addResult = await runCli(
-      ['add', '--transport', 'http', 'sentry', 'https://mcp.sentry.dev/mcp'],
-      homeDir,
-    );
+    // Add an HTTP server (local fixture — no OAuth metadata advertised)
+    const addResult = await runCli(['add', '--transport', 'http', 'sentry', httpUrl], homeDir);
     expect(addResult.exitCode).toBe(0);
     expect(addResult.stdout).toContain('Added server "sentry"');
 
@@ -72,7 +81,7 @@ describe('CLI management commands', () => {
     const getResult = await runCli(['get', 'sentry'], homeDir);
     expect(getResult.exitCode).toBe(0);
     expect(getResult.stdout).toContain('sentry');
-    expect(getResult.stdout).toContain('https://mcp.sentry.dev/mcp');
+    expect(getResult.stdout).toContain(httpUrl);
 
     // List both servers
     const listResult = await runCli(['list'], homeDir);

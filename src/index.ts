@@ -13,6 +13,7 @@ import {
   buildCatalog,
   invokeDownstreamTool,
   OAuthCredentialManager,
+  persistAuthRequirements,
 } from './services/index.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -169,6 +170,8 @@ async function runRouter(configPath: string | undefined, verbose: boolean) {
   const servers = await loadConfig(resolved);
   logger.info('Configuration loaded', { serverCount: servers.length });
 
+  await persistAuthRequirements(resolved, servers, logger);
+
   const authProviders = await buildAuthProviders(resolved, servers);
   const getAuthProvider = (server: DownstreamServerConfig) => authProviders.get(server.name);
 
@@ -203,7 +206,7 @@ function registerAddCommand(program: Command): void {
     .action(
       guardedAction(async (name, commandOrUrl, rest, options) => {
         const configPath = await resolveConfigPath(options.config);
-        return handleAdd(configPath, {
+        const result = await handleAdd(configPath, {
           name,
           transport: options.transport,
           commandOrUrl,
@@ -211,6 +214,7 @@ function registerAddCommand(program: Command): void {
           env: Object.keys(options.env).length > 0 ? options.env : undefined,
           headers: Object.keys(options.header).length > 0 ? options.header : undefined,
         });
+        return result;
       }),
     );
 }
@@ -292,8 +296,11 @@ function registerRouterCommand(program: Command): void {
 
 async function main() {
   // Load .env from the config directory before any config resolution
-  // or env var expansion.
-  dotenv.config({ path: path.join(resolveConfigDir(), '.env') });
+  // or env var expansion. `quiet` suppresses dotenv's startup log line.
+  dotenv.config({
+    path: path.join(resolveConfigDir(), '.env'),
+    quiet: true,
+  });
 
   const program = new Command();
 

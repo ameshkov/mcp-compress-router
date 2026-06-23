@@ -63,16 +63,20 @@ mcp-compress-router/
 │   │   ├── get-command.ts     # get subcommand handler
 │   │   ├── get-command.test.ts # Unit tests for get command
 │   │   ├── list-command.ts    # list subcommand handler
-│   │   └── list-command.test.ts # Unit tests for list command
+│   │   ├── list-command.test.ts # Unit tests for list command
 │   ├── services/             # Core business logic
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
 │   │   ├── discovery.ts       # Downstream Connection Manager
 │   │   ├── catalog.ts         # Catalog Builder & Cache
+│   │   ├── oauth.ts           # OAuth credential storage (credentials.json)
+│   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
 │   │   ├── config.test.ts     # Unit tests for config path resolution
 │   │   ├── config-load.test.ts # Unit tests for config loading
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
 │   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
+│   │   ├── oauth.test.ts      # Unit tests for OAuth credential storage
+│   │   ├── auth-status.test.ts # Unit tests for auth requirement & status
 │   │   ├── invoker.ts         # Downstream tool invocation
 │   │   └── invoker.test.ts    # Unit tests for tool invocation
 │   ├── utils/                 # Shared utilities

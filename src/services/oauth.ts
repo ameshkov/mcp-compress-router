@@ -85,7 +85,9 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     const creds = await this._loadCredentials();
     const updated: StoredCredentials = {
       clientRegistration: clientInformation as Record<string, unknown>,
-      tokens: creds?.tokens ?? { access_token: '', token_type: 'Bearer' },
+      // Preserve existing tokens; omit when none (tokens is optional).
+      ...(creds?.tokens ? { tokens: creds.tokens } : {}),
+      ...this._preserveAuthMetadata(creds),
     };
     await writeCredentials(this._configPath, this._server.name, updated);
   }
@@ -109,6 +111,7 @@ export class OAuthCredentialManager implements OAuthClientProvider {
         scope: tokens.scope,
         token_type: tokens.token_type,
       },
+      ...this._preserveAuthMetadata(creds),
     };
     await writeCredentials(this._configPath, this._server.name, updated);
   }
@@ -131,11 +134,37 @@ export class OAuthCredentialManager implements OAuthClientProvider {
   }
 
   /**
-   * Removes all stored credentials for this server (used by logout).
+   * Removes stored OAuth tokens and client registration for this server
+   * (used by logout). Preserves the cached auth requirement so the
+   * `list` command still shows the correct status (e.g. "requires
+   * login") after logout. When there is no cached auth requirement to
+   * keep, the entire entry is removed (and the credentials file deleted
+   * when it becomes empty).
    */
   async clearTokens(): Promise<void> {
     this._codeVerifier = undefined;
+    const creds = await this._loadCredentials();
+    if (creds?.authRequirement) {
+      await writeCredentials(this._configPath, this._server.name, {
+        authRequirement: creds.authRequirement,
+        checkedAt: creds.checkedAt,
+      });
+      return;
+    }
     await removeCredentials(this._configPath, this._server.name);
+  }
+
+  /**
+   * Builds a fragment carrying the cached auth-requirement metadata so
+   * it survives token/client-registration updates.
+   */
+  private _preserveAuthMetadata(
+    creds: StoredCredentials | undefined,
+  ): Pick<StoredCredentials, 'authRequirement' | 'checkedAt'> {
+    const preserved: Pick<StoredCredentials, 'authRequirement' | 'checkedAt'> = {};
+    if (creds?.authRequirement) preserved.authRequirement = creds.authRequirement;
+    if (creds?.checkedAt) preserved.checkedAt = creds.checkedAt;
+    return preserved;
   }
 
   private async _loadCredentials(): Promise<StoredCredentials | undefined> {

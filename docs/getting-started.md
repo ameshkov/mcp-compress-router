@@ -166,6 +166,10 @@ mcp-compress-router add -c /path/to/mcp.json my-tool -- node /path/to/server.js
 
 ### Adding an HTTP Server
 
+> ![NOTE] If the URL starts with `http://` or `https://`, the transport
+> is auto-detected as HTTP — the `--transport` flag is optional in that
+> case.
+
 ```bash
 mcp-compress-router add my-http --transport http http://localhost:3100/mcp
 
@@ -176,9 +180,9 @@ mcp-compress-router add my-http \
   http://localhost:3100/mcp
 ```
 
-> **Note**: If the URL starts with `http://` or `https://`, the transport
-> is auto-detected as HTTP — the `--transport` flag is optional in that
-> case.
+> ![NOTE] When you add an HTTP server, the router probes it for OAuth
+> metadata. If the server advertises OAuth support, the `login` flow
+> starts automatically so you can authenticate right away.
 
 ### OAuth Login
 
@@ -188,6 +192,10 @@ with:
 ```bash
 mcp-compress-router login my-http
 ```
+
+This is also triggered automatically by `add` when the server
+advertises OAuth. To re-authenticate later (or if the automatic flow
+was interrupted), run `login` again.
 
 This opens your browser to complete the OAuth flow. The default timeout
 is 120 seconds; you can increase it with the
@@ -227,6 +235,13 @@ mcp-compress-router remove my-tool
 Once your downstream servers are configured, you connect the router the
 same way you would connect any other MCP server — by pointing your
 agent's MCP configuration at the `mcp-compress-router` command.
+
+The examples below pass an explicit config path with `-c`. That
+argument is optional — omit it to use the platform-specific default
+(see [Configuration](#configuration)). The paths shown are Linux
+examples; on macOS use
+`~/Library/Application Support/mcp-compress-router/mcp.json`, and on
+Windows use `%APPDATA%\mcp-compress-router\mcp.json`.
 
 ### Claude Desktop
 

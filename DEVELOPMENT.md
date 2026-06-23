@@ -35,7 +35,7 @@ repository. For installation as an end user, see
 
 The router stores all of its state — configuration, secrets, and OAuth
 credentials — in a single **router home directory**. For development we
-keep this directory *outside* the default `~/.local/share/...` location so
+keep this directory *outside* the default platform config location so
 your test data does not collide with a real installation. We point the
 router at it with the `MCP_COMPRESS_ROUTER_HOME` environment variable.
 

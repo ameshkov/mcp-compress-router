@@ -1,8 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { handleAdd } from './add-command.js';
+
+const { discoverAuthMetadataMock, handleLoginMock } = vi.hoisted(() => ({
+  discoverAuthMetadataMock: vi.fn<(url: URL) => Promise<Record<string, unknown> | undefined>>(),
+  handleLoginMock: vi.fn<(configPath: string, name: string) => Promise<string>>(),
+}));
+
+vi.mock('@modelcontextprotocol/sdk/client/auth.js', () => ({
+  discoverAuthorizationServerMetadata: discoverAuthMetadataMock,
+}));
+
+vi.mock('./login-command.js', () => ({
+  handleLogin: handleLoginMock,
+}));
 
 describe('handleAdd', () => {
   let tempDir: string;
@@ -10,6 +23,9 @@ describe('handleAdd', () => {
   beforeEach(async () => {
     tempDir = path.join(tmpdir(), `cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await fs.mkdir(tempDir, { recursive: true });
+    // By default, servers do not advertise OAuth metadata.
+    discoverAuthMetadataMock.mockResolvedValue(undefined);
+    handleLoginMock.mockReset();
   });
 
   afterEach(async () => {
@@ -147,5 +163,93 @@ describe('handleAdd', () => {
     const parsed = JSON.parse(contents);
     expect(parsed.mcpServers).toHaveProperty('existing');
     expect(parsed.mcpServers).toHaveProperty('newone');
+  });
+
+  it('auto-starts OAuth login when server advertises OAuth metadata', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    discoverAuthMetadataMock.mockResolvedValue({
+      issuer: 'https://example.com',
+      authorization_endpoint: 'https://example.com/authorize',
+      token_endpoint: 'https://example.com/token',
+    });
+    handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
+
+    const result = await handleAdd(configPath, {
+      name: 'github',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+    });
+
+    expect(discoverAuthMetadataMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
+    expect(handleLoginMock).toHaveBeenCalledWith(configPath, 'github');
+    expect(result).toContain('Added server "github" (http).');
+    expect(result).toContain('Successfully authenticated server "github".');
+  });
+
+  it('caches authRequirement "oauth" when the server advertises OAuth', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    discoverAuthMetadataMock.mockResolvedValue({
+      issuer: 'https://example.com',
+      authorization_endpoint: 'https://example.com/authorize',
+      token_endpoint: 'https://example.com/token',
+    });
+    handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
+
+    await handleAdd(configPath, {
+      name: 'github',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+    });
+
+    const credPath = path.join(tempDir, 'credentials.json');
+    const parsed = JSON.parse(await fs.readFile(credPath, 'utf-8'));
+    expect(parsed.github.authRequirement).toBe('oauth');
+    expect(parsed.github.checkedAt).toBeTruthy();
+  });
+
+  it('caches authRequirement "none" when the server has no OAuth metadata', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    discoverAuthMetadataMock.mockResolvedValue(undefined);
+
+    await handleAdd(configPath, {
+      name: 'plain',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+    });
+
+    const credPath = path.join(tempDir, 'credentials.json');
+    const parsed = JSON.parse(await fs.readFile(credPath, 'utf-8'));
+    expect(parsed.plain.authRequirement).toBe('none');
+    expect(parsed.plain.checkedAt).toBeTruthy();
+    expect(parsed.plain.tokens).toBeUndefined();
+  });
+
+  it('caches authRequirement "unknown" when the probe throws', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    discoverAuthMetadataMock.mockRejectedValue(new Error('network down'));
+
+    await handleAdd(configPath, {
+      name: 'flaky',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+    });
+
+    const credPath = path.join(tempDir, 'credentials.json');
+    const parsed = JSON.parse(await fs.readFile(credPath, 'utf-8'));
+    expect(parsed.flaky.authRequirement).toBe('unknown');
+    expect(handleLoginMock).not.toHaveBeenCalled();
+  });
+
+  it('does not start login when server has no OAuth metadata', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const result = await handleAdd(configPath, {
+      name: 'plain',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+    });
+
+    expect(discoverAuthMetadataMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
+    expect(handleLoginMock).not.toHaveBeenCalled();
+    expect(result).toBe('Added server "plain" (http).');
   });
 });
