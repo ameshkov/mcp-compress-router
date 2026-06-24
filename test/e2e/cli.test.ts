@@ -72,7 +72,16 @@ describe('CLI management commands', () => {
     // Add a stdio server
     const { command } = await resolveFixtureCommand();
     const addStdioResult = await runCli(
-      ['add', '-e', 'API_KEY=testkey', 'fixture', command, fixturePath],
+      [
+        'add',
+        '-e',
+        'API_KEY=testkey',
+        '--description',
+        'Local fixture for testing',
+        'fixture',
+        command,
+        fixturePath,
+      ],
       homeDir,
     );
     expect(addStdioResult.exitCode).toBe(0);
@@ -82,6 +91,11 @@ describe('CLI management commands', () => {
     expect(getResult.exitCode).toBe(0);
     expect(getResult.stdout).toContain('sentry');
     expect(getResult.stdout).toContain(httpUrl);
+
+    // Description should appear in get output
+    const getStdioResult = await runCli(['get', 'fixture'], homeDir);
+    expect(getStdioResult.exitCode).toBe(0);
+    expect(getStdioResult.stdout).toContain('Local fixture for testing');
 
     // List both servers
     const listResult = await runCli(['list'], homeDir);

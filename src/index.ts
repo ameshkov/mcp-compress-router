@@ -204,6 +204,10 @@ function registerAddCommand(program: Command): void {
     .option('--transport <type>', 'transport type (stdio or http)', 'stdio')
     .option('--header <header>', 'HTTP header (Key: Value)', collectHeaders, {})
     .option('-e, --env <env>', 'environment variable (KEY=value)', collectEnv, {})
+    .option(
+      '--description <text>',
+      'server description exposed to the LLM to help it route requests',
+    )
     .action(
       guardedAction(async (name, commandOrUrl, rest, options) => {
         const configPath = await resolveConfigPath(options.config);
@@ -214,6 +218,7 @@ function registerAddCommand(program: Command): void {
           rest,
           env: Object.keys(options.env).length > 0 ? options.env : undefined,
           headers: Object.keys(options.header).length > 0 ? options.header : undefined,
+          description: options.description || undefined,
         });
         return result;
       }),

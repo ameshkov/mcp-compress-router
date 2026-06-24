@@ -22,6 +22,9 @@ export interface AddOptions {
   env?: Record<string, string>;
   /** HTTP headers from repeated --header flags. */
   headers?: Record<string, string>;
+  /** Optional server description exposed to the LLM via get_tool_schema
+   *  to help it decide which server to route a request to. */
+  description?: string;
 }
 
 /**
@@ -65,6 +68,10 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
     if (opts.env && Object.keys(opts.env).length > 0) {
       entry.env = opts.env;
     }
+  }
+
+  if (opts.description) {
+    entry.description = opts.description;
   }
 
   servers[opts.name] = entry;

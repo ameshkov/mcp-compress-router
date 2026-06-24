@@ -252,4 +252,50 @@ describe('handleAdd', () => {
     expect(handleLoginMock).not.toHaveBeenCalled();
     expect(result).toBe('Added server "plain" (http).');
   });
+
+  it('adds a stdio server with description', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const result = await handleAdd(configPath, {
+      name: 'myserver',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'my-mcp-server'],
+      description: 'My custom MCP server',
+    });
+
+    expect(result).toContain('Added server "myserver"');
+
+    const contents = await fs.readFile(configPath, 'utf-8');
+    const parsed = JSON.parse(contents);
+    expect(parsed.mcpServers.myserver.description).toBe('My custom MCP server');
+  });
+
+  it('adds an HTTP server with description', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const result = await handleAdd(configPath, {
+      name: 'sentry',
+      transport: 'http',
+      commandOrUrl: 'https://mcp.sentry.dev/mcp',
+      description: 'Sentry error tracking tools',
+    });
+
+    expect(result).toContain('Added server "sentry"');
+
+    const contents = await fs.readFile(configPath, 'utf-8');
+    const parsed = JSON.parse(contents);
+    expect(parsed.mcpServers.sentry.description).toBe('Sentry error tracking tools');
+  });
+
+  it('does not write description when not provided', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'plain',
+      transport: 'stdio',
+      commandOrUrl: 'echo',
+    });
+
+    const contents = await fs.readFile(configPath, 'utf-8');
+    const parsed = JSON.parse(contents);
+    expect(parsed.mcpServers.plain.description).toBeUndefined();
+  });
 });

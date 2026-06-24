@@ -356,12 +356,15 @@ Registers a downstream MCP server.
 | `--transport <type>` | Transport type: `stdio` (default) or `http`. Ignored when `commandOrUrl` starts with `http://` or `https://`, which forces HTTP |
 | `--header <header>` | HTTP header as `Key: Value`. Repeatable |
 | `-e, --env <env>` | Environment variable as `KEY=value`. Repeatable (stdio only) |
+| `--description <text>` | Optional server description exposed to the LLM via `get_tool_schema`, helping it pick the right server. Optional |
 
 ```bash
 mcp-compress-router add my-tool -- npx -y @some/mcp-server
 mcp-compress-router add my-http \
   --header "Authorization: Bearer mytoken" \
   http://localhost:3100/mcp
+mcp-compress-router add my-tool --description "Custom tools for my workflow" \
+  -- npx -y @some/mcp-server
 ```
 
 ### `remove <name>`

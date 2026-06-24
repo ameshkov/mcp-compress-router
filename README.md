@@ -148,13 +148,22 @@ startup, so you can keep secrets out of the config (see
 
 Use the `add` command to register a downstream MCP server.
 
+A good description helps the LLM route requests to the correct server.
+When several servers are compressed behind the router, the model sees
+each server's name, its description, and a list of tool names in the
+`get_tool_schema` catalog. A clear description (e.g. *"GitHub API tools
+for issues, PRs, and repos"*) steers the model toward the right server
+far better than a bare name.
+
 **stdio server** (a local process):
 
 ```bash
-npx mcp-compress-router add github -- npx -y @modelcontextprotocol/server-github
+npx mcp-compress-router add github --description "GitHub API tools" \
+  -- npx -y @modelcontextprotocol/server-github
 
 # With environment variables
 npx mcp-compress-router add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
+  --description "GitHub API tools" \
   -- npx -y @modelcontextprotocol/server-github
 ```
 

@@ -10,6 +10,8 @@ and this project adheres to
 
 ### Added
 
+- `--description <text>` flag on the `add` subcommand to optionally set
+  a human-readable server description for the compact tool catalog.
 - Usage instructions to the README: quick start with `npx`,
   prerequisites, config file location, downstream server configuration,
   OAuth, custom headers, secrets via `${VAR}` expansion, and agent
