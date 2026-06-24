@@ -1,5 +1,9 @@
 # MCP Compressing Router
 
+[![CI](https://github.com/ameshkov/mcp-compress-router/actions/workflows/ci.yml/badge.svg)](https://github.com/ameshkov/mcp-compress-router/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/mcp-compress-router)](https://www.npmjs.com/package/mcp-compress-router)
+[![GitHub release](https://img.shields.io/github/v/release/ameshkov/mcp-compress-router)](https://github.com/ameshkov/mcp-compress-router/releases)
+
 <p align="center">
     Compress all connected MCP into a single router MCP and save up to 99% on
     tokens.
