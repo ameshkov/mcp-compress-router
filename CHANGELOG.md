@@ -15,6 +15,12 @@ and this project adheres to
   fixed-port `127.0.0.1` redirect URI, add the server, provide
   `oauth.clientId`/`clientSecret`/`scope`/`callbackPort`, run `login`).
 
+### Changed
+
+- README "Connecting Coding Agents" examples now name the server key
+  `mcp-compress-router` (was `compress-router`) across all agents for
+  consistency with the package name.
+
 ## [v1.3.0] - 2026-06-25
 
 ### Added

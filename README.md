@@ -596,7 +596,7 @@ Add the router to your `opencode.json` under `mcp`:
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "compress-router": {
+    "mcp-compress-router": {
       "type": "local",
       "command": ["npx", "-y", "mcp-compress-router"],
       "enabled": true
@@ -617,7 +617,7 @@ your user-level config (applies to every project):
 ```json
 {
   "mcpServers": {
-    "compress-router": {
+    "mcp-compress-router": {
       "command": "npx",
       "args": ["-y", "mcp-compress-router"]
     }
@@ -627,14 +627,14 @@ your user-level config (applies to every project):
 
 ### Codex
 
-Add a `[mcp_servers.compress-router]` table to your Codex config (note
+Add a `[mcp_servers.mcp-compress-router]` table to your Codex config (note
 the snake_case key). The config path is `~/.codex/config.toml` on
 macOS/Linux, or `%USERPROFILE%\.codex\config.toml` on Windows; you can
 also scope it to a single project via `.codex/config.toml` in trusted
 projects.
 
 ```toml
-[mcp_servers.compress-router]
+[mcp_servers.mcp-compress-router]
 command = "npx"
 args = ["-y", "mcp-compress-router"]
 enabled = true
@@ -652,7 +652,7 @@ merged, with project-level taking precedence.
 ```json
 {
   "servers": {
-    "compress-router": {
+    "mcp-compress-router": {
       "command": "npx",
       "args": ["-y", "mcp-compress-router"]
     }
