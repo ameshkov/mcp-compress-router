@@ -8,6 +8,19 @@ import type { DownstreamServerConfig, StoredCredentials } from '../utils/index.j
 import { readCredentials, writeCredentials, removeCredentials } from '../cli/config-io.js';
 
 /**
+ * The OAuth redirect callback path served by the temporary local HTTP
+ * server started during `login`. The full redirect URI is
+ * `http://localhost:<port>/mcp-compress-router/oauth-callback`, where
+ * `<port>` is assigned by the OS. Register this path (on `localhost`,
+ * any port) with OAuth providers that require a pre-registered client.
+ *
+ * @internal Exported for tests only; not part of the public module API.
+ *   The constant is consumed internally by `redirectUrl`; tests import
+ *   it directly to avoid hardcoding the path string.
+ */
+export const OAUTH_CALLBACK_PATH = '/mcp-compress-router/oauth-callback';
+
+/**
  * Implements OAuthClientProvider backed by credentials.json credential storage.
  *
  * Each instance manages credentials for one downstream server.
@@ -40,7 +53,7 @@ export class OAuthCredentialManager implements OAuthClientProvider {
   get redirectUrl(): string | URL | undefined {
     // Return the callback URL with the actual port assigned by the OS.
     // Falls back to port 0 until setActualPort() is called by login-command.
-    return `http://localhost:${this._actualPort}/callback`;
+    return `http://localhost:${this._actualPort}${OAUTH_CALLBACK_PATH}`;
   }
 
   get clientMetadata(): OAuthClientMetadata {

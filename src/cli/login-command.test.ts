@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import { handleLogin } from './login-command.js';
+import { OAUTH_CALLBACK_PATH } from '../services/oauth.js';
 
 vi.mock('../utils/open-browser.js', () => ({
   openBrowser: vi.fn().mockResolvedValue(undefined),
@@ -44,7 +45,7 @@ function startDiscoveryServer(): Promise<{ server: http.Server; url: string }> {
           JSON.stringify({
             client_id: 'test-client-id',
             client_secret: 'test-client-secret',
-            redirect_uris: ['http://localhost:0/callback'],
+            redirect_uris: [`http://localhost:0${OAUTH_CALLBACK_PATH}`],
           }),
         );
         return;
@@ -246,4 +247,24 @@ describe('handleLogin', () => {
       server.close();
     }
   }, 10_000);
+
+  it('throws when --port override is out of range', async () => {
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          nodcr: {
+            type: 'http',
+            url: 'http://127.0.0.1:1/mcp',
+            oauth: { clientId: 'pre-registered-client-id' },
+          },
+        },
+      }),
+    );
+
+    // Validation runs before any network probe, so no server is contacted.
+    await expect(handleLogin(configPath, 'nodcr', 70000)).rejects.toThrow(
+      /--port must be an integer/,
+    );
+  });
 });

@@ -243,12 +243,38 @@ function parseOauthBlock(
       : undefined;
   const scope =
     rawScope !== undefined ? expandEnvField(rawScope, `${entryContext} oauth.scope`) : undefined;
+  const callbackPort = parseCallbackPort(oauthRaw.callbackPort, entryContext);
 
   const oauth: OAuthConfig = {};
   if (clientId !== undefined) oauth.clientId = clientId;
   if (clientSecret !== undefined) oauth.clientSecret = clientSecret;
   if (scope !== undefined) oauth.scope = scope;
+  if (callbackPort !== undefined) oauth.callbackPort = callbackPort;
   return oauth;
+}
+
+/**
+ * Parses and validates the optional `oauth.callbackPort` field.
+ *
+ * Accepts a JSON number or a numeric string. Must be an integer between
+ * 1 and 65535. No env expansion is applied (ports are not secrets).
+ *
+ * @param value - The raw `callbackPort` value from the oauth block.
+ * @param entryContext - Human-readable context string for error messages.
+ * @returns The validated port number, or undefined when absent.
+ * @throws If the value is present but not a valid port number.
+ */
+function parseCallbackPort(value: unknown, entryContext: string): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const port = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `Server "${entryContext.slice(8)}" oauth.callbackPort must be an integer between 1 and 65535`,
+    );
+  }
+  return port;
 }
 
 /**

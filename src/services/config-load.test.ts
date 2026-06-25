@@ -475,5 +475,67 @@ describe('loadConfig', () => {
       expect(servers[0].oauth).toEqual({ clientId: 'pub-client' });
       delete process.env.CLIENT_ID;
     });
+
+    it('parses oauth.callbackPort as a number', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      const config = {
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: 'https://api.github.com/mcp',
+            oauth: { clientId: 'cid', callbackPort: 8765 },
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config));
+      const servers = await loadConfig(configPath);
+      expect(servers[0].oauth?.callbackPort).toBe(8765);
+    });
+
+    it('parses oauth.callbackPort from a numeric string', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      const config = {
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: 'https://api.github.com/mcp',
+            oauth: { callbackPort: '8765' },
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config));
+      const servers = await loadConfig(configPath);
+      expect(servers[0].oauth?.callbackPort).toBe(8765);
+    });
+
+    it('rejects oauth.callbackPort outside the valid range', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      const config = {
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: 'https://api.github.com/mcp',
+            oauth: { callbackPort: 70000 },
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config));
+      await expect(loadConfig(configPath)).rejects.toThrow(/callbackPort/i);
+    });
+
+    it('rejects a non-integer oauth.callbackPort', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      const config = {
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: 'https://api.github.com/mcp',
+            oauth: { callbackPort: 'not-a-port' },
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config));
+      await expect(loadConfig(configPath)).rejects.toThrow(/callbackPort/i);
+    });
   });
 });

@@ -126,6 +126,7 @@ async function acquireAuthorizationCode(
   mgr: import('../services/oauth.js').OAuthCredentialManager,
   metadata: OAuthMetadata,
   targetServer: DownstreamServerConfig,
+  callbackPort: number,
 ): Promise<{
   authorizationCode: string;
   authResult: AuthResult;
@@ -141,6 +142,7 @@ async function acquireAuthorizationCode(
     startAuthorization,
     openBrowser,
     TIMEOUT_MS,
+    callbackPort,
   );
 }
 
@@ -197,6 +199,7 @@ async function _startCallbackServerAndWait(
   startAuthorization: Awaited<ReturnType<typeof _getSdkAuth>>['startAuthorization'],
   openBrowser: (url: string) => Promise<void>,
   TIMEOUT_MS: number,
+  callbackPort: number,
 ): Promise<{
   authorizationCode: string;
   authResult: AuthResult;
@@ -215,7 +218,7 @@ async function _startCallbackServerAndWait(
     tempServer.on('request', _makeCallbackHandler(timeoutHandle, tempServer, resolve, reject));
 
     tempServer.listen(
-      0,
+      callbackPort,
       _onServerListen(
         tempServer,
         mgr,
@@ -304,6 +307,46 @@ function _readTimeoutMs(): number {
 }
 
 /**
+ * Validates a requested callback port override from the `--port` flag.
+ *
+ * @param port - The raw port value (0 means "OS-assigned", undefined
+ *   means "use config or OS-assigned").
+ * @returns The validated port number (0 or a positive integer
+ *   1-65535), or undefined when no override was given.
+ * @throws If the port is not a valid integer in range.
+ */
+function _validatePortOverride(port: number | undefined): number | undefined {
+  if (port === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(
+      `--port must be an integer between 0 and 65535 (got ${port}). Use 0 to let the OS assign a port.`,
+    );
+  }
+  return port;
+}
+
+/**
+ * Resolves the effective callback port from the `--port` override, the
+ * server's `oauth.callbackPort` config field, or 0 (OS-assigned) as a
+ * final fallback.
+ *
+ * @param override - The validated `--port` override, or undefined.
+ * @param server - The typed downstream server configuration.
+ * @returns The port to bind the callback server on (0 = OS-assigned).
+ */
+function _resolveCallbackPort(
+  override: number | undefined,
+  server: DownstreamServerConfig,
+): number {
+  if (override !== undefined) {
+    return override;
+  }
+  return server.oauth?.callbackPort ?? 0;
+}
+
+/**
  * Handles the `login <name>` subcommand.
  *
  * Validates the server exists in config and is an HTTP type.
@@ -314,11 +357,22 @@ function _readTimeoutMs(): number {
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
+ * @param portOverride - Optional `--port` override for the local
+ *   callback server. 0 forces an OS-assigned port; a positive integer
+ *   binds to that exact port (overrides `oauth.callbackPort`). When
+ *   omitted, `oauth.callbackPort` from config is used, falling back to
+ *   an OS-assigned port.
  * @returns Human-readable confirmation message.
  * @throws If the server name is not found or is not an HTTP type.
  */
-export async function handleLogin(configPath: string, name: string): Promise<string> {
+export async function handleLogin(
+  configPath: string,
+  name: string,
+  portOverride?: number,
+): Promise<string> {
   const { targetServer } = await validateServerForLogin(configPath, name);
+
+  const callbackPort = _resolveCallbackPort(_validatePortOverride(portOverride), targetServer);
 
   const { OAuthCredentialManager } = await import('../services/oauth.js');
   const mgr = new OAuthCredentialManager(configPath, targetServer);
@@ -329,6 +383,7 @@ export async function handleLogin(configPath: string, name: string): Promise<str
     mgr,
     metadata,
     targetServer,
+    callbackPort,
   );
 
   const { exchangeAuthorization } = await _getSdkAuth();

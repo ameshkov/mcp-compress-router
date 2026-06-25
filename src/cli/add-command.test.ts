@@ -409,4 +409,42 @@ describe('handleAdd', () => {
 
     await expect(fs.access(configPath)).rejects.toThrow();
   });
+
+  it('writes oauth.callbackPort for HTTP servers when --port is passed', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'github',
+      transport: 'http',
+      commandOrUrl: 'https://api.githubcopilot.com/mcp',
+      port: 8765,
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.github.oauth).toEqual({ callbackPort: 8765 });
+  });
+
+  it('throws when --port is passed for a stdio server', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'local',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'some-server'],
+        port: 8765,
+      }),
+    ).rejects.toThrow(/--port is only supported for HTTP servers/);
+  });
+
+  it('throws when --port is out of range', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'github',
+        transport: 'http',
+        commandOrUrl: 'https://api.githubcopilot.com/mcp',
+        port: 70000,
+      }),
+    ).rejects.toThrow(/--port must be an integer between 1 and 65535/);
+  });
 });

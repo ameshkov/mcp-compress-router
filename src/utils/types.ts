@@ -45,6 +45,16 @@ export interface OAuthConfig {
   clientSecret?: string;
   /** Space-delimited scope string. ${VAR} expanded during config load. */
   scope?: string;
+  /**
+   * Fixed TCP port for the local OAuth callback server. When set, the
+   * `login` command binds the temporary callback server to this exact
+   * port (so the redirect URI is stable, e.g.
+   * `http://localhost:8765/mcp-compress-router/oauth-callback`). When
+   * omitted, the OS assigns an ephemeral port. Useful for OAuth
+   * providers that require a pre-registered redirect URI with an exact
+   * port. Must be an integer between 1 and 65535.
+   */
+  callbackPort?: number;
 }
 
 /**

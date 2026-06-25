@@ -8,6 +8,29 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- The OAuth login redirect URI path is now
+  `/mcp-compress-router/oauth-callback` (was `/callback`). The full
+  loopback redirect URI remains `http://localhost:<port>/mcp-compress-router/oauth-callback`
+  with an OS-assigned port. Register
+  `http://localhost/mcp-compress-router/oauth-callback` (no port) with
+  OAuth providers that require a pre-registered redirect URI.
+
+### Added
+
+- `login --port <number>` and `add --port <number>` pin the local OAuth
+  callback server to an exact port, for providers that require a
+  pre-registered redirect URI with a fixed port (e.g.
+  `http://localhost:8765/mcp-compress-router/oauth-callback`). `add`
+  persists the port as `oauth.callbackPort` in `mcp.json`; `login`'s
+  `--port` is a one-run override (use `--port 0` to force an
+  OS-assigned port). New `oauth.callbackPort` config field (integer
+  1-65535, validated at load time).
+- README now documents the OAuth redirect URL and a step-by-step GitHub
+  MCP setup (create OAuth App, set callback URL, add the server, provide
+  `oauth.clientId`/`clientSecret`/`scope`, run `login`).
+
 ### Fixed
 
 - `tools <name>` CLI subcommand now collapses embedded newlines in tool

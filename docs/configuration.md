@@ -256,10 +256,37 @@ want to use a pre-registered client, provide an `oauth` block:
 | `clientId` | Yes | Pre-registered OAuth client ID |
 | `clientSecret` | No | Pre-registered OAuth client secret |
 | `scope` | No | Space-delimited scope string requested during authorization |
+| `callbackPort` | No | Fixed TCP port for the local OAuth callback server (integer 1-65535). When set, `login` binds the callback server to this exact port so the redirect URI is stable. Omit to let the OS assign a port. |
 
 When `clientId` is present, dynamic client registration is skipped and
-the static client information is used instead. All three values support
-[Variable Expansion](#variable-expansion).
+the static client information is used instead. `clientId`, `clientSecret`,
+and `scope` support [Variable Expansion](#variable-expansion);
+`callbackPort` does not (ports are not secrets).
+
+The `login` command starts a temporary local HTTP server and uses a
+loopback redirect URI (per RFC 8252):
+
+```text
+http://localhost:<port>/mcp-compress-router/oauth-callback
+```
+
+`<port>` is assigned by the OS at login time, so there is no fixed port
+to register. When the provider requires a pre-registered redirect URI,
+register the loopback form without a port:
+
+```text
+http://localhost/mcp-compress-router/oauth-callback
+```
+
+If the provider demands a redirect URI with an exact port, pin it with
+the `--port` flag or the `oauth.callbackPort` field:
+
+```bash
+mcp-compress-router login my-http --port 8765
+```
+
+`--port` overrides `oauth.callbackPort` for a single run; pass `--port 0`
+to force an OS-assigned port even when `oauth.callbackPort` is set.
 
 Authenticate a configured server with the `login` command:
 
@@ -422,6 +449,7 @@ Registers a downstream MCP server.
 | `--disabled` | Mark the server as disabled. Writes `"enabled": false`. Mutually exclusive with `--enabled` |
 | `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
 | `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
+| `-p, --port <number>` | Fixed local OAuth callback port (HTTP only). Written to `oauth.callbackPort` so subsequent `login` runs reuse it. Integer 1-65535 |
 
 ```bash
 mcp-compress-router add my-tool -- npx -y @some/mcp-server
@@ -551,6 +579,10 @@ The `Auth` column values:
 
 Runs the OAuth authorization-code flow for an HTTP server and stores
 the resulting tokens in `credentials.json`.
+
+| Flag | Description |
+| --- | --- |
+| `-p, --port <number>` | Fixed local OAuth callback port. Overrides `oauth.callbackPort`; `0` forces an OS-assigned port. |
 
 ### `logout <name>`
 

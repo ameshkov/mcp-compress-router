@@ -11,6 +11,8 @@ export interface AuthFixtureServer {
   getLastCode: () => string | undefined;
   /** Get the last refresh token issued. */
   getLastRefreshToken: () => string | undefined;
+  /** Get the last `redirect_uri` received on the /authorize endpoint. */
+  getLastRedirectUri: () => string | undefined;
   /** Mark all refresh tokens as expired/unusable. */
   invalidateRefreshToken: () => void;
 }
@@ -28,6 +30,7 @@ export interface AuthFixtureServer {
 export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   let lastCode: string | undefined;
   let lastRefreshToken: string | undefined;
+  let lastRedirectUri: string | undefined;
   let refreshTokensValid = true;
 
   // In-memory store: client_id -> client_secret
@@ -126,7 +129,9 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
-          redirect_uris: parsed.redirect_uris || ['http://localhost:0/callback'],
+          redirect_uris: parsed.redirect_uris || [
+            'http://localhost:0/mcp-compress-router/oauth-callback',
+          ],
         }),
       );
       return;
@@ -135,6 +140,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
     // Authorization endpoint — auto-approve and redirect
     if (req.method === 'GET' && url.pathname === '/authorize') {
       const redirectUri = url.searchParams.get('redirect_uri');
+      lastRedirectUri = redirectUri ?? undefined;
       const state = url.searchParams.get('state');
       const code = `auth-code-${randomBytes(8).toString('hex')}`;
       lastCode = code;
@@ -268,6 +274,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         url: `http://localhost:${addr.port}`,
         getLastCode: () => lastCode,
         getLastRefreshToken: () => lastRefreshToken,
+        getLastRedirectUri: () => lastRedirectUri,
         invalidateRefreshToken: () => {
           refreshTokensValid = false;
         },

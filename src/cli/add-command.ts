@@ -33,6 +33,12 @@ export interface AddOptions {
   allowedTools?: string[];
   /** Ordered glob patterns from repeatable --disabled-tools. */
   disabledTools?: string[];
+  /**
+   * Fixed local OAuth callback port from `--port`. Only applies to HTTP
+   * servers; persisted as `oauth.callbackPort` so subsequent `login`
+   * runs reuse it.
+   */
+  port?: number;
 }
 
 /**
@@ -100,6 +106,18 @@ function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: stri
   }
   if (opts.disabledTools && opts.disabledTools.length > 0) {
     entry.disabledTools = opts.disabledTools;
+  }
+
+  // A fixed callback port only applies to HTTP servers (OAuth). Persist
+  // it on the `oauth` block so `login` reuses the same redirect URI.
+  if (opts.port !== undefined) {
+    if (type !== 'http') {
+      throw new Error('--port is only supported for HTTP servers (OAuth callback).');
+    }
+    if (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535) {
+      throw new Error(`--port must be an integer between 1 and 65535 (got ${opts.port}).`);
+    }
+    entry.oauth = { callbackPort: opts.port };
   }
 
   return { entry, type };

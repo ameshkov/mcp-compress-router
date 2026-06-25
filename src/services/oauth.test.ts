@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { OAuthCredentialManager } from './oauth.js';
+import { OAuthCredentialManager, OAUTH_CALLBACK_PATH } from './oauth.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
@@ -29,19 +29,21 @@ describe('OAuthCredentialManager', () => {
   it('redirectUrl returns localhost URL with actual port after setActualPort', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
     mgr.setActualPort(54321);
-    expect(mgr.redirectUrl).toBe('http://localhost:54321/callback');
+    expect(mgr.redirectUrl).toBe(`http://localhost:54321${OAUTH_CALLBACK_PATH}`);
   });
 
   it('redirectUrl returns fallback port 0 before setActualPort is called', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
-    expect(mgr.redirectUrl).toBe('http://localhost:0/callback');
+    expect(mgr.redirectUrl).toBe(`http://localhost:0${OAUTH_CALLBACK_PATH}`);
   });
 
   it('clientMetadata returns correct metadata with actual port', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
     mgr.setActualPort(54321);
     expect(mgr.clientMetadata.client_name).toBe('mcp-compress-router');
-    expect(mgr.clientMetadata.redirect_uris).toEqual(['http://localhost:54321/callback']);
+    expect(mgr.clientMetadata.redirect_uris).toEqual([
+      `http://localhost:54321${OAUTH_CALLBACK_PATH}`,
+    ]);
   });
 
   it('clientInformation returns undefined when no credentials stored', async () => {

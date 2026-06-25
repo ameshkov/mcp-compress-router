@@ -27,6 +27,8 @@
     - [Per-Server Tool Selection](#per-server-tool-selection)
     - [Inspecting Tools](#inspecting-tools)
     - [OAuth](#oauth)
+        - [Redirect URL](#redirect-url)
+        - [GitHub MCP (special case)](#github-mcp-special-case)
     - [Custom Headers](#custom-headers)
     - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
 - [Connecting Coding Agents](#connecting-coding-agents)
@@ -328,6 +330,104 @@ the server entry (in `mcp.json`):
 ```
 
 Only `clientId` is required; `clientSecret` and `scope` are optional.
+
+#### Redirect URL
+
+During `login` the router starts a temporary local HTTP server and uses
+a loopback redirect URI (per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252)):
+
+```text
+http://localhost:<port>/mcp-compress-router/oauth-callback
+```
+
+`<port>` is chosen by the OS at login time, so there is no fixed port to
+register. When a provider requires a pre-registered redirect URI,
+register the loopback form **without a port**:
+
+```text
+http://localhost/mcp-compress-router/oauth-callback
+```
+
+Most providers (GitHub included) match the scheme, host, and path and
+ignore the port on `localhost`. If your provider demands a redirect URI
+with an **exact port**, pin it with `--port`:
+
+```bash
+npx mcp-compress-router login my-http --port 8765
+```
+
+This binds the callback server to `8765`, so the redirect URI becomes
+`http://localhost:8765/mcp-compress-router/oauth-callback` — register
+that exact URL with the provider. To reuse the same port on every
+`login`, persist it in the server's `oauth` block instead of passing the
+flag each time:
+
+```jsonc
+"my-http": {
+  "type": "http",
+  "url": "https://example.com/mcp",
+  "oauth": { "clientId": "${ID}", "callbackPort": 8765 }
+}
+```
+
+`--port` overrides `oauth.callbackPort` for a single run. Pass `--port 0`
+to force an OS-assigned port even when `oauth.callbackPort` is set.
+
+#### GitHub MCP (special case)
+
+The official GitHub MCP server at
+`https://api.githubcopilot.com/mcp` advertises OAuth but does **not**
+support Dynamic Client Registration, so you must pre-register a GitHub
+OAuth App and pass its credentials via the `oauth` block. GitHub also
+requires that the OAuth App be installed to the repositories and
+organizations you want the MCP to access.
+
+1. **Create a GitHub OAuth App.**
+   Open <https://github.com/settings/developers> → *New OAuth App* (or
+   *Register an application*). Give it any name and homepage URL.
+2. **Configure the callback URL.**
+   Set the *Authorization callback URL* to:
+   `http://localhost/mcp-compress-router/oauth-callback`
+3. **Add the GitHub MCP server by URL.**
+
+   ```bash
+   npx mcp-compress-router add github https://api.githubcopilot.com/mcp
+   ```
+
+4. **Set `oauth` credentials in `mcp.json`.**
+   Copy the Client ID and generate a Client Secret, then put them in the
+   server entry (use variable expansion to keep secrets out of the
+   file):
+
+   ```jsonc
+   "github": {
+     "type": "http",
+     "url": "https://api.githubcopilot.com/mcp",
+     "oauth": {
+       "clientId": "${GITHUB_OAUTH_CLIENT_ID}",
+       "clientSecret": "${GITHUB_OAUTH_CLIENT_SECRET}",
+       "scope": "repo read:org"
+     }
+   }
+   ```
+
+   Request only the scopes the tools you need require; `repo read:org`
+   covers the common repo and organization operations. Put the actual
+   values in your `.env` file (see
+   [Secrets and Variable Expansion](#secrets-and-variable-expansion)).
+5. **Run the login command.**
+
+   ```bash
+   npx mcp-compress-router login github
+   ```
+
+   Your browser opens to authorize. After you approve, tokens are stored
+   in `credentials.json` and the router can call GitHub MCP tools.
+
+> **Note:** if you used a *GitHub App* (not a classic OAuth App), the
+> App must be installed to the accounts/repos you want to access before
+> login will succeed, and its client secret is generated under *General*
+> → *Generate a new client secret*.
 
 Other OAuth commands:
 

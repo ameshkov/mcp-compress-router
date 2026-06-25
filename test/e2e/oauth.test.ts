@@ -1,11 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import * as net from 'node:net';
 import { tmpdir } from 'node:os';
 import { routerPath, browserMockPath } from './helpers.js';
 import { createAuthFixtureServer } from '../fixture-auth-server.js';
 import type { AuthFixtureServer } from '../fixture-auth-server.js';
 import { spawnSync, spawn } from 'node:child_process';
+
+/**
+ * Resolves a free TCP port by binding to 0 and immediately closing.
+ * Supplies a concrete `--port` value the login command can actually bind.
+ */
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const sock = net.createServer();
+    sock.unref();
+    sock.on('error', reject);
+    sock.listen(0, () => {
+      const addr = sock.address();
+      sock.close(() => resolve(typeof addr === 'object' && addr ? addr.port : 0));
+    });
+  });
+}
 
 describe('MCP Compress Router E2E — OAuth', () => {
   let authFixture: AuthFixtureServer;
@@ -204,5 +221,60 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(creds.authsrv.tokens.access_token).toMatch(/^at-/);
     expect(creds.authsrv.tokens.refresh_token).toMatch(/^rt-/);
     expect(creds.authsrv.tokens.token_type).toBe('Bearer');
+  }, 25000);
+
+  it('login --port binds the callback server to the exact port', async () => {
+    const port = await getFreePort();
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          authsrv: { type: 'http', url: authFixture.url + '/mcp' },
+        },
+      }),
+    );
+
+    const result = await runCliAsync(
+      ['login', 'authsrv', '--port', String(port), '--config', configPath],
+      {
+        extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+        timeout: 20000,
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Successfully authenticated');
+
+    // The redirect_uri the fixture received must carry the exact fixed port.
+    expect(authFixture.getLastRedirectUri()).toBe(
+      `http://localhost:${port}/mcp-compress-router/oauth-callback`,
+    );
+  }, 25000);
+
+  it('login uses oauth.callbackPort from config when --port is omitted', async () => {
+    const port = await getFreePort();
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          authsrv: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            oauth: { callbackPort: port },
+          },
+        },
+      }),
+    );
+
+    const result = await runCliAsync(['login', 'authsrv', '--config', configPath], {
+      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+      timeout: 20000,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Successfully authenticated');
+    expect(authFixture.getLastRedirectUri()).toBe(
+      `http://localhost:${port}/mcp-compress-router/oauth-callback`,
+    );
   }, 25000);
 });
