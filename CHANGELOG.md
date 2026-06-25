@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-06-25
+
 ### Changed
 
 - The `get_tool_schema` tool description now renders each connected
@@ -130,7 +132,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.2.0...HEAD
+[v1.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.2.0
 [v1.1.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.1.0
 [v1.0.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.2
 [v1.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.1
