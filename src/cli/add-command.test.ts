@@ -4,13 +4,13 @@ import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { handleAdd } from './add-command.js';
 
-const { discoverAuthMetadataMock, handleLoginMock } = vi.hoisted(() => ({
-  discoverAuthMetadataMock: vi.fn<(url: URL) => Promise<Record<string, unknown> | undefined>>(),
+const { discoverAuthMock, handleLoginMock } = vi.hoisted(() => ({
+  discoverAuthMock: vi.fn<(url: URL) => Promise<{ serverMetadata?: Record<string, unknown> }>>(),
   handleLoginMock: vi.fn<(configPath: string, name: string) => Promise<string>>(),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/client/auth.js', () => ({
-  discoverAuthorizationServerMetadata: discoverAuthMetadataMock,
+vi.mock('../services/oauth-discovery.js', () => ({
+  discoverAuth: discoverAuthMock,
 }));
 
 vi.mock('./login-command.js', () => ({
@@ -24,7 +24,7 @@ describe('handleAdd', () => {
     tempDir = path.join(tmpdir(), `cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await fs.mkdir(tempDir, { recursive: true });
     // By default, servers do not advertise OAuth metadata.
-    discoverAuthMetadataMock.mockResolvedValue(undefined);
+    discoverAuthMock.mockResolvedValue({ serverMetadata: undefined });
     handleLoginMock.mockReset();
   });
 
@@ -167,10 +167,12 @@ describe('handleAdd', () => {
 
   it('auto-starts OAuth login when server advertises OAuth metadata', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
-    discoverAuthMetadataMock.mockResolvedValue({
-      issuer: 'https://example.com',
-      authorization_endpoint: 'https://example.com/authorize',
-      token_endpoint: 'https://example.com/token',
+    discoverAuthMock.mockResolvedValue({
+      serverMetadata: {
+        issuer: 'https://example.com',
+        authorization_endpoint: 'https://example.com/authorize',
+        token_endpoint: 'https://example.com/token',
+      },
     });
     handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
 
@@ -180,7 +182,7 @@ describe('handleAdd', () => {
       commandOrUrl: 'https://example.com/mcp',
     });
 
-    expect(discoverAuthMetadataMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
+    expect(discoverAuthMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
     expect(handleLoginMock).toHaveBeenCalledWith(configPath, 'github');
     expect(result).toContain('Added server "github" (http).');
     expect(result).toContain('Successfully authenticated server "github".');
@@ -188,10 +190,12 @@ describe('handleAdd', () => {
 
   it('caches authRequirement "oauth" when the server advertises OAuth', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
-    discoverAuthMetadataMock.mockResolvedValue({
-      issuer: 'https://example.com',
-      authorization_endpoint: 'https://example.com/authorize',
-      token_endpoint: 'https://example.com/token',
+    discoverAuthMock.mockResolvedValue({
+      serverMetadata: {
+        issuer: 'https://example.com',
+        authorization_endpoint: 'https://example.com/authorize',
+        token_endpoint: 'https://example.com/token',
+      },
     });
     handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
 
@@ -209,7 +213,7 @@ describe('handleAdd', () => {
 
   it('caches authRequirement "none" when the server has no OAuth metadata', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
-    discoverAuthMetadataMock.mockResolvedValue(undefined);
+    discoverAuthMock.mockResolvedValue({ serverMetadata: undefined });
 
     await handleAdd(configPath, {
       name: 'plain',
@@ -226,7 +230,7 @@ describe('handleAdd', () => {
 
   it('caches authRequirement "unknown" when the probe throws', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
-    discoverAuthMetadataMock.mockRejectedValue(new Error('network down'));
+    discoverAuthMock.mockRejectedValue(new Error('network down'));
 
     await handleAdd(configPath, {
       name: 'flaky',
@@ -248,7 +252,7 @@ describe('handleAdd', () => {
       commandOrUrl: 'https://example.com/mcp',
     });
 
-    expect(discoverAuthMetadataMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
+    expect(discoverAuthMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
     expect(handleLoginMock).not.toHaveBeenCalled();
     expect(result).toBe('Added server "plain" (http).');
   });

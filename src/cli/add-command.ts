@@ -159,10 +159,13 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
 }
 
 /**
- * Probes the server for OAuth metadata and, if found, runs the login
- * flow automatically. The probed auth requirement is cached in
- * `credentials.json` regardless of the login outcome so the `list`
- * command can show auth status without re-probing.
+ * Probes the server for OAuth metadata using the spec-compliant two-step
+ * discovery flow (RFC 9728 Protected Resource Metadata, then RFC 8414
+ * Authorization Server Metadata at each advertised authorization server)
+ * and, if OAuth is advertised, runs the login flow automatically. The
+ * probed auth requirement is cached in `credentials.json` regardless of
+ * the login outcome so the `list` command can show auth status without
+ * re-probing.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name just added.
@@ -175,14 +178,19 @@ async function tryAutoLogin(
   name: string,
   url: string,
 ): Promise<string | undefined> {
-  const { discoverAuthorizationServerMetadata } =
-    await import('@modelcontextprotocol/sdk/client/auth.js');
+  // Use the spec-compliant two-step discovery (RFC 9728 PRM, then RFC 8414
+  // AS metadata at each advertised authorization server). A one-step
+  // `discoverAuthorizationServerMetadata` probe misses servers that
+  // publish their AS only via PRM `authorization_servers` (e.g. Notion,
+  // whose AS metadata lives at the origin root, not the path-qualified
+  // well-known URL).
+  const { discoverAuth } = await import('../services/oauth-discovery.js');
 
   let requirement: AuthRequirement;
   let hasOAuth: boolean;
   try {
-    const metadata = await discoverAuthorizationServerMetadata(new URL(url));
-    hasOAuth = metadata !== undefined;
+    const discovered = await discoverAuth(new URL(url));
+    hasOAuth = Boolean(discovered.serverMetadata);
     requirement = hasOAuth ? 'oauth' : 'none';
   } catch {
     // Probe failed — cache 'unknown' and don't block the add.

@@ -22,6 +22,13 @@ and this project adheres to
   legacy servers. `login` also no longer requires Dynamic Client
   Registration when an `oauth.clientId` override is configured, enabling
   GitHub login with a pre-registered client ID.
+- `add <name> <url>` now detects OAuth on servers that publish their
+  Authorization Server only via RFC 9728 Protected Resource Metadata
+  `authorization_servers` (e.g. Notion, whose AS metadata lives at the
+  origin root rather than the path-qualified well-known URL). The
+  auto-probe now reuses the spec-compliant two-step `discoverAuth` flow
+  instead of a one-step AS-metadata lookup, so auto-login is triggered
+  and `authRequirement` is cached as `'oauth'` at add time.
 
 ## [v1.1.0] - 2026-06-25
 
