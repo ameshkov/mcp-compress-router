@@ -17,6 +17,10 @@ and this project adheres to
 
 ### Changed
 
+- The `get_tool_schema` and `invoke_tool` tool descriptions now state
+  emphatically that `get_tool_schema` MUST be called first to retrieve a
+  tool's parameters before calling `invoke_tool`, making the required
+  two-step workflow clearer to the agent.
 - README "Connecting Coding Agents" examples now name the server key
   `mcp-compress-router` (was `compress-router`) across all agents for
   consistency with the package name.

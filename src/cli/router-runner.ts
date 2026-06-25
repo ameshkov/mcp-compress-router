@@ -75,7 +75,9 @@ async function startRouterServer(
     {
       title: 'Invoke Tool',
       description:
-        'Invoke a specific tool on a connected MCP server. First use get_tool_schema to retrieve the required parameters.',
+        'Invoke a specific tool on a connected MCP server. ' +
+        'You MUST first use get_tool_schema to retrieve the required parameters ' +
+        'for this tool before calling invoke_tool.',
       inputSchema: InvokeToolInputSchema,
     },
     createInvokeToolHandler(catalog, invokeFn, logger),
