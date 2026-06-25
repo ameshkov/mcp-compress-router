@@ -20,6 +20,9 @@ importers:
       jsonc-parser:
         specifier: 3.3.1
         version: 3.3.1
+      picomatch:
+        specifier: 4.0.4
+        version: 4.0.4
       zod:
         specifier: 3.25.76
         version: 3.25.76
@@ -30,6 +33,9 @@ importers:
       '@types/node':
         specifier: 24.13.2
         version: 24.13.2
+      '@types/picomatch':
+        specifier: 4.0.3
+        version: 4.0.3
       eslint:
         specifier: 9.16.0
         version: 9.16.0(jiti@2.7.0)
@@ -848,6 +854,9 @@ packages:
 
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
+
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@types/unist@2.0.11':
     resolution: {integrity: sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==}
@@ -2629,6 +2638,8 @@ snapshots:
   '@types/node@24.13.2':
     dependencies:
       undici-types: 7.18.2
+
+  '@types/picomatch@4.0.3': {}
 
   '@types/unist@2.0.11': {}
 

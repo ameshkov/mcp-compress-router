@@ -160,6 +160,37 @@ describe('writeConfigFile', () => {
   });
 });
 
+describe('RawServerEntry field round-trip', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = path.join(tmpdir(), `cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await fs.mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('round-trips enabled, allowedTools, and disabledTools verbatim', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const servers = {
+      srv: {
+        type: 'stdio' as const,
+        command: 'node',
+        enabled: false,
+        allowedTools: ['list_issues', 'get_pull_request'],
+        disabledTools: ['delete_repo'],
+      },
+    };
+    await writeConfigFile(configPath, servers);
+    const readBack = await readConfigFile(configPath);
+    expect(readBack.srv.enabled).toBe(false);
+    expect(readBack.srv.allowedTools).toEqual(['list_issues', 'get_pull_request']);
+    expect(readBack.srv.disabledTools).toEqual(['delete_repo']);
+  });
+});
+
 describe('credentials', () => {
   let tempDir: string;
   let configPath: string;

@@ -298,4 +298,111 @@ describe('handleAdd', () => {
     const parsed = JSON.parse(contents);
     expect(parsed.mcpServers.plain.description).toBeUndefined();
   });
+
+  it('writes "enabled": false when --disabled is passed', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'github',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'server-github'],
+      disabled: true,
+      allowedTools: ['list_issues'],
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.github.enabled).toBe(false);
+    expect(parsed.mcpServers.github.allowedTools).toEqual(['list_issues']);
+  });
+
+  it('writes no enabled field when --enabled is passed', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'fs',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'fs-server'],
+      enabled: true,
+      disabledTools: ['delete_*'],
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.fs.enabled).toBeUndefined();
+    expect(parsed.mcpServers.fs.disabledTools).toEqual(['delete_*']);
+  });
+
+  it('writes no enable/filter fields when no selection flags are passed', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'x',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'x-server'],
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.x.enabled).toBeUndefined();
+    expect(parsed.mcpServers.x.allowedTools).toBeUndefined();
+    expect(parsed.mcpServers.x.disabledTools).toBeUndefined();
+  });
+
+  it('collects repeated --allowed-tools values in order', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'y',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'y-server'],
+      allowedTools: ['a', 'b'],
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.y.allowedTools).toEqual(['a', 'b']);
+  });
+
+  it('throws and writes nothing when an allowed-tools glob is invalid', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'z',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'z-server'],
+        allowedTools: ['[unclosed'],
+      }),
+    ).rejects.toThrow(/allowedTools.*\[unclosed/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it('throws and writes nothing when a disabled-tools glob is invalid', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'z2',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'z-server'],
+        disabledTools: ['{a,b'],
+      }),
+    ).rejects.toThrow(/disabledTools.*\{a,b/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it('throws when both --enabled and --disabled are passed', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'both',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'both-server'],
+        enabled: true,
+        disabled: true,
+      }),
+    ).rejects.toThrow(/--enabled.*--disabled|mutually exclusive/i);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
 });

@@ -1,29 +1,64 @@
-import type { ToolCatalog, ToolDescriptor } from '../utils/index.js';
+import { filterTools } from '../utils/index.js';
+import type { Logger } from '../utils/index.js';
+import type { ToolCatalog, ToolDescriptor, ToolSelection } from '../utils/index.js';
 import type { DiscoveredServer } from './discovery.js';
 
 /**
- * Builds the immutable tool catalog from discovered server data.
+ * Builds the immutable tool catalog from discovered server data, applying
+ * per-server tool selection so filtered tools never enter the catalog.
  *
- * @param discovered - Results from parallel discovery.
- * @returns An immutable ToolCatalog.
+ * For each configured `allowedTools`/`disabledTools` pattern that matches
+ * no discovered tool, emits a `debug`-level warning naming the server and
+ * pattern. These warnings appear only under verbose logging (`-v`) and
+ * never abort catalog construction — they signal config drift or a
+ * renamed tool, per PRD §"Implementation Decisions".
+ *
+ * @param discovered - Results from parallel discovery (enabled servers only).
+ * @param selectionByServer - Optional per-server allowlist/denylist. When a
+ *   server name is absent from the map, all its tools are exposed.
+ * @param logger - Optional logger for unmatched-pattern warnings. When
+ *   omitted, no warnings are emitted (backward compatible).
+ * @returns An immutable ToolCatalog containing only exposed tools.
  */
-export function buildCatalog(discovered: DiscoveredServer[]): ToolCatalog {
+export function buildCatalog(
+  discovered: DiscoveredServer[],
+  selectionByServer: Map<string, ToolSelection> = new Map(),
+  logger?: Logger,
+): ToolCatalog {
   const toolMap = new Map<string, ToolDescriptor>();
+  const filteredToolNames = new Set<string>();
 
   const servers = discovered.map((ds) => {
-    for (const tool of ds.tools) {
-      const key = `${ds.name}::${tool.name}`;
-      toolMap.set(key, tool);
+    const selection = selectionByServer.get(ds.name);
+    const { exposed, entries, unmatchedPatterns } = filterTools(
+      ds.tools,
+      selection?.allowedTools,
+      selection?.disabledTools,
+    );
+
+    for (const tool of exposed) {
+      toolMap.set(`${ds.name}::${tool.name}`, tool);
+    }
+    for (const entry of entries) {
+      if (entry.decision === 'filtered') {
+        filteredToolNames.add(`${ds.name}::${entry.descriptor.name}`);
+      }
+    }
+    for (const pattern of unmatchedPatterns) {
+      logger?.debug(
+        `Configured tool pattern matched no discovered tool on server "${ds.name}": "${pattern}"`,
+        { server: ds.name, pattern },
+      );
     }
 
     return {
       name: ds.name,
       description: ds.description,
-      tools: ds.tools,
+      tools: exposed,
     };
   });
 
-  return { servers, toolMap };
+  return { servers, toolMap, filteredToolNames };
 }
 
 /**
@@ -48,22 +83,35 @@ export function lookupTools(
 
   const results: ToolDescriptor[] = [];
   const missing: string[] = [];
+  const filtered: string[] = [];
 
   for (const toolName of toolNames) {
     const key = `${serverName}::${toolName}`;
     const tool = catalog.toolMap.get(key);
-    if (!tool) {
-      missing.push(toolName);
-    } else {
+    if (tool) {
       results.push(tool);
+      continue;
+    }
+    if (catalog.filteredToolNames.has(key)) {
+      filtered.push(toolName);
+    } else {
+      missing.push(toolName);
     }
   }
 
-  if (missing.length > 0) {
+  if (missing.length > 0 || filtered.length > 0) {
     const valid = server.tools.map((t) => t.name).join(', ');
-    throw new Error(
-      `Tool(s) not found on server "${serverName}": ${missing.join(', ')}. Valid tools: ${valid}`,
-    );
+    const parts: string[] = [];
+    if (missing.length > 0) {
+      parts.push(`Tool(s) not found on server "${serverName}": ${missing.join(', ')}.`);
+    }
+    if (filtered.length > 0) {
+      parts.push(
+        `Tool(s) filtered out on server "${serverName}" (excluded by allowedTools/disabledTools): ${filtered.join(', ')}.`,
+      );
+    }
+    parts.push(`Valid tools: ${valid}`);
+    throw new Error(parts.join(' '));
   }
 
   return results;

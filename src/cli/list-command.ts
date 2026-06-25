@@ -7,6 +7,8 @@ interface ServerRow {
   name: string;
   type: string;
   commandOrUrl: string;
+  enabled: string;
+  tools: string;
   auth: AuthStatus;
 }
 
@@ -32,6 +34,43 @@ function buildCommandOrUrl(server: DownstreamServerConfig): string {
 }
 
 /**
+ * Renders the `Enabled` cell for a server: `yes` unless `enabled` is
+ * explicitly `false` (absent = enabled, per PRD §"Assumptions").
+ *
+ * @param server - Typed downstream server config.
+ * @returns `yes` or `no`.
+ */
+function summarizeEnabled(server: DownstreamServerConfig): string {
+  return server.enabled === false ? 'no' : 'yes';
+}
+
+/**
+ * Renders the configured-filter `Tools` summary cell. Counts configured
+ * glob patterns only — never resolved live tool counts. Wording:
+ *   - no filtering configured -> `all`
+ *   - allowedTools present    -> `<N> allowed`
+ *   - disabledTools only      -> `all (<M> blocked)`
+ *   - both present            -> `<N> allowed (<M> blocked)`
+ *
+ * @param server - Typed downstream server config.
+ * @returns The compact filter summary.
+ */
+function summarizeTools(server: DownstreamServerConfig): string {
+  const allowed = server.allowedTools;
+  const disabled = server.disabledTools;
+  if (allowed && disabled) {
+    return `${allowed.length} allowed (${disabled.length} blocked)`;
+  }
+  if (allowed) {
+    return `${allowed.length} allowed`;
+  }
+  if (disabled) {
+    return `all (${disabled.length} blocked)`;
+  }
+  return 'all';
+}
+
+/**
  * Renders the list header and server rows as a fixed-width table. The
  * final (Auth) column is left unpadded so lines never carry trailing
  * whitespace.
@@ -49,16 +88,25 @@ function formatList(configPath: string, rows: ServerRow[]): string {
   const nameWidth = Math.max('Name'.length, ...rows.map((r) => r.name.length));
   const typeWidth = Math.max('Type'.length, ...rows.map((r) => r.type.length));
   const commandWidth = Math.max('CommandOrUrl'.length, ...rows.map((r) => r.commandOrUrl.length));
+  const enabledWidth = Math.max('Enabled'.length, ...rows.map((r) => r.enabled.length));
+  const toolsWidth = Math.max('Tools'.length, ...rows.map((r) => r.tools.length));
 
   const pad = (val: string, width: number): string => val.padEnd(width);
-  const columns = (name: string, type: string, command: string, auth: string): string =>
-    `${pad(name, nameWidth)}  ${pad(type, typeWidth)}  ${pad(command, commandWidth)}  ${auth}`;
+  const columns = (
+    name: string,
+    type: string,
+    command: string,
+    enabled: string,
+    tools: string,
+    auth: string,
+  ): string =>
+    `${pad(name, nameWidth)}  ${pad(type, typeWidth)}  ${pad(command, commandWidth)}  ${pad(enabled, enabledWidth)}  ${pad(tools, toolsWidth)}  ${auth}`;
 
   return [
     header,
     '',
-    columns('Name', 'Type', 'CommandOrUrl', 'Auth'),
-    ...rows.map((r) => columns(r.name, r.type, r.commandOrUrl, r.auth)),
+    columns('Name', 'Type', 'CommandOrUrl', 'Enabled', 'Tools', 'Auth'),
+    ...rows.map((r) => columns(r.name, r.type, r.commandOrUrl, r.enabled, r.tools, r.auth)),
   ].join('\n');
 }
 
@@ -84,11 +132,16 @@ export async function handleList(configPath: string): Promise<string> {
       args: entry.args,
       url: entry.url,
       headers: entry.headers,
+      enabled: entry.enabled,
+      allowedTools: entry.allowedTools,
+      disabledTools: entry.disabledTools,
     };
     return {
       name,
       type: entry.type,
       commandOrUrl: buildCommandOrUrl(typed),
+      enabled: summarizeEnabled(typed),
+      tools: summarizeTools(typed),
       auth: computeAuthStatus(typed, credentials[name]),
     };
   });

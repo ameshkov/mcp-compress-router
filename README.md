@@ -23,6 +23,9 @@
 - [Configuration](#configuration)
     - [Config File Location](#config-file-location)
     - [Adding Downstream Servers](#adding-downstream-servers)
+    - [Per-Server Enable/Disable](#per-server-enabledisable)
+    - [Per-Server Tool Selection](#per-server-tool-selection)
+    - [Inspecting Tools](#inspecting-tools)
     - [OAuth](#oauth)
     - [Custom Headers](#custom-headers)
     - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
@@ -211,6 +214,84 @@ npx mcp-compress-router list            # list all servers + auth status
 npx mcp-compress-router get my-http     # show one server's config
 npx mcp-compress-router remove my-http  # remove a server
 ```
+
+### Per-Server Enable/Disable
+
+Every server entry accepts an optional `enabled` boolean. When set to
+`false`, the router skips that server entirely at startup — no process
+spawn, no network connection, no discovery — and it is absent from the
+`get_tool_schema` catalog. All configuration is preserved so the server
+can be turned back on instantly. Omitting `enabled` (the default) means
+enabled, keeping `mcp.json` clean and fully backward compatible.
+
+Toggle it from the CLI without touching the rest of the config:
+
+```bash
+npx mcp-compress-router disable github   # writes "enabled": false
+npx mcp-compress-router enable github    # removes the field
+```
+
+You can also set it at creation time:
+
+```bash
+npx mcp-compress-router add archive --disabled -- npx -y server-archive
+```
+
+### Per-Server Tool Selection
+
+Two optional fields control which of a server's advertised tools are
+exposed to the LLM. Both are arrays of glob patterns
+([picomatch](https://github.com/micromatch/picomatch) syntax: `*`, `?`,
+`{a,b}`, `[abc]`) matched against bare tool names:
+
+- **`allowedTools`** — when present, only matching tools are exposed.
+  An empty array (`[]`) exposes *no* tools (handy for staging a server
+  while you build the list).
+- **`disabledTools`** — removes matching tools from whatever would
+  otherwise be exposed. The denylist wins: a tool matching both lists
+  is blocked.
+
+Filtered tools are hidden from the catalog *and* hard-rejected by
+`invoke_tool`, so even an LLM that guesses a filtered name cannot
+reach the downstream server.
+
+```jsonc
+"dangerous": {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@some/mcp-server"],
+  "allowedTools": ["list_issues", "get_pull_request"],
+  "disabledTools": ["*_delete"]
+}
+```
+
+A pattern that matches no real tool is not an error — the router logs a
+warning (visible with `-v`) and continues. A malformed pattern is a
+hard error at startup. Set filters at creation time with repeatable
+flags:
+
+```bash
+npx mcp-compress-router add github \
+  --allowed-tools list_issues \
+  --allowed-tools get_pull_request \
+  -- npx -y server-github
+```
+
+### Inspecting Tools
+
+To see exactly which tools a server advertises — and which are
+`[exposed]` or `[filtered]` under your current selection — connect to
+it live without starting the full router:
+
+```bash
+npx mcp-compress-router tools github
+```
+
+This works regardless of the server's `enabled` state (inspecting a
+disabled server is the primary way to build its allowlist). For HTTP
+servers, stored OAuth credentials and `oauth` overrides are reused. If
+the server cannot be reached or is missing required auth, the command
+exits non-zero with a clear error and prints no partial list.
 
 ### OAuth
 

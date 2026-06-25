@@ -102,6 +102,8 @@ describe('CLI management commands', () => {
     expect(listResult.exitCode).toBe(0);
     expect(listResult.stdout).toContain('sentry');
     expect(listResult.stdout).toContain('fixture');
+    expect(listResult.stdout).toContain('Enabled');
+    expect(listResult.stdout).toContain('Tools');
 
     // Remove sentry
     const removeResult = await runCli(['remove', 'sentry'], homeDir);
@@ -133,5 +135,129 @@ describe('CLI management commands', () => {
     );
     expect(exitCode).toBe(1);
     expect(stderr).toContain('already exists');
+  });
+
+  it('disable then enable round-trips the enabled field', async () => {
+    // Seed a server in this test's own home (suite homeDir is shared)
+    const seed = await runCli(['add', 'gh', 'node', '-e', 'TOKEN=abc'], homeDir);
+    expect(seed.exitCode).toBe(0);
+
+    const configPath = path.join(homeDir, 'mcp.json');
+    const readConfig = async () => JSON.parse(await fs.readFile(configPath, 'utf-8'));
+
+    // Disable: enabled: false should be written
+    const disable1 = await runCli(['disable', 'gh'], homeDir);
+    expect(disable1.exitCode).toBe(0);
+    expect(disable1.stdout).toContain('Disabled server "gh"');
+    expect((await readConfig()).mcpServers.gh.enabled).toBe(false);
+
+    // Disable again — idempotent
+    const disable2 = await runCli(['disable', 'gh'], homeDir);
+    expect(disable2.exitCode).toBe(0);
+    expect(disable2.stdout).toContain('already disabled');
+
+    // Enable: field should be removed
+    const enable1 = await runCli(['enable', 'gh'], homeDir);
+    expect(enable1.exitCode).toBe(0);
+    expect(enable1.stdout).toContain('Enabled server "gh"');
+    expect((await readConfig()).mcpServers.gh).not.toHaveProperty('enabled');
+
+    // Enable again — idempotent
+    const enable2 = await runCli(['enable', 'gh'], homeDir);
+    expect(enable2.exitCode).toBe(0);
+    expect(enable2.stdout).toContain('already enabled');
+
+    // Other fields preserved
+    expect((await readConfig()).mcpServers.gh.command).toBe('node');
+
+    // Cleanup so other tests don't see 'gh'
+    await runCli(['remove', 'gh'], homeDir);
+  });
+
+  it('enable/disable nonexistent server exits with error', async () => {
+    const en = await runCli(['enable', 'nonexistent'], homeDir);
+    expect(en.exitCode).toBe(1);
+    expect(en.stderr).toContain('not found');
+
+    const dis = await runCli(['disable', 'nonexistent'], homeDir);
+    expect(dis.exitCode).toBe(1);
+    expect(dis.stderr).toContain('not found');
+  });
+
+  /** Read the parsed mcp.json written under the E2E home dir. */
+  async function readE2eConfig(): Promise<{
+    mcpServers: Record<string, Record<string, unknown>>;
+  }> {
+    const raw = await fs.readFile(path.join(homeDir, 'mcp.json'), 'utf-8');
+    return JSON.parse(raw);
+  }
+
+  it('add --disabled --allowed-tools writes enabled:false and allowedTools', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(
+      ['add', '--disabled', '--allowed-tools', 'list_issues', 'gh', command, fixturePath],
+      homeDir,
+    );
+    expect(result.exitCode).toBe(0);
+
+    const config = await readE2eConfig();
+    expect(config.mcpServers.gh.enabled).toBe(false);
+    expect(config.mcpServers.gh.allowedTools).toEqual(['list_issues']);
+
+    await runCli(['remove', 'gh'], homeDir);
+  });
+
+  it('add --disabled-tools writes disabledTools and no enabled field', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(
+      ['add', '--disabled-tools', 'delete_*', 'fs', command, fixturePath],
+      homeDir,
+    );
+    expect(result.exitCode).toBe(0);
+
+    const config = await readE2eConfig();
+    expect(config.mcpServers.fs.enabled).toBeUndefined();
+    expect(config.mcpServers.fs.disabledTools).toEqual(['delete_*']);
+
+    await runCli(['remove', 'fs'], homeDir);
+  });
+
+  it('add with no selection flags writes a clean entry', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(['add', 'plain', command, fixturePath], homeDir);
+    expect(result.exitCode).toBe(0);
+
+    const config = await readE2eConfig();
+    expect(config.mcpServers.plain.enabled).toBeUndefined();
+    expect(config.mcpServers.plain.allowedTools).toBeUndefined();
+    expect(config.mcpServers.plain.disabledTools).toBeUndefined();
+
+    await runCli(['remove', 'plain'], homeDir);
+  });
+
+  it('add rejects an invalid glob with non-zero exit and no write', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(
+      ['add', '--allowed-tools', '[unclosed', 'bad', command, fixturePath],
+      homeDir,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('[unclosed');
+
+    const { stdout } = await runCli(['list'], homeDir);
+    expect(stdout).not.toContain('bad');
+  });
+
+  it('add rejects --enabled and --disabled together', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(
+      ['add', '--enabled', '--disabled', 'both', command, fixturePath],
+      homeDir,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/--enabled.*--disabled/i);
+
+    const { stdout } = await runCli(['list'], homeDir);
+    expect(stdout).not.toContain('both');
   });
 });

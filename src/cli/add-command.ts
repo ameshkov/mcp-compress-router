@@ -6,7 +6,7 @@ import {
   writeCredentials,
   type RawServerEntry,
 } from './config-io.js';
-import type { AuthRequirement } from '../utils/index.js';
+import { validateGlobPattern, type AuthRequirement } from '../utils/index.js';
 
 /**
  * Options for the add subcommand, parsed from CLI flags.
@@ -25,30 +25,48 @@ export interface AddOptions {
   /** Optional server description exposed to the LLM via get_tool_schema
    *  to help it decide which server to route a request to. */
   description?: string;
+  /** Set true by --disabled (writes "enabled": false). */
+  disabled?: boolean;
+  /** Set true by --enabled (writes nothing; omitted = enabled). */
+  enabled?: boolean;
+  /** Ordered glob patterns from repeatable --allowed-tools. */
+  allowedTools?: string[];
+  /** Ordered glob patterns from repeatable --disabled-tools. */
+  disabledTools?: string[];
 }
 
 /**
- * Handles the `add <name> <commandOrUrl> [args...]` subcommand.
+ * Validates every glob pattern in an optional tool list, throwing with
+ * the field name and offending pattern on the first invalid entry.
  *
- * - If commandOrUrl starts with http:// or https://, auto-detects as HTTP.
- * - Otherwise treats it as a stdio command.
- * - Writes the entry to the mcpServers object and saves the config file.
- *
- * @param configPath - Absolute path to the mcp.json file.
- * @param opts - Parsed CLI options.
- * @returns Human-readable confirmation message.
- * @throws If the server name already exists.
+ * @param field - "allowedTools" or "disabledTools" (for the message).
+ * @param patterns - Patterns to validate; undefined/empty is a no-op.
+ * @throws If any pattern is rejected by picomatch.
  */
-export async function handleAdd(configPath: string, opts: AddOptions): Promise<string> {
-  await ensureConfigDir(configPath);
-  const servers = await readConfigFile(configPath);
-
-  if (opts.name in servers) {
-    throw new Error(
-      `Server "${opts.name}" already exists. Use "remove ${opts.name}" first to replace it.`,
-    );
+function validateToolListPatterns(
+  field: 'allowedTools' | 'disabledTools',
+  patterns: string[] | undefined,
+): void {
+  if (!patterns || patterns.length === 0) return;
+  for (const pattern of patterns) {
+    try {
+      validateGlobPattern(pattern);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`Invalid "${field}" pattern "${pattern}": ${reason}`);
+    }
   }
+}
 
+/**
+ * Builds the raw server entry from parsed CLI options, including
+ * transport auto-detection, env/headers, description, and the optional
+ * enable/filter fields.
+ *
+ * @param opts - Parsed CLI options.
+ * @returns The constructed raw server entry and its resolved transport type.
+ */
+function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: string } {
   // Auto-detect HTTP from URL pattern
   const isUrl = opts.commandOrUrl.startsWith('http://') || opts.commandOrUrl.startsWith('https://');
   const type = isUrl ? 'http' : opts.transport;
@@ -73,6 +91,50 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
   if (opts.description) {
     entry.description = opts.description;
   }
+
+  if (opts.disabled) {
+    entry.enabled = false;
+  }
+  if (opts.allowedTools && opts.allowedTools.length > 0) {
+    entry.allowedTools = opts.allowedTools;
+  }
+  if (opts.disabledTools && opts.disabledTools.length > 0) {
+    entry.disabledTools = opts.disabledTools;
+  }
+
+  return { entry, type };
+}
+
+/**
+ * Handles the `add <name> <commandOrUrl> [args...]` subcommand.
+ *
+ * - If commandOrUrl starts with http:// or https://, auto-detects as HTTP.
+ * - Otherwise treats it as a stdio command.
+ * - Writes the entry to the mcpServers object and saves the config file.
+ *
+ * @param configPath - Absolute path to the mcp.json file.
+ * @param opts - Parsed CLI options.
+ * @returns Human-readable confirmation message.
+ * @throws If the server name already exists.
+ */
+export async function handleAdd(configPath: string, opts: AddOptions): Promise<string> {
+  if (opts.enabled && opts.disabled) {
+    throw new Error('Cannot specify both --enabled and --disabled.');
+  }
+
+  validateToolListPatterns('allowedTools', opts.allowedTools);
+  validateToolListPatterns('disabledTools', opts.disabledTools);
+
+  await ensureConfigDir(configPath);
+  const servers = await readConfigFile(configPath);
+
+  if (opts.name in servers) {
+    throw new Error(
+      `Server "${opts.name}" already exists. Use "remove ${opts.name}" first to replace it.`,
+    );
+  }
+
+  const { entry, type } = buildServerEntry(opts);
 
   servers[opts.name] = entry;
   await writeConfigFile(configPath, servers);

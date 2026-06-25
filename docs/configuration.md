@@ -12,11 +12,26 @@ quick-start guide, see the
 - [The mcp.json File](#the-mcpjson-file)
     - [Server Entry Fields](#server-entry-fields)
     - [Server Types](#server-types)
+    - [Tool Selection](#tool-selection)
     - [Variable Expansion](#variable-expansion)
 - [OAuth Configuration](#oauth-configuration)
 - [Credential Storage](#credential-storage)
 - [Environment Variables](#environment-variables)
+    - [.env Auto-Loading](#env-auto-loading)
+    - [MCP_COMPRESS_ROUTER_HOME](#mcp_compress_router_home)
+    - [MCP_COMPRESS_ROUTER_VERBOSE](#mcp_compress_router_verbose)
+    - [MCP_COMPRESS_ROUTER_BROWSER](#mcp_compress_router_browser)
+    - [MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS](#mcp_compress_router_login_timeout_ms)
 - [CLI Flags](#cli-flags)
+    - [add](#add-name-commandorurl-rest)
+    - [disable](#disable-name)
+    - [enable](#enable-name)
+    - [remove](#remove-name)
+    - [tools](#tools-name)
+    - [get](#get-name)
+    - [list](#list)
+    - [login](#login-name)
+    - [logout](#logout-name)
 - [Global Options](#global-options)
 
 ## How Configuration Works
@@ -127,6 +142,9 @@ time.
 | `headers` | No | http, streamable-http | Map of HTTP headers sent with each request |
 | `description` | No | All | Human-readable description shown in the tool catalog |
 | `oauth` | No | http, streamable-http | OAuth client overrides (see [OAuth Configuration](#oauth-configuration)) |
+| `enabled` | No | All | Boolean. `false` skips the server entirely at startup (no spawn, no connection, no discovery). Defaults to `true` when omitted, so omitting it keeps `mcp.json` clean and is fully backward compatible |
+| `allowedTools` | No | All | Array of glob patterns matched against the server's bare tool names. When present, only matching tools are exposed; `[]` (empty array) means *no* tools are exposed. Patterns are compiled under picomatch (`*`, `?`, `{a,b}`, `[abc]`) with strict bracket handling |
+| `disabledTools` | No | All | Array of glob patterns removing matching tools from whatever would otherwise be exposed. Takes precedence on conflict: a tool matching both lists is blocked. Same glob semantics as `allowedTools` |
 
 All string values in the fields above support
 [Variable Expansion](#variable-expansion).
@@ -143,6 +161,49 @@ All string values in the fields above support
 - **`streamable-http`** — Same requirements as `http`, but uses the
   streamable HTTP transport. Use this when the downstream server
   implements the streaming variant of the MCP protocol.
+
+### Tool Selection
+
+The `allowedTools` and `disabledTools` fields control which of a
+server's advertised tools are exposed to the LLM. Both are optional
+arrays of glob patterns matched against bare tool names with
+[picomatch](https://github.com/micromatch/picomatch) (`*`, `?`,
+`{a,b}`, `[abc]`; strict bracket handling).
+
+The effective exposed set is computed once at catalog build time:
+
+1. Start with every tool the server advertises.
+2. If `allowedTools` is present, keep only tools matching at least one
+   pattern. An empty array (`[]`) keeps *nothing* — useful for staging
+   a server (connected, configured) while you build the list.
+3. Remove any tool matching a `disabledTools` pattern. The denylist
+   wins on conflict: a tool matching both lists is blocked.
+
+Filtered tools are both hidden from the `get_tool_schema` catalog and
+hard-rejected by `invoke_tool`, so an LLM that guesses a filtered name
+still cannot reach the downstream server.
+
+```jsonc
+"dangerous": {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@some/mcp-server"],
+  // Expose only these two...
+  "allowedTools": ["list_issues", "get_pull_request"],
+  // ...and additionally block anything ending in _delete.
+  "disabledTools": ["*_delete"]
+}
+```
+
+A configured pattern (literal or glob) that matches no tool the server
+actually advertises is *not* an error — the router logs a warning
+(visible with `-v`) identifying the unmatched pattern and continues
+startup. A malformed pattern (one picomatch rejects) is a hard error
+at config load time, naming the offending server and pattern.
+
+Inspect what a server actually exposes — including the
+`[exposed]`/`[filtered]` decision per tool — with the
+[`tools <name>`](#tools-name) command.
 
 ### Variable Expansion
 
@@ -357,6 +418,10 @@ Registers a downstream MCP server.
 | `--header <header>` | HTTP header as `Key: Value`. Repeatable |
 | `-e, --env <env>` | Environment variable as `KEY=value`. Repeatable (stdio only) |
 | `--description <text>` | Optional server description exposed to the LLM via `get_tool_schema`, helping it pick the right server. Optional |
+| `--enabled` | Mark the server as enabled. Writes no `enabled` field (the default). Mutually exclusive with `--disabled` |
+| `--disabled` | Mark the server as disabled. Writes `"enabled": false`. Mutually exclusive with `--enabled` |
+| `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
+| `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
 
 ```bash
 mcp-compress-router add my-tool -- npx -y @some/mcp-server
@@ -365,12 +430,77 @@ mcp-compress-router add my-http \
   http://localhost:3100/mcp
 mcp-compress-router add my-tool --description "Custom tools for my workflow" \
   -- npx -y @some/mcp-server
+# Add a server that starts disabled (turn it on later with enable)
+mcp-compress-router add archive --disabled -- npx -y server-archive
+
+# Add a server restricted to an allowlist at creation time
+mcp-compress-router add github --allowed-tools list_issues \
+  --allowed-tools get_pull_request -- npx -y server-github
+
+# Add a server with a denylist glob
+mcp-compress-router add fs --disabled-tools "delete_*" -- npx -y fs-server
+```
+
+### `disable <name>`
+
+Sets `"enabled": false` on a server entry without removing any of its
+configuration. A disabled server is skipped entirely at startup: no
+process spawn, no network connection, no discovery, and it does not
+appear in the `get_tool_schema` catalog. All config (command, env,
+OAuth overrides, tool filters) is preserved so it can be turned back on
+instantly with `enable <name>`.
+
+```bash
+mcp-compress-router disable github
+```
+
+### `enable <name>`
+
+Removes the `enabled` field from a server (so it defaults to enabled)
+on the next startup. All other fields are preserved. Pure config edit —
+no probe, no login, no side effects.
+
+```bash
+mcp-compress-router enable archive
 ```
 
 ### `remove <name>`
 
 Removes a server entry from `mcp.json`. Stored credentials are left
 intact; use `logout <name>` to remove them.
+
+### `tools <name>`
+
+Connects to the named server *live* and lists every tool it
+advertises, each marked `[exposed]` or `[filtered]` against the
+server's configured `allowedTools`/`disabledTools`. This is the primary
+workflow for building an accurate allowlist/denylist without starting
+the full router or reading verbose logs.
+
+The command probes the server regardless of its `enabled` state, since
+inspecting a disabled server's tools is how you build its allowlist.
+For HTTP servers, cached OAuth `authRequirement` is refreshed before
+connecting and stored credentials / `oauth` overrides are reused.
+
+```bash
+mcp-compress-router tools github
+```
+
+Example output:
+
+```text
+Tools exposed by "github":
+
+Name           Description                                       Exposure
+list_issues    List GitHub issues                                [exposed]
+get_pull_req   Get a pull request by number                      [exposed]
+delete_repo    Delete a repository                               [filtered]
+```
+
+If the server advertises no tools, the command prints
+`(server advertises no tools)`. If the server is not found,
+unreachable, or missing required auth, the command exits non-zero
+with a clear error and prints no partial tool list.
 
 ### `get <name>`
 
@@ -379,18 +509,32 @@ Prints the raw configuration for a single server.
 ### `list`
 
 Prints a table of every configured server with its transport type,
-command or URL, and auth status. Auth status is read entirely from
-local files (`mcp.json` and `credentials.json`) — no network access.
+command or URL, enable state, configured tool-filter summary, and auth
+status. All columns are read entirely from local files (`mcp.json` and
+`credentials.json`) — no network access.
 
 ```text
 Configuration was loaded from /home/user/.config/mcp-compress-router/mcp.json
 
-Name      Type  CommandOrUrl                                   Auth
-github    http  https://api.github.com/mcp                     requires login
-notion    http  https://api.notion.com/mcp                     authenticated
-my-api    http  https://example.com/mcp                        public
-local-fs  stdio npx -y @modelcontextprotocol/server-filesystem none
+Name      Type  CommandOrUrl                                   Enabled Tools                  Auth
+github    http  https://api.github.com/mcp                     yes      all                   requires login
+filtered  stdio npx -y @modelcontextprotocol/server-github     yes      2 allowed (1 blocked) none
+archive   stdio npx -y @modelcontextprotocol/server-archive   no       all                   none
 ```
+
+The `Enabled` column shows `yes` unless `enabled` is explicitly `false`
+(absent = enabled). The `Tools` column summarizes the *configured*
+filter patterns only — not live tool counts:
+
+| Value | Meaning |
+| --- | --- |
+| `all` | No `allowedTools` or `disabledTools` configured |
+| `N allowed` | `allowedTools` present with `N` patterns |
+| `all (M blocked)` | `disabledTools` present with `M` patterns |
+| `N allowed (M blocked)` | Both lists present |
+
+For live per-tool `[exposed]`/`[filtered]` marks, use
+[`tools <name>`](#tools-name).
 
 The `Auth` column values:
 

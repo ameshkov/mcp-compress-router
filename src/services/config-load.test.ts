@@ -47,6 +47,9 @@ describe('loadConfig', () => {
       url: undefined,
       headers: undefined,
       description: undefined,
+      enabled: undefined,
+      allowedTools: undefined,
+      disabledTools: undefined,
     });
     expect(servers[1]).toEqual({
       name: 'server2',
@@ -57,6 +60,9 @@ describe('loadConfig', () => {
       url: undefined,
       headers: undefined,
       description: 'A Python MCP server',
+      enabled: undefined,
+      allowedTools: undefined,
+      disabledTools: undefined,
     });
   });
 

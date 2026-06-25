@@ -36,6 +36,12 @@ export interface RawServerEntry {
   url?: string;
   headers?: Record<string, string>;
   description?: string;
+  /** Whether the server is enabled. Absent means enabled (default). */
+  enabled?: boolean;
+  /** Glob patterns allowlisting tool names; empty array means no tools. */
+  allowedTools?: string[];
+  /** Glob patterns denylisting tool names; wins over allowedTools. */
+  disabledTools?: string[];
 }
 
 /**

@@ -156,4 +156,21 @@ describe('invokeDownstreamTool', () => {
       invokeDownstreamTool(clients, 'srv', 'echo', {}, new Logger('error')),
     ).rejects.toThrow('Internal server error');
   });
+
+  it('rejects a disabled server without contacting downstream (server absent from clients)', async () => {
+    // A disabled server never gets a client (Task 1 partitions it out),
+    // so the clients map simply has no entry for it. A mock whose
+    // callTool would throw proves the downstream is never contacted.
+    const unreachableClient = createMockClient(() => {
+      throw new Error('downstream should never be contacted for a disabled server');
+    });
+
+    const clients = new Map([['enabled-srv', unreachableClient]]);
+
+    await expect(
+      invokeDownstreamTool(clients, 'disabled-srv', 'any_tool', {}, new Logger('error')),
+    ).rejects.toThrow(/disabled-srv/);
+
+    expect(unreachableClient.callTool).not.toHaveBeenCalled();
+  });
 });

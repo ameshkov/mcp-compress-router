@@ -17,6 +17,20 @@ async function main() {
     version: '1.0.0',
   });
 
+  if (process.env.FIXTURE_EMPTY_TOOLS !== '1') {
+    registerTools(server);
+  }
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+/**
+ * Registers the fixture's standard tool set on the given server.
+ * Centralized so the `FIXTURE_EMPTY_TOOLS` mode can skip registration
+ * entirely, producing a server that advertises zero tools.
+ */
+function registerTools(server: McpServer): void {
   server.registerTool(
     'echo',
     {
@@ -129,9 +143,6 @@ async function main() {
       };
     },
   );
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
 }
 
 main().catch((err) => {

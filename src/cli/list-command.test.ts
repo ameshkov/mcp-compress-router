@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -115,6 +115,96 @@ describe('handleList', () => {
     expect(result).toContain('header');
   });
 
+  it('shows "all" in Tools when no filtering is configured', async () => {
+    const configPath = await writeConfig({
+      local: { type: 'stdio', command: 'npx', args: ['-y', 'fs-server'] },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toBeDefined();
+    expect(localRow).toMatch(/\ball\b/);
+  });
+
+  it('shows "<N> allowed" when allowedTools is configured', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        allowedTools: ['a', 'b'],
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/2 allowed/);
+  });
+
+  it('shows "all (<N> blocked)" when only disabledTools is configured', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        disabledTools: ['x'],
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/all \(1 blocked\)/);
+  });
+
+  it('shows "<N> allowed (<M> blocked)" when both lists are configured', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        allowedTools: ['a', 'b', 'c'],
+        disabledTools: ['x', 'y'],
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/3 allowed \(2 blocked\)/);
+  });
+
+  it('shows "yes" in Enabled when enabled field is absent', async () => {
+    const configPath = await writeConfig({
+      local: { type: 'stdio', command: 'npx', args: ['-y', 'fs-server'] },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/\byes\b/);
+  });
+
+  it('shows "no" in Enabled when enabled is false', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        enabled: false,
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/\bno\b/);
+  });
+
+  it('shows "yes" in Enabled when enabled is true', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        enabled: true,
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toMatch(/\byes\b/);
+  });
+
   it('renders a mixed set of servers with aligned columns and no trailing whitespace', async () => {
     const configPath = await writeConfig({
       'local-fs': {
@@ -145,6 +235,8 @@ describe('handleList', () => {
     expect(headerLine).toContain('Name');
     expect(headerLine).toContain('Type');
     expect(headerLine).toContain('CommandOrUrl');
+    expect(headerLine).toContain('Enabled');
+    expect(headerLine).toContain('Tools');
     expect(headerLine).toContain('Auth');
 
     const dataLines = lines.slice(3);
@@ -152,9 +244,45 @@ describe('handleList', () => {
     expect(dataLines[1]).toMatch(/authenticated$/);
     expect(dataLines[2]).toMatch(/public$/);
 
+    // Each row carries the default Enabled (yes) and Tools (all) cells
+    // since none of these three servers set filters or enabled: false.
+    for (const line of dataLines) {
+      expect(line).toMatch(/yes\s+all/);
+    }
+
     // No line should carry trailing whitespace.
     for (const line of lines) {
       expect(line).toBe(line.trimEnd());
     }
+  });
+
+  it('makes no network calls and spawns no processes', async () => {
+    const configPath = await writeConfig({
+      local: { type: 'stdio', command: 'npx', args: ['-y', 'fs-server'] },
+      github: { type: 'http', url: 'https://api.github.com/mcp' },
+    });
+    await writeCredentials({
+      github: {
+        authRequirement: 'oauth',
+        tokens: { access_token: 'at', token_type: 'Bearer' },
+      },
+    });
+
+    // `handleList` imports only local I/O modules (config-io, services,
+    // utils); it never imports `node:child_process`, so spawn cannot be
+    // reached. ESM module namespaces are non-configurable, so
+    // `vi.spyOn(childProcess, 'spawn')` is not possible here — guarding
+    // `fetch` (the only HTTP egress path) is the meaningful assertion.
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('must not be called', { status: 599 }));
+
+    const result = await handleList(configPath);
+    expect(result).toContain('local');
+    expect(result).toContain('github');
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
   });
 });

@@ -21,6 +21,30 @@
         "Authorization": "Bearer ${MY_SERVER_TOKEN}"
       },
       "description": "My custom MCP server"
+    },
+    // Tool selection example — only these two tools are exposed; all
+    // others the server advertises are hidden and hard-rejected by
+    // invoke_tool. Glob patterns (*, ?, {a,b}, [abc]) are matched
+    // against bare tool names via picomatch.
+    "github-filtered": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_TOKEN": "${GITHUB_PERSONAL_TOKEN}"
+      },
+      "allowedTools": ["list_issues", "get_pull_request"],
+      "disabledTools": ["*_delete"],
+      "description": "GitHub API tools (restricted)"
+    },
+    // Disabled server example — skipped entirely at startup (no spawn,
+    // no connection, no discovery). All config is preserved so it can
+    // be turned back on with: mcp-compress-router enable archive
+    "archive": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-archive"],
+      "enabled": false
     }
   }
 }

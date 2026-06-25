@@ -25,6 +25,12 @@ export interface DownstreamServerConfig {
   description?: string;
   /** Optional OAuth client configuration overrides, with ${VAR} expansion. */
   oauth?: OAuthConfig;
+  /** Whether this server is connected at startup. Defaults to `true` when omitted. */
+  enabled?: boolean;
+  /** Glob patterns allowlisting tool names (matched against this server's own tools). Present-but-empty means no tools. */
+  allowedTools?: string[];
+  /** Glob patterns denylisting tool names; takes precedence over {@link allowedTools}. */
+  disabledTools?: string[];
 }
 
 /**
@@ -135,6 +141,17 @@ export interface CatalogServer {
 }
 
 /**
+ * Per-server tool selection extracted from a {@link DownstreamServerConfig}.
+ * Used by the catalog builder to filter a server's discovered tools.
+ */
+export interface ToolSelection {
+  /** Glob patterns allowlisting tool names. Present-but-empty means no tools. */
+  allowedTools?: string[];
+  /** Glob patterns denylisting tool names; takes precedence over {@link allowedTools}. */
+  disabledTools?: string[];
+}
+
+/**
  * The immutable tool catalog built at startup.
  */
 export interface ToolCatalog {
@@ -142,4 +159,6 @@ export interface ToolCatalog {
   servers: CatalogServer[];
   /** Fast lookup keyed by "server::tool". */
   toolMap: Map<string, ToolDescriptor>;
+  /** Keys "server::tool" for discovered tools filtered out by selection. */
+  filteredToolNames: Set<string>;
 }

@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
 import type { DownstreamServerConfig, OAuthConfig, ServerTransportType } from '../utils/index.js';
-import { expandEnvField, parseJsonc } from '../utils/index.js';
+import { expandEnvField, parseJsonc, validateGlobPattern } from '../utils/index.js';
 
 /** Recognized MCP transport types. */
 const VALID_TYPES = new Set<string>(['stdio', 'http', 'streamable-http']);
@@ -252,6 +252,67 @@ function parseOauthBlock(
 }
 
 /**
+ * Validates the optional `enabled` field on a server entry.
+ *
+ * @param name - Server name (for error messages).
+ * @param server - The raw server entry object.
+ * @returns The boolean value, or undefined when the field is absent.
+ * @throws If `enabled` is present but not a boolean.
+ */
+function validateEnabled(name: string, server: Record<string, unknown>): boolean | undefined {
+  if (server.enabled === undefined) return undefined;
+  if (typeof server.enabled !== 'boolean') {
+    throw new Error(
+      `Server "${name}" has invalid "enabled" field: expected boolean, got ${typeof server.enabled}`,
+    );
+  }
+  return server.enabled;
+}
+
+/**
+ * Validates an optional tool-name glob list (`allowedTools` or
+ * `disabledTools`).
+ *
+ * Confirms the value is an array of non-empty strings, and that each
+ * pattern compiles under picomatch with strict bracket handling. The
+ * compiled regex is discarded — this slice validates only; the Tool
+ * Filter (later slice) recompiles patterns when matching.
+ *
+ * @param name - Server name (for error messages).
+ * @param field - Field name, either "allowedTools" or "disabledTools".
+ * @param value - The raw value from the server entry.
+ * @returns The validated string array, or undefined when absent.
+ * @throws If the value is not an array of non-empty strings, or any
+ *   pattern is rejected by picomatch.
+ */
+function validateToolList(
+  name: string,
+  field: 'allowedTools' | 'disabledTools',
+  value: unknown,
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error(`Server "${name}" has invalid "${field}" field: expected an array of strings`);
+  }
+  const patterns: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      throw new Error(
+        `Server "${name}" has invalid "${field}" field: every entry must be a non-empty string`,
+      );
+    }
+    try {
+      validateGlobPattern(entry);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`Server "${name}" has invalid "${field}" pattern "${entry}": ${reason}`);
+    }
+    patterns.push(entry);
+  }
+  return patterns;
+}
+
+/**
  * Parses a single server entry from the mcpServers object.
  *
  * Orchestrates validation, field extraction, and env var expansion for
@@ -284,8 +345,11 @@ function parseServerEntry(
   const fields = buildServerFields(entryContext, server);
   const description = typeof server.description === 'string' ? server.description : undefined;
   const oauth = parseOauthBlock(entryContext, server);
+  const enabled = validateEnabled(name, server);
+  const allowedTools = validateToolList(name, 'allowedTools', server.allowedTools);
+  const disabledTools = validateToolList(name, 'disabledTools', server.disabledTools);
 
-  return { name, type, ...fields, description, oauth };
+  return { name, type, ...fields, description, oauth, enabled, allowedTools, disabledTools };
 }
 
 /**

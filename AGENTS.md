@@ -58,12 +58,20 @@ mcp-compress-router/
 │   │   ├── config-io.test.ts  # Unit tests for config I/O
 │   │   ├── add-command.ts     # add subcommand handler
 │   │   ├── add-command.test.ts # Unit tests for add command
+│   │   ├── disable-command.ts # disable subcommand handler
+│   │   ├── disable-command.test.ts # Unit tests for disable command
+│   │   ├── enable-command.ts # enable subcommand handler
+│   │   ├── enable-command.test.ts # Unit tests for enable command
 │   │   ├── remove-command.ts  # remove subcommand handler
 │   │   ├── remove-command.test.ts # Unit tests for remove command
 │   │   ├── get-command.ts     # get subcommand handler
 │   │   ├── get-command.test.ts # Unit tests for get command
 │   │   ├── list-command.ts    # list subcommand handler
 │   │   ├── list-command.test.ts # Unit tests for list command
+│   │   ├── tools-command.ts   # tools subcommand handler (live inspection)
+│   │   ├── tools-command.test.ts # Unit tests for tools command
+│   │   ├── register-commands.ts # Wires all CLI subcommands onto a commander program
+│   │   ├── router-runner.ts   # Router startup: load config, discover, build catalog, serve
 │   ├── services/             # Core business logic
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
@@ -73,6 +81,7 @@ mcp-compress-router/
 │   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
 │   │   ├── config.test.ts     # Unit tests for config path resolution
 │   │   ├── config-load.test.ts # Unit tests for config loading
+│   │   ├── config-selection.test.ts # Unit tests for enabled/tool-selection config fields
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
 │   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
 │   │   ├── oauth.test.ts      # Unit tests for OAuth credential storage
@@ -87,6 +96,9 @@ mcp-compress-router/
 │   │   │                        commas)
 │   │   ├── parse-jsonc.test.ts # Unit tests for parseJsonc
 │   │   ├── text-format.ts     # Compact catalog text renderer
+│   │   ├── text-format.test.ts # Unit tests for compact catalog renderer
+│   │   ├── tool-filter.ts     # Tool Filter (allow/deny glob matching)
+│   │   ├── tool-filter.test.ts # Unit tests for tool filter
 │   │   ├── types.ts           # Shared type definitions
 │   │   ├── validate-arguments.ts   # JSON Schema argument validation
 │   │   ├── validate-arguments.test.ts
@@ -106,7 +118,8 @@ mcp-compress-router/
 │       ├── fail-fast.test.ts  # Fail-fast startup behavior tests
 │       ├── stdio.test.ts      # E2E tests with stdio downstream server
 │       ├── http.test.ts       # E2E tests with HTTP downstream server
-│       └── mixed.test.ts      # E2E tests with stdio + HTTP together
+│       ├── mixed.test.ts      # E2E tests with stdio + HTTP together
+│       └── tool-filter.test.ts # E2E tests for allowlist/denylist tool filtering
 ├── docs/                     # Documentation and assets
 │   ├── configuration.md      # Full configuration & env var reference
 │   └── assets/               # Example JSON payloads

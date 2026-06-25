@@ -1,6 +1,6 @@
 {
   "name": "mcp-compress-router",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Compress all connected MCP servers into a single router MCP to save tokens",
   "license": "MIT",
   "type": "module",
@@ -53,6 +53,7 @@
   "devDependencies": {
     "@eslint/js": "9.16.0",
     "@types/node": "24.13.2",
+    "@types/picomatch": "4.0.3",
     "eslint": "9.16.0",
     "husky": "9.1.7",
     "knip": "6.6.2",
@@ -68,6 +69,7 @@
     "commander": "14.0.2",
     "dotenv": "17.4.2",
     "jsonc-parser": "3.3.1",
+    "picomatch": "4.0.4",
     "zod": "3.25.76"
   }
 }

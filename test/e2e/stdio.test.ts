@@ -496,6 +496,107 @@ describe('MCP Compress Router E2E — stdio', () => {
     }
   }, 15000);
 
+  it('excludes a disabled server from the catalog and rejects invoke_tool on it', async () => {
+    const fixture = await resolveFixtureCommand();
+
+    const config = {
+      mcpServers: {
+        on: {
+          type: 'stdio',
+          command: fixture.command,
+          args: fixture.args,
+          description: 'Enabled fixture',
+        },
+        off: {
+          type: 'stdio',
+          command: fixture.command,
+          args: fixture.args,
+          description: 'Disabled fixture',
+          enabled: false,
+        },
+      },
+    };
+
+    const disabledTempDir = path.join(
+      tmpdir(),
+      `mcp-e2e-disabled-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    await fs.mkdir(disabledTempDir, { recursive: true });
+
+    const configPath = path.join(disabledTempDir, 'mcp.json');
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const disabledClient = new McpTestClient();
+    try {
+      await disabledClient.start('node', [routerPath, '--config', configPath], {
+        MCP_COMPRESS_ROUTER_HOME: disabledTempDir,
+      });
+
+      // The compact catalog inside get_tool_schema's description must
+      // list the enabled server and its tools, but NOT the disabled one.
+      const listResp = await disabledClient.sendRequest('tools/list');
+      const tools = (
+        listResp.result as {
+          tools: Array<{ name: string; description?: string }>;
+        }
+      ).tools;
+      const gts = tools.find((t) => t.name === 'get_tool_schema')!;
+      expect(gts.description).toContain('on');
+      expect(gts.description).toContain('echo');
+      expect(gts.description).not.toContain('off');
+      expect(gts.description).not.toContain('Disabled fixture');
+
+      // get_tool_schema on the disabled server fails and names it.
+      const schemaResp = await disabledClient.sendRequest('tools/call', {
+        name: 'get_tool_schema',
+        arguments: { server: 'off', tools: ['echo'] },
+      });
+      const schemaResult = schemaResp.result as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      expect(schemaResult.isError).toBe(true);
+      expect(schemaResult.content[0].text).toContain('off');
+
+      // invoke_tool on the disabled server fails and names it, without
+      // forwarding to the downstream process.
+      const invokeResp = await disabledClient.sendRequest('tools/call', {
+        name: 'invoke_tool',
+        arguments: {
+          server: 'off',
+          tool: 'echo',
+          arguments: { message: 'should not reach downstream' },
+        },
+      });
+      const invokeResult = invokeResp.result as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      expect(invokeResult.isError).toBe(true);
+      expect(invokeResult.content[0].text).toContain('off');
+      expect(invokeResult.content[0].text).toContain('Available servers');
+      expect(invokeResult.content[0].text).toContain('on');
+
+      // The enabled server still works end-to-end.
+      const okResp = await disabledClient.sendRequest('tools/call', {
+        name: 'invoke_tool',
+        arguments: {
+          server: 'on',
+          tool: 'echo',
+          arguments: { message: 'still up' },
+        },
+      });
+      expect(okResp.error).toBeUndefined();
+      const okResult = okResp.result as {
+        content: Array<{ type: string; text: string }>;
+      };
+      expect(okResult.content[0]).toEqual({ type: 'text', text: 'still up' });
+    } finally {
+      await disabledClient.close();
+      await fs.rm(disabledTempDir, { recursive: true, force: true });
+    }
+  }, 15000);
+
   it('emits structured info-level logs to stderr on startup and invocation', async () => {
     const stderr = client.getStderr();
 
