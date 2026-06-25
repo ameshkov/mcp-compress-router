@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-06-25
+
 ### Added
 
 - `--version` (and `-V`) flag prints the installed package version and
@@ -137,7 +139,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.2.0...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.3.0...HEAD
+[v1.3.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.3.0
 [v1.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.2.0
 [v1.1.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.1.0
 [v1.0.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.0.2
