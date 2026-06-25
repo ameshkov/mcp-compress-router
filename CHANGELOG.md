@@ -8,6 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- `tools <name>` CLI subcommand now collapses embedded newlines in tool
+  descriptions (e.g. markdown content from remote servers) so the
+  `Name` / `Description` / `Exposure` table layout stays aligned and
+  one row is rendered per tool.
+
 ## [v1.1.0] - 2026-06-25
 
 ### Added

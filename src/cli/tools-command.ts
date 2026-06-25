@@ -15,13 +15,20 @@ const DESCRIPTION_MAX_WIDTH = 60;
 
 /**
  * Truncates a description to {@link DESCRIPTION_MAX_WIDTH} characters,
- * appending an ellipsis when truncated. Returns an empty string for
- * undefined input.
+ * appending an ellipsis when truncated. Collapses all whitespace
+ * (including embedded newlines from markdown descriptions) to single
+ * spaces so downstream table layout stays intact. Returns an empty
+ * string for undefined input.
+ *
+ * @internal Exported for tests only; not part of the public module API.
  */
-function truncateDescription(desc: string | undefined): string {
+export function truncateDescription(desc: string | undefined): string {
   if (!desc) return '';
-  if (desc.length <= DESCRIPTION_MAX_WIDTH) return desc;
-  return desc.slice(0, DESCRIPTION_MAX_WIDTH - 1) + '…';
+  // Collapse all whitespace (including embedded newlines from markdown
+  // descriptions) to single spaces so the table layout stays intact.
+  const flat = desc.replace(/\s+/g, ' ').trim();
+  if (flat.length <= DESCRIPTION_MAX_WIDTH) return flat;
+  return flat.slice(0, DESCRIPTION_MAX_WIDTH - 1) + '…';
 }
 
 /**

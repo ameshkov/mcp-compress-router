@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import type * as http from 'node:http';
-import { handleTools } from './tools-command.js';
+import { handleTools, truncateDescription } from './tools-command.js';
 import { createHttpFixtureServer } from '../../test/fixture-http-server.js';
 import { writeCredentials } from './config-io.js';
 
@@ -18,6 +18,26 @@ async function resolveCommand(): Promise<{ command: string; args: string[] }> {
     return { command: 'node', args: [fixturePath.replace('.ts', '.js')] };
   }
 }
+
+describe('truncateDescription', () => {
+  it('collapses embedded newlines and whitespace to single spaces', () => {
+    const input = '# jira_list_projects\n\nLists all JIRA projects.';
+    const out = truncateDescription(input);
+    expect(out).not.toContain('\n');
+    expect(out).toBe('# jira_list_projects Lists all JIRA projects.');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(truncateDescription(undefined)).toBe('');
+  });
+
+  it('truncates with ellipsis when exceeding max width', () => {
+    const long = 'a'.repeat(80);
+    const out = truncateDescription(long);
+    expect(out).toHaveLength(60);
+    expect(out.endsWith('…')).toBe(true);
+  });
+});
 
 describe('handleTools — stdio fixture', () => {
   let tempDir: string;
