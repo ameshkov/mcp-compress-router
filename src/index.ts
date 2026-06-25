@@ -2,11 +2,16 @@
 /// <reference types="node" />
 
 import * as path from 'node:path';
+import { createRequire } from 'node:module';
 import dotenv from 'dotenv';
 import { Command } from 'commander';
 import { resolveConfigDir } from './services/index.js';
 import { Logger } from './utils/index.js';
 import { registerAllCommands } from './cli/register-commands.js';
+
+const { version } = createRequire(import.meta.url)('../package.json') as {
+  version: string;
+};
 
 async function main() {
   // Load .env from the config directory before any config resolution
@@ -20,7 +25,8 @@ async function main() {
 
   program
     .name('mcp-compress-router')
-    .description('Compress all connected MCP servers into a single router MCP');
+    .description('Compress all connected MCP servers into a single router MCP')
+    .version(version);
 
   registerAllCommands(program);
 

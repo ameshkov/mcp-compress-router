@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `--version` (and `-V`) flag prints the installed package version and
+  exits.
+
 ## [v1.2.0] - 2026-06-25
 
 ### Changed

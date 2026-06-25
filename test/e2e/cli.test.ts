@@ -63,6 +63,12 @@ describe('CLI management commands', () => {
     expect(stdout).not.toContain('Error');
   });
 
+  it('--version prints the package version', async () => {
+    const { stdout, exitCode } = await runCli(['--version'], homeDir);
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
   it('add then get then list then remove lifecycle', async () => {
     // Add an HTTP server (local fixture — no OAuth metadata advertised)
     const addResult = await runCli(['add', '--transport', 'http', 'sentry', httpUrl], homeDir);
