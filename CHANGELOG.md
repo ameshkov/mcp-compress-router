@@ -8,6 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- README now documents a step-by-step Figma MCP setup (create a Personal
+  Access Token, register an OAuth client via Figma's REST API with a
+  fixed-port `127.0.0.1` redirect URI, add the server, provide
+  `oauth.clientId`/`clientSecret`/`scope`/`callbackPort`, run `login`).
+
 ## [v1.3.0] - 2026-06-25
 
 ### Added
