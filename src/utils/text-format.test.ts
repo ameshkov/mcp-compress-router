@@ -21,6 +21,7 @@ describe('renderCompactCatalog', () => {
 
     expect(text).toContain('## github');
     expect(text).toContain('GitHub server');
+    expect(text).toContain('Available tools:');
     expect(text).toContain('list_issues');
     expect(text).not.toContain('delete_repo');
   });
@@ -36,6 +37,27 @@ describe('renderCompactCatalog', () => {
     const text = renderCompactCatalog(servers);
 
     expect(text).toContain('## staged');
+    expect(text).not.toContain('Available tools:');
     expect(text.trim()).toBe('## staged');
+  });
+
+  it('separates servers with blank lines and labels tool lists', () => {
+    const servers: CatalogServer[] = [
+      {
+        name: 'alpha',
+        description: 'Alpha server',
+        tools: [{ name: 'a1', inputSchema: { type: 'object' } }],
+      },
+      {
+        name: 'beta',
+        tools: [{ name: 'b1', inputSchema: { type: 'object' } }],
+      },
+    ];
+
+    const text = renderCompactCatalog(servers);
+
+    expect(text).toBe(
+      '## alpha\nAlpha server\n\nAvailable tools:\na1\n\n## beta\n\nAvailable tools:\nb1',
+    );
   });
 });

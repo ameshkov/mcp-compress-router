@@ -57,6 +57,20 @@ export function collectStringArray(value: string, previous: string[]): string[] 
 }
 
 /**
+ * Coerces a `--port` flag value into an integer. Throws on non-numeric
+ * values so the user gets a clear error before any network activity.
+ * Range validation is deferred to the command handlers.
+ * @internal — Exported for tests only; not part of the public module API.
+ */
+export function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port)) {
+    throw new Error(`--port must be an integer (got "${value}").`);
+  }
+  return port;
+}
+
+/**
  * Wraps a CLI action handler with error handling.
  * On success, writes the result to stdout. On error, writes to stderr
  * and exits with code 1.
@@ -89,6 +103,7 @@ interface AddCommandOptions {
   disabled?: boolean;
   allowedTools: string[];
   disabledTools: string[];
+  port?: number;
 }
 
 /**
@@ -114,6 +129,7 @@ function buildAddOptions(
       options.allowedTools && options.allowedTools.length > 0 ? options.allowedTools : undefined,
     disabledTools:
       options.disabledTools && options.disabledTools.length > 0 ? options.disabledTools : undefined,
+    port: options.port,
   };
 }
 
@@ -142,6 +158,11 @@ function registerAddCommand(program: Command): void {
       'glob pattern denylisting tool names (repeatable)',
       collectStringArray,
       [],
+    )
+    .option(
+      '-p, --port <number>',
+      'fixed local OAuth callback port (HTTP only; written to oauth.callbackPort)',
+      parsePort,
     )
     .action(
       guardedAction(async (name, commandOrUrl, rest, options: AddCommandOptions) => {
@@ -195,10 +216,15 @@ function registerLoginCommand(program: Command): void {
     .command('login <name>')
     .description('Authenticate a downstream server using OAuth')
     .option('-c, --config <path>', 'path to mcp.json configuration file')
+    .option(
+      '-p, --port <number>',
+      'fixed local OAuth callback port (overrides oauth.callbackPort; 0 = OS-assigned)',
+      parsePort,
+    )
     .action(
-      guardedAction(async (name, options) => {
+      guardedAction(async (name, options: { config?: string; port?: number }) => {
         const configPath = await resolveConfigPath(options.config);
-        return handleLogin(configPath, name);
+        return handleLogin(configPath, name, options.port);
       }),
     );
 }

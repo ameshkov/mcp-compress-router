@@ -62,9 +62,5 @@ export function createGetToolSchemaHandler(catalog: ToolCatalog, logger: Logger)
  */
 export function buildGetToolSchemaDescription(catalog: ToolCatalog): string {
   const compact = renderCompactCatalog(catalog.servers);
-  return (
-    'Get the JSON schema for one or more tools from a connected MCP server.\n\n' +
-    'Available MCP servers and their tools:\n\n' +
-    compact
-  );
+  return 'Get the JSON schema for one or more tools from a connected MCP server.\n\n' + compact;
 }

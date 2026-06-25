@@ -7,22 +7,31 @@ import type { CatalogServer } from './types.js';
  * Format:
  *   ## {server name}
  *   {description (optional)}
+ *
+ *   Available tools:
  *   {tool1}, {tool2}, ...
+ *
+ * When a server has no tools, only the header (and optional
+ * description) is rendered.
  *
  * @param servers - The catalog server entries.
  * @returns Compact catalog text.
  */
 export function renderCompactCatalog(servers: CatalogServer[]): string {
-  const lines: string[] = [];
+  const blocks: string[] = [];
 
   for (const server of servers) {
-    lines.push(`## ${server.name}`);
+    const lines: string[] = [`## ${server.name}`];
     if (server.description) {
       lines.push(server.description);
     }
-    lines.push(server.tools.map((t) => t.name).join(', '));
-    lines.push(''); // blank line between servers
+    if (server.tools.length > 0) {
+      lines.push('');
+      lines.push('Available tools:');
+      lines.push(server.tools.map((t) => t.name).join(', '));
+    }
+    blocks.push(lines.join('\n'));
   }
 
-  return lines.join('\n').trimEnd();
+  return blocks.join('\n\n');
 }

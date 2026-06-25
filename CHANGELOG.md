@@ -10,6 +10,11 @@ and this project adheres to
 
 ### Changed
 
+- The `get_tool_schema` tool description now renders each connected
+  server as a `## {name}` section with the server description followed
+  by an `Available tools:` label and the comma-separated tool list,
+  making the per-server tool inventory easier to scan. The redundant
+  `Available MCP servers and their tools:` preamble was removed.
 - The OAuth login redirect URI path is now
   `/mcp-compress-router/oauth-callback` (was `/callback`). The full
   loopback redirect URI remains `http://localhost:<port>/mcp-compress-router/oauth-callback`
