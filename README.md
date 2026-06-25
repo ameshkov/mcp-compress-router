@@ -38,6 +38,7 @@
     - [Codex](#codex)
     - [GitHub Copilot](#github-copilot)
 - [How It Works](#how-it-works)
+- [Aknowledgements](#acknowledgements)
 
 ## The Problem
 
@@ -96,12 +97,12 @@ The router is published on npm as
 You do not need to install it — just run it with `npx`:
 
 ```bash
-npx mcp-compress-router add github -- npx -y @modelcontextprotocol/server-github
+npx mcp-compress-router add playwright2 -- npx -y @playwright/mcp
 ```
 
-This registers a downstream MCP server named `github` and writes it to
-your [config file](#config-file-location). Repeat for every MCP server you
-want to compress.
+This registers a downstream MCP server named `playwright` and writes it
+to your [config file](#config-file-location). Repeat for every MCP server
+you want to compress.
 
 Then point your [coding agent](#connecting-coding-agents) at the router:
 
@@ -374,7 +375,7 @@ flag each time:
 `--port` overrides `oauth.callbackPort` for a single run. Pass `--port 0`
 to force an OS-assigned port even when `oauth.callbackPort` is set.
 
-#### GitHub MCP (special case)
+#### GitHub MCP with OAuth (special case)
 
 The official GitHub MCP server at
 `https://api.githubcopilot.com/mcp` advertises OAuth but does **not**
@@ -430,7 +431,7 @@ organizations you want the MCP to access.
 > login will succeed, and its client secret is generated under *General*
 > → *Generate a new client secret*.
 
-#### Figma MCP (special case)
+#### Figma MCP with OAuth (special case)
 
 The official Figma MCP server at `https://mcp.figma.com/mcp` does **not**
 support Dynamic Client Registration through the standard MCP flow.
@@ -684,3 +685,11 @@ token catalog, regardless of how many downstream servers you have.
 
 For the full configuration and environment variable reference, see
 [configuration.md](docs/configuration.md).
+
+## Acknowledgements
+
+- [mcp2cli](https://github.com/knowsuchagency/mcp2cli) — a very similar
+  idea of how MCP can be compressed, but to a CLI.
+- [mcp-compressor](https://github.com/atlassian-labs/mcp-compressor) —
+  also a very similar idea; the "two tools" approach was borrowed from
+  this project, though it only compresses a single MCP server.
