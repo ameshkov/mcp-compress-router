@@ -1,11 +1,14 @@
 import type { DownstreamServerConfig } from '../utils/index.js';
 import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
 import { loadConfig } from '../services/config.js';
+import { discoverAuth } from '../services/index.js';
 
 /** SDK OAuth metadata type (non-null after discovery). */
 type OAuthMetadata = NonNullable<
   Awaited<
-    ReturnType<typeof import('@modelcontextprotocol/sdk/client/auth.js').discoverOAuthMetadata>
+    ReturnType<
+      typeof import('@modelcontextprotocol/sdk/client/auth.js').discoverAuthorizationServerMetadata
+    >
   >
 >;
 
@@ -80,18 +83,25 @@ async function setupOAuthClient(
   targetServer: DownstreamServerConfig,
   name: string,
 ): Promise<OAuthMetadata> {
-  const { discoverOAuthMetadata, registerClient } = await _getSdkAuth();
+  const { registerClient } = await _getSdkAuth();
 
   const serverUrl = new URL(targetServer.url!);
-  const metadata = await discoverOAuthMetadata(serverUrl);
+  const discovered = await discoverAuth(serverUrl);
+  const metadata = discovered.serverMetadata;
   if (!metadata) {
     throw new Error(`Server "${name}" does not expose OAuth metadata.`);
   }
-  if (!metadata.registration_endpoint) {
-    throw new Error(`Server "${name}" does not support dynamic client registration.`);
-  }
 
+  // DCR is only required when there is no pre-registered client (static
+  // override) and no previously stored client information. Servers without a
+  // registration_endpoint (e.g. GitHub) work when an "oauth.clientId"
+  // override is configured.
   if (!mgr.hasStaticClient() && !(await mgr.clientInformation())) {
+    if (!metadata.registration_endpoint) {
+      throw new Error(
+        `Server "${name}" does not support dynamic client registration. Configure an "oauth.clientId" override in mcp.json with a pre-registered client ID.`,
+      );
+    }
     const regResult = await registerClient(new URL(metadata.registration_endpoint), {
       metadata,
       clientMetadata: mgr.clientMetadata,

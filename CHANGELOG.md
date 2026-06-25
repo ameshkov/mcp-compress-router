@@ -14,6 +14,14 @@ and this project adheres to
   descriptions (e.g. markdown content from remote servers) so the
   `Name` / `Description` / `Exposure` table layout stays aligned and
   one row is rendered per tool.
+- OAuth is now correctly discovered for spec-compliant remote MCP servers
+  (e.g. GitHub `api.githubcopilot.com/mcp`, Notion `mcp.notion.com/mcp`).
+  `probeAuthRequirement` and the `login` flow now follow the MCP 2025-06-18
+  two-step authorization discovery (RFC 9728 Protected Resource Metadata ->
+  RFC 8414 Authorization Server Metadata), with an origin-root fallback for
+  legacy servers. `login` also no longer requires Dynamic Client
+  Registration when an `oauth.clientId` override is configured, enabling
+  GitHub login with a pre-registered client ID.
 
 ## [v1.1.0] - 2026-06-25
 

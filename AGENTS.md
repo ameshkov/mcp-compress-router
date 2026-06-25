@@ -85,6 +85,8 @@ mcp-compress-router/
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
 │   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
 │   │   ├── oauth.test.ts      # Unit tests for OAuth credential storage
+│   │   ├── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
+│   │   ├── oauth-discovery.test.ts # Unit tests for OAuth discovery
 │   │   ├── auth-status.test.ts # Unit tests for auth requirement & status
 │   │   ├── invoker.ts         # Downstream tool invocation
 │   │   └── invoker.test.ts    # Unit tests for tool invocation

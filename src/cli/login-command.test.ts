@@ -76,6 +76,60 @@ function startDiscoveryServer(): Promise<{ server: http.Server; url: string }> {
   });
 }
 
+/**
+ * Starts a server that serves AS metadata WITHOUT a registration_endpoint
+ * (models a no-DCR authorization server like GitHub's). The authorize
+ * endpoint redirects, but openBrowser is mocked so login reaches the
+ * callback timeout — proving discovery succeeded and DCR was skipped.
+ */
+function startNoDcrServer(): Promise<{ server: http.Server; url: string }> {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url!, `http://${req.headers.host}`);
+
+      if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
+        const addr = server.address();
+        const port = typeof addr === 'object' && addr ? addr.port : '0';
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        // NOTE: no registration_endpoint — DCR is not supported.
+        res.end(
+          JSON.stringify({
+            issuer: `http://localhost:${port}`,
+            authorization_endpoint: `http://localhost:${port}/authorize`,
+            token_endpoint: `http://localhost:${port}/token`,
+            response_types_supported: ['code'],
+            grant_types_supported: ['authorization_code'],
+            code_challenge_methods_supported: ['S256'],
+          }),
+        );
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/authorize') {
+        const redirectUri = url.searchParams.get('redirect_uri') || '';
+        const state = url.searchParams.get('state') || '';
+        const redirectUrl = new URL(redirectUri);
+        redirectUrl.searchParams.set('code', 'auth-code-no-dcr');
+        if (state) {
+          redirectUrl.searchParams.set('state', state);
+        }
+        res.writeHead(302, { Location: redirectUrl.toString() });
+        res.end();
+        return;
+      }
+
+      res.writeHead(404);
+      res.end('{}');
+    });
+
+    server.listen(0, () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : '0';
+      resolve({ server, url: `http://127.0.0.1:${port}` });
+    });
+  });
+}
+
 describe('handleLogin', () => {
   let tmpDir: string;
   let configPath: string;
@@ -138,6 +192,55 @@ describe('handleLogin', () => {
       // openBrowser is mocked, so no browser opens and the callback
       // never reaches the temp server. The short 500ms timeout fires.
       await expect(handleLogin(configPath, 'test')).rejects.toThrow(/timed out/);
+    } finally {
+      delete process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS;
+      server.close();
+    }
+  }, 10_000);
+
+  it('throws guided error when AS has no registration endpoint and no static clientId', async () => {
+    const { server, url } = await startNoDcrServer();
+
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          nodcr: { type: 'http', url: url + '/mcp' },
+        },
+      }),
+    );
+
+    try {
+      await expect(handleLogin(configPath, 'nodcr')).rejects.toThrow(
+        /does not support dynamic client registration.*oauth\.clientId/,
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  it('skips DCR and proceeds when a static oauth.clientId is configured', async () => {
+    process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS = '500';
+    const { server, url } = await startNoDcrServer();
+
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          nodcr: {
+            type: 'http',
+            url: url + '/mcp',
+            oauth: { clientId: 'pre-registered-client-id' },
+          },
+        },
+      }),
+    );
+
+    try {
+      // With a static clientId, DCR is skipped. Discovery + authorize succeed,
+      // and login reaches the callback wait, which times out (openBrowser is
+      // mocked). Asserting "timed out" proves the no-DCR path did NOT throw.
+      await expect(handleLogin(configPath, 'nodcr')).rejects.toThrow(/timed out/);
     } finally {
       delete process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS;
       server.close();

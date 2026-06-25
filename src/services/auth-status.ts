@@ -6,19 +6,22 @@ import type {
   StoredCredentials,
 } from '../utils/index.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
+import { discoverAuth } from './oauth-discovery.js';
 
 /**
- * Probes a downstream HTTP server's OAuth discovery endpoint to
- * determine whether it advertises OAuth support. Makes a single probe
- * of the server's well-known authorization-server metadata.
+ * Probes a downstream HTTP server to determine whether it advertises OAuth
+ * support, following the MCP 2025-06-18 two-step flow: RFC 9728 Protected
+ * Resource Metadata first, then RFC 8414 Authorization Server Metadata at
+ * each advertised authorization server (with an origin-root fallback for
+ * legacy servers).
  *
  * stdio servers never support OAuth, so they short-circuit to `'none'`
  * without any network access.
  *
  * @param server - Typed downstream server config.
  * @param logger - Optional logger for diagnostic output on probe errors.
- * @returns `'oauth'` when metadata is advertised, `'none'` when it is
- *   absent, or `'unknown'` on network/probe errors.
+ * @returns `'oauth'` when authorization-server metadata is advertised,
+ *   `'none'` when it is absent, or `'unknown'` on network/probe errors.
  * @internal Exported for tests only; not part of the public module API.
  */
 export async function probeAuthRequirement(
@@ -34,10 +37,8 @@ export async function probeAuthRequirement(
   }
 
   try {
-    const { discoverAuthorizationServerMetadata } =
-      await import('@modelcontextprotocol/sdk/client/auth.js');
-    const metadata = await discoverAuthorizationServerMetadata(new URL(server.url));
-    return metadata ? 'oauth' : 'none';
+    const discovered = await discoverAuth(new URL(server.url));
+    return discovered.serverMetadata ? 'oauth' : 'none';
   } catch (err) {
     logger?.error(`Failed to probe OAuth metadata for "${server.name}"`, {
       server: server.name,
