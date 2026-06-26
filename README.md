@@ -25,6 +25,7 @@
     - [Adding Downstream Servers](#adding-downstream-servers)
     - [Per-Server Enable/Disable](#per-server-enabledisable)
     - [Per-Server Tool Selection](#per-server-tool-selection)
+    - [Compression Levels](#compression-levels)
     - [Inspecting Tools](#inspecting-tools)
     - [OAuth](#oauth)
         - [Redirect URL](#redirect-url)
@@ -280,6 +281,61 @@ npx mcp-compress-router@latest add github \
   --allowed-tools get_pull_request \
   -- npx -y server-github
 ```
+
+### Compression Levels
+
+Each server's tools are listed in the `get_tool_schema` description at a
+configurable `compressionLevel`. The level trades catalog compactness
+for routing detail: lower levels give the LLM more information up front
+(fewer `get_tool_schema` round-trips), while higher levels minimize the
+per-request token overhead. The full JSON parameter schema is always
+available via `get_tool_schema` regardless of the level — only the
+catalog *listing* changes.
+
+Four levels are supported, from most to least compact:
+
+| Level | Tool listing format | Description shown? |
+| --- | --- | --- |
+| `max` | `toolA, toolB, toolC` (comma-separated, single line) | No |
+| `high` (default) | `toolName(arg1, arg2)` (one per line) | No |
+| `medium` | `toolName(arg1, arg2): first sentence...` (one per line) | Snippet |
+| `low` | `<tool>toolName(arg1, arg2): full description</tool>` (one per line) | Full |
+
+Argument names are extracted from each tool's `inputSchema.properties`
+keys in definition order. When a tool has no description, the `medium`
+and `low` listings omit the description portion and show just the
+signature.
+
+Omitting `compressionLevel` (the default) is equivalent to `high`. Set
+it per server in `mcp.json`:
+
+```jsonc
+"github": {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"],
+  "compressionLevel": "medium"
+}
+```
+
+Or set it at creation time with the `--compression-level` flag:
+
+```bash
+npx mcp-compress-router@latest add github \
+  --compression-level medium \
+  -- npx -y @modelcontextprotocol/server-github
+```
+
+A good rule of thumb:
+
+- Use `max` for servers whose tool names are self-describing and you
+  want the smallest possible catalog.
+- Use `high` (the default) for most servers — argument names are
+  usually enough for the LLM to pick the right tool.
+- Use `medium` when tool names alone are ambiguous and a one-line
+  hint helps disambiguate.
+- Use `low` sparingly — only when full descriptions must be visible
+  without a `get_tool_schema` call, since it costs the most tokens.
 
 ### Inspecting Tools
 
