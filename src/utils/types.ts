@@ -4,6 +4,14 @@
 export type ServerTransportType = 'stdio' | 'http' | 'streamable-http';
 
 /**
+ * Per-server tool listing compression level controlling how a server's
+ * tools are rendered in the `get_tool_schema` description. When the
+ * `compressionLevel` config field is absent, the effective value is
+ * `high`.
+ */
+export type CompressionLevel = 'max' | 'high' | 'medium' | 'low';
+
+/**
  * Parsed definition of a single downstream MCP server from mcp.json.
  */
 export interface DownstreamServerConfig {
@@ -31,6 +39,11 @@ export interface DownstreamServerConfig {
   allowedTools?: string[];
   /** Glob patterns denylisting tool names; takes precedence over {@link allowedTools}. */
   disabledTools?: string[];
+  /**
+   * Optional tool listing compression level for this server. Absent
+   * means `high` (the default). See {@link CompressionLevel}.
+   */
+  compressionLevel?: CompressionLevel;
 }
 
 /**
@@ -148,6 +161,8 @@ export interface CatalogServer {
   description?: string;
   /** Tools provided by this server. */
   tools: ToolDescriptor[];
+  /** Resolved compression level (always concrete; never undefined). */
+  compressionLevel: CompressionLevel;
 }
 
 /**

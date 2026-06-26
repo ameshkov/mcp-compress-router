@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildCatalog, lookupTools } from './catalog.js';
 import type { DiscoveredServer } from './discovery.js';
 import type { ToolSelection } from '../utils/index.js';
+import type { CompressionLevel } from '../utils/index.js';
 import { Logger } from '../utils/logger.js';
 
 describe('buildCatalog', () => {
@@ -358,5 +359,48 @@ describe('buildCatalog — unmatched-pattern warnings', () => {
     ]);
 
     expect(() => buildCatalog([server], selection)).not.toThrow();
+  });
+});
+
+describe('buildCatalog — compressionLevel propagation', () => {
+  it('defaults to high when no entry is provided for a server', () => {
+    const discovered: DiscoveredServer[] = [
+      {
+        name: 'srv',
+        tools: [{ name: 't', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const catalog = buildCatalog(discovered);
+
+    expect(catalog.servers[0].compressionLevel).toBe('high');
+  });
+
+  it('uses the explicit level when provided', () => {
+    const discovered: DiscoveredServer[] = [
+      {
+        name: 'srv',
+        tools: [{ name: 't', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const levels = new Map<string, CompressionLevel | undefined>([['srv', 'max']]);
+    const catalog = buildCatalog(discovered, new Map(), undefined, levels);
+
+    expect(catalog.servers[0].compressionLevel).toBe('max');
+  });
+
+  it('resolves undefined map entry to high', () => {
+    const discovered: DiscoveredServer[] = [
+      {
+        name: 'srv',
+        tools: [{ name: 't', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const levels = new Map<string, CompressionLevel | undefined>([['srv', undefined]]);
+    const catalog = buildCatalog(discovered, new Map(), undefined, levels);
+
+    expect(catalog.servers[0].compressionLevel).toBe('high');
   });
 });

@@ -50,6 +50,7 @@ describe('loadConfig', () => {
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
+      compressionLevel: undefined,
     });
     expect(servers[1]).toEqual({
       name: 'server2',
@@ -63,6 +64,7 @@ describe('loadConfig', () => {
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
+      compressionLevel: undefined,
     });
   });
 
@@ -414,128 +416,31 @@ describe('loadConfig', () => {
     });
   });
 
-  describe('oauth block', () => {
-    it('parses oauth block with ${VAR} expansion', async () => {
-      process.env.TEST_CLIENT_ID = 'my-client';
-      process.env.TEST_CLIENT_SECRET = 'my-secret';
+  describe('compressionLevel field', () => {
+    it('defaults to undefined when omitted', async () => {
       const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: {
-              clientId: '${TEST_CLIENT_ID}',
-              clientSecret: '${TEST_CLIENT_SECRET}',
-              scope: 'repo user',
-            },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: { srv: { type: 'stdio', command: 'node' } },
+        }),
+      );
       const servers = await loadConfig(configPath);
-      expect(servers[0].oauth).toEqual({
-        clientId: 'my-client',
-        clientSecret: 'my-secret',
-        scope: 'repo user',
-      });
-      delete process.env.TEST_CLIENT_ID;
-      delete process.env.TEST_CLIENT_SECRET;
+      expect(servers[0].compressionLevel).toBeUndefined();
     });
 
-    it('rejects oauth block with unresolved ${VAR} in clientId', async () => {
+    it('passes through a present string value', async () => {
       const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { clientId: '${MISSING_VAR}' },
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: 'high' },
           },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
-      await expect(loadConfig(configPath)).rejects.toThrow('MISSING_VAR');
-    });
-
-    it('allows oauth block with only clientId (public client)', async () => {
-      process.env.CLIENT_ID = 'pub-client';
-      const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { clientId: '${CLIENT_ID}' },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
+        }),
+      );
       const servers = await loadConfig(configPath);
-      expect(servers[0].oauth).toEqual({ clientId: 'pub-client' });
-      delete process.env.CLIENT_ID;
-    });
-
-    it('parses oauth.callbackPort as a number', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { clientId: 'cid', callbackPort: 8765 },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
-      const servers = await loadConfig(configPath);
-      expect(servers[0].oauth?.callbackPort).toBe(8765);
-    });
-
-    it('parses oauth.callbackPort from a numeric string', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { callbackPort: '8765' },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
-      const servers = await loadConfig(configPath);
-      expect(servers[0].oauth?.callbackPort).toBe(8765);
-    });
-
-    it('rejects oauth.callbackPort outside the valid range', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { callbackPort: 70000 },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
-      await expect(loadConfig(configPath)).rejects.toThrow(/callbackPort/i);
-    });
-
-    it('rejects a non-integer oauth.callbackPort', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      const config = {
-        mcpServers: {
-          github: {
-            type: 'http',
-            url: 'https://api.github.com/mcp',
-            oauth: { callbackPort: 'not-a-port' },
-          },
-        },
-      };
-      await fs.writeFile(configPath, JSON.stringify(config));
-      await expect(loadConfig(configPath)).rejects.toThrow(/callbackPort/i);
+      expect(servers[0].compressionLevel).toBe('high');
     });
   });
 });

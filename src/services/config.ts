@@ -1,7 +1,12 @@
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
-import type { DownstreamServerConfig, OAuthConfig, ServerTransportType } from '../utils/index.js';
+import type {
+  CompressionLevel,
+  DownstreamServerConfig,
+  OAuthConfig,
+  ServerTransportType,
+} from '../utils/index.js';
 import { expandEnvField, parseJsonc, validateGlobPattern } from '../utils/index.js';
 
 /** Recognized MCP transport types. */
@@ -374,8 +379,22 @@ function parseServerEntry(
   const enabled = validateEnabled(name, server);
   const allowedTools = validateToolList(name, 'allowedTools', server.allowedTools);
   const disabledTools = validateToolList(name, 'disabledTools', server.disabledTools);
+  const compressionLevel =
+    typeof server.compressionLevel === 'string'
+      ? (server.compressionLevel as CompressionLevel)
+      : undefined;
 
-  return { name, type, ...fields, description, oauth, enabled, allowedTools, disabledTools };
+  return {
+    name,
+    type,
+    ...fields,
+    description,
+    oauth,
+    enabled,
+    allowedTools,
+    disabledTools,
+    compressionLevel,
+  };
 }
 
 /**

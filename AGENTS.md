@@ -81,6 +81,7 @@ mcp-compress-router/
 │   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
 │   │   ├── config.test.ts     # Unit tests for config path resolution
 │   │   ├── config-load.test.ts # Unit tests for config loading
+│   │   ├── config-oauth.test.ts # Unit tests for oauth config block parsing
 │   │   ├── config-selection.test.ts # Unit tests for enabled/tool-selection config fields
 │   │   ├── discovery.test.ts  # Integration tests for downstream discovery
 │   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
@@ -94,6 +95,8 @@ mcp-compress-router/
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
 │   │   ├── expand-env.test.ts # Unit tests for env var expansion
+│   │   ├── argument-names.ts  # Argument Name Extractor (inputSchema.properties keys)
+│   │   ├── argument-names.test.ts # Unit tests for argument name extraction
 │   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing
 │   │   │                        commas)
 │   │   ├── parse-jsonc.test.ts # Unit tests for parseJsonc

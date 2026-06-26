@@ -9,7 +9,12 @@ import {
 } from '../services/index.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { DownstreamServerConfig, ToolCatalog, ToolSelection } from '../utils/index.js';
+import type {
+  CompressionLevel,
+  DownstreamServerConfig,
+  ToolCatalog,
+  ToolSelection,
+} from '../utils/index.js';
 import { Logger } from '../utils/index.js';
 import {
   createGetToolSchemaHandler,
@@ -132,13 +137,15 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
   });
 
   const selectionByServer = new Map<string, ToolSelection>();
+  const compressionLevelByServer = new Map<string, CompressionLevel | undefined>();
   for (const server of servers) {
     selectionByServer.set(server.name, {
       allowedTools: server.allowedTools,
       disabledTools: server.disabledTools,
     });
+    compressionLevelByServer.set(server.name, server.compressionLevel);
   }
 
-  const catalog = buildCatalog(discovered, selectionByServer, logger);
+  const catalog = buildCatalog(discovered, selectionByServer, logger, compressionLevelByServer);
   await startRouterServer(catalog, clients, logger);
 }

@@ -1,15 +1,22 @@
 import type { CatalogServer } from './types.js';
+import { extractArgumentNames } from './argument-names.js';
 
 /**
  * Renders the compact catalog as Markdown text suitable for inclusion
  * in the `get_tool_schema` tool description.
+ *
+ * At the `high` compression level (the default), each tool is rendered
+ * on its own line as `toolName(arg1, arg2)`, with `toolName()` for
+ * zero-parameter tools. Argument names are extracted from each tool's
+ * `inputSchema.properties` keys in definition order.
  *
  * Format:
  *   ## {server name}
  *   {description (optional)}
  *
  *   Available tools:
- *   {tool1}, {tool2}, ...
+ *   {tool1}(arg1, arg2)
+ *   {tool2}()
  *
  * When a server has no tools, only the header (and optional
  * description) is rendered.
@@ -28,7 +35,10 @@ export function renderCompactCatalog(servers: CatalogServer[]): string {
     if (server.tools.length > 0) {
       lines.push('');
       lines.push('Available tools:');
-      lines.push(server.tools.map((t) => t.name).join(', '));
+      for (const tool of server.tools) {
+        const args = extractArgumentNames(tool.inputSchema);
+        lines.push(`${tool.name}(${args.join(', ')})`);
+      }
     }
     blocks.push(lines.join('\n'));
   }

@@ -1,5 +1,5 @@
 import { filterTools } from '../utils/index.js';
-import type { Logger } from '../utils/index.js';
+import type { CompressionLevel, Logger } from '../utils/index.js';
 import type { ToolCatalog, ToolDescriptor, ToolSelection } from '../utils/index.js';
 import type { DiscoveredServer } from './discovery.js';
 
@@ -18,12 +18,16 @@ import type { DiscoveredServer } from './discovery.js';
  *   server name is absent from the map, all its tools are exposed.
  * @param logger - Optional logger for unmatched-pattern warnings. When
  *   omitted, no warnings are emitted (backward compatible).
+ * @param compressionLevelByServer - Optional per-server compression level
+ *   map. When a server name is absent or the entry is `undefined`, the
+ *   level resolves to `high` (the default).
  * @returns An immutable ToolCatalog containing only exposed tools.
  */
 export function buildCatalog(
   discovered: DiscoveredServer[],
   selectionByServer: Map<string, ToolSelection> = new Map(),
   logger?: Logger,
+  compressionLevelByServer: Map<string, CompressionLevel | undefined> = new Map(),
 ): ToolCatalog {
   const toolMap = new Map<string, ToolDescriptor>();
   const filteredToolNames = new Set<string>();
@@ -55,6 +59,7 @@ export function buildCatalog(
       name: ds.name,
       description: ds.description,
       tools: exposed,
+      compressionLevel: compressionLevelByServer.get(ds.name) ?? 'high',
     };
   });
 

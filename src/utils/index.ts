@@ -1,4 +1,5 @@
 export type {
+  CompressionLevel,
   DownstreamServerConfig,
   OAuthConfig,
   ServerTransportType,
