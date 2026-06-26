@@ -1,6 +1,6 @@
 {
   "name": "mcp-compress-router",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Compress all connected MCP servers into a single router MCP to save tokens",
   "license": "MIT",
   "type": "module",

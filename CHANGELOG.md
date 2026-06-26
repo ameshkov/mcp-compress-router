@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.4.0] - 2026-06-26
+
 ### Added
 
 - Per-server `compressionLevel` config field controlling how a
@@ -164,7 +166,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.3.1...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.4.0...HEAD
+[v1.4.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.4.0
 [v1.3.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.3.1
 [v1.3.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.3.0
 [v1.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.2.0
