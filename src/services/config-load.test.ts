@@ -442,5 +442,89 @@ describe('loadConfig', () => {
       const servers = await loadConfig(configPath);
       expect(servers[0].compressionLevel).toBe('high');
     });
+
+    it('passes through max, medium, and low values', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            maxSrv: { type: 'stdio', command: 'node', compressionLevel: 'max' },
+            mediumSrv: { type: 'stdio', command: 'node', compressionLevel: 'medium' },
+            lowSrv: { type: 'stdio', command: 'node', compressionLevel: 'low' },
+          },
+        }),
+      );
+      const servers = await loadConfig(configPath);
+      const byName = new Map(servers.map((s) => [s.name, s.compressionLevel]));
+      expect(byName.get('maxSrv')).toBe('max');
+      expect(byName.get('mediumSrv')).toBe('medium');
+      expect(byName.get('lowSrv')).toBe('low');
+    });
+
+    it('rejects an invalid string compressionLevel', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: 'ultra' },
+          },
+        }),
+      );
+      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel".*ultra/);
+    });
+
+    it('rejects a numeric compressionLevel', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: 42 },
+          },
+        }),
+      );
+      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel".*42/);
+    });
+
+    it('rejects a null compressionLevel', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: null },
+          },
+        }),
+      );
+      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel"/);
+    });
+
+    it('rejects a boolean compressionLevel', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: true },
+          },
+        }),
+      );
+      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel"/);
+    });
+
+    it('error message lists the valid options', async () => {
+      const configPath = path.join(tempDir, 'mcp.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            srv: { type: 'stdio', command: 'node', compressionLevel: 'ultra' },
+          },
+        }),
+      );
+      await expect(loadConfig(configPath)).rejects.toThrow(/max, high, medium, low/);
+    });
   });
 });

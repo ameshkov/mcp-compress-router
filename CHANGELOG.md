@@ -13,19 +13,6 @@ and this project adheres to
 - Per-server `compressionLevel` config field controlling how a
   server's tools are listed in the `get_tool_schema` description.
   Supports `max`, `high` (default), `medium`, and `low` values.
-- `extractArgumentNames` utility that reads `inputSchema.properties`
-  keys in definition order for catalog rendering.
-
-### Changed
-
-- **Breaking**: The default tool listing format in the
-  `get_tool_schema` description changed from bare comma-separated tool
-  names to one tool per line as `toolName(arg1, arg2)` (the `high`
-  compression level). Zero-parameter tools render as `toolName()`. To
-  restore the previous compact format, set
-  `"compressionLevel": "max"` on the server (the `max` render level
-  arrives in a follow-up; until then the field is parsed but only
-  `high` is rendered).
 
 ## [v1.3.1] - 2026-06-25
 

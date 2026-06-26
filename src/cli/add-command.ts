@@ -6,7 +6,12 @@ import {
   writeCredentials,
   type RawServerEntry,
 } from './config-io.js';
-import { validateGlobPattern, type AuthRequirement } from '../utils/index.js';
+import {
+  isCompressionLevel,
+  validateGlobPattern,
+  VALID_COMPRESSION_LEVELS,
+  type AuthRequirement,
+} from '../utils/index.js';
 
 /**
  * Options for the add subcommand, parsed from CLI flags.
@@ -39,6 +44,8 @@ export interface AddOptions {
    * runs reuse it.
    */
   port?: number;
+  /** Compression level from `--compression-level`; undefined writes no field. */
+  compressionLevel?: string;
 }
 
 /**
@@ -108,6 +115,10 @@ function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: stri
     entry.disabledTools = opts.disabledTools;
   }
 
+  if (opts.compressionLevel) {
+    entry.compressionLevel = opts.compressionLevel;
+  }
+
   // A fixed callback port only applies to HTTP servers (OAuth). Persist
   // it on the `oauth` block so `login` reuses the same redirect URI.
   if (opts.port !== undefined) {
@@ -142,6 +153,13 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
 
   validateToolListPatterns('allowedTools', opts.allowedTools);
   validateToolListPatterns('disabledTools', opts.disabledTools);
+
+  if (opts.compressionLevel !== undefined && !isCompressionLevel(opts.compressionLevel)) {
+    throw new Error(
+      `Invalid "--compression-level" value "${opts.compressionLevel}": ` +
+        `must be one of ${VALID_COMPRESSION_LEVELS.join(', ')}.`,
+    );
+  }
 
   await ensureConfigDir(configPath);
   const servers = await readConfigFile(configPath);

@@ -447,4 +447,59 @@ describe('handleAdd', () => {
       }),
     ).rejects.toThrow(/--port must be an integer between 1 and 65535/);
   });
+
+  it('writes compressionLevel when a valid level is provided', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'srv',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'some-server'],
+      compressionLevel: 'medium',
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.srv.compressionLevel).toBe('medium');
+  });
+
+  it('writes no compressionLevel field when the flag is absent', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'srv',
+      transport: 'stdio',
+      commandOrUrl: 'npx',
+      rest: ['-y', 'some-server'],
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.srv.compressionLevel).toBeUndefined();
+  });
+
+  it('throws and writes nothing when --compression-level is invalid', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'srv',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'some-server'],
+        compressionLevel: 'invalid',
+      }),
+    ).rejects.toThrow(/--compression-level.*invalid/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it('error message lists the valid levels for an invalid --compression-level', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'srv',
+        transport: 'stdio',
+        commandOrUrl: 'npx',
+        rest: ['-y', 'some-server'],
+        compressionLevel: 'fast',
+      }),
+    ).rejects.toThrow(/max, high, medium, low/);
+  });
 });

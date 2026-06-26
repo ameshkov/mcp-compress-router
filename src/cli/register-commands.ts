@@ -104,6 +104,7 @@ interface AddCommandOptions {
   allowedTools: string[];
   disabledTools: string[];
   port?: number;
+  compressionLevel?: string;
 }
 
 /**
@@ -130,6 +131,7 @@ function buildAddOptions(
     disabledTools:
       options.disabledTools && options.disabledTools.length > 0 ? options.disabledTools : undefined,
     port: options.port,
+    compressionLevel: options.compressionLevel || undefined,
   };
 }
 
@@ -158,6 +160,10 @@ function registerAddCommand(program: Command): void {
       'glob pattern denylisting tool names (repeatable)',
       collectStringArray,
       [],
+    )
+    .option(
+      '--compression-level <level>',
+      'tool listing compression level (max, high, medium, low; default high)',
     )
     .option(
       '-p, --port <number>',

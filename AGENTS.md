@@ -97,6 +97,10 @@ mcp-compress-router/
 │   │   ├── expand-env.test.ts # Unit tests for env var expansion
 │   │   ├── argument-names.ts  # Argument Name Extractor (inputSchema.properties keys)
 │   │   ├── argument-names.test.ts # Unit tests for argument name extraction
+│   │   ├── description-truncator.ts # Description Truncator (medium-level first-sentence snippet)
+│   │   ├── description-truncator.test.ts # Unit tests for description truncator
+│   │   ├── compression-level.ts # CompressionLevel valid set + type guard
+│   │   ├── compression-level.test.ts # Unit tests for compression-level guard
 │   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing
 │   │   │                        commas)
 │   │   ├── parse-jsonc.test.ts # Unit tests for parseJsonc
@@ -289,25 +293,28 @@ All code MUST meet documentation and style requirements before merge:
   symbols that are part of the package's public API but are NOT
   reachable from the entry point through internal imports (Knip would
   otherwise report them as unused).
-- **File size limit**: Source files SHOULD stay within 300 lines of code.
-  When a file approaches or exceeds this limit — or fails the ESLint
-  `max-lines` gate (500 lines) — your FIRST and default response MUST be
+- **File size limit**: Source files MUST stay within 300 lines of code.
+  This is an enforced ESLint `max-lines` gate (`'error'` severity,
+  `max: 300`; blank lines and comments are skipped) — a hard gate, not a
+  soft target. When a file approaches or exceeds this limit, your FIRST
+  and default response MUST be
   to **split the file into several smaller, cohesive files**, each with a
   single, clear responsibility (extract related functions, types, or
   constants into dedicated modules, utilities, or services, and
   re-export them through the barrel). Treat the limit as a signal that
   the file is doing too much, not as a quota to optimize against. You
   MUST attempt a split before any other tactic; only fall back if you can
-  articulate a concrete reason a split would hurt clarity. For test
-  files, split a large `*.test.ts` into multiple focused `*.test.ts`
-  files grouped by the behavior they verify — multiple test files per
-  source module are explicitly allowed. **Do NOT** satisfy the limit by
-  making the existing code shorter: no condensing tests into table-driven
-  blocks purely to save lines, no shortening of identifiers, string
-  literals, or file paths, no merging statements onto one line, and no
-  removing blank lines, comments, or JSDoc. Formatting is managed by
-  Prettier and must stay uniform — readability and clarity always win
-  over line count.
+  articulate a concrete reason a split would hurt clarity.
+  For test files, the `max-lines` gate is raised to 500 (and
+  `max-lines-per-function` is disabled); split a large `*.test.ts` into
+  multiple focused `*.test.ts` files grouped by the behavior they
+  verify — multiple test files per source module are explicitly allowed.
+  **Do NOT** satisfy the limit by making the existing code shorter: no
+  condensing tests into table-driven blocks purely to save lines, no shortening
+  of identifiers, string literals, or file paths, no merging statements onto one
+  line, and no removing blank lines, comments, or JSDoc. Formatting is managed
+  by Prettier and must stay uniform — readability and clarity always win over
+  line count.
   Exceptions: auto-generated files and database migration files.
 - **Function size limit**: Functions SHOULD stay within 50 lines of code.
   When approaching or exceeding this limit, break the function into

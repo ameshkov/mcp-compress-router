@@ -1,6 +1,11 @@
 import { ensureConfigDir, readConfigFile, readCredentials } from './config-io.js';
 import { computeAuthStatus } from '../services/index.js';
-import type { AuthStatus, DownstreamServerConfig, ServerTransportType } from '../utils/index.js';
+import type {
+  AuthStatus,
+  CompressionLevel,
+  DownstreamServerConfig,
+  ServerTransportType,
+} from '../utils/index.js';
 
 /** A single rendered row in the `list` table. */
 interface ServerRow {
@@ -9,6 +14,7 @@ interface ServerRow {
   commandOrUrl: string;
   enabled: string;
   tools: string;
+  compression: string;
   auth: AuthStatus;
 }
 
@@ -71,6 +77,17 @@ function summarizeTools(server: DownstreamServerConfig): string {
 }
 
 /**
+ * Renders the `Compression` cell: the explicit `compressionLevel`, or
+ * `high` when the field is absent (the default per PRD §"Solution").
+ *
+ * @param server - Typed downstream server config.
+ * @returns The resolved compression level string.
+ */
+function summarizeCompression(server: DownstreamServerConfig): string {
+  return server.compressionLevel ?? 'high';
+}
+
+/**
  * Renders the list header and server rows as a fixed-width table. The
  * final (Auth) column is left unpadded so lines never carry trailing
  * whitespace.
@@ -90,6 +107,7 @@ function formatList(configPath: string, rows: ServerRow[]): string {
   const commandWidth = Math.max('CommandOrUrl'.length, ...rows.map((r) => r.commandOrUrl.length));
   const enabledWidth = Math.max('Enabled'.length, ...rows.map((r) => r.enabled.length));
   const toolsWidth = Math.max('Tools'.length, ...rows.map((r) => r.tools.length));
+  const compressionWidth = Math.max('Compression'.length, ...rows.map((r) => r.compression.length));
 
   const pad = (val: string, width: number): string => val.padEnd(width);
   const columns = (
@@ -98,15 +116,18 @@ function formatList(configPath: string, rows: ServerRow[]): string {
     command: string,
     enabled: string,
     tools: string,
+    compression: string,
     auth: string,
   ): string =>
-    `${pad(name, nameWidth)}  ${pad(type, typeWidth)}  ${pad(command, commandWidth)}  ${pad(enabled, enabledWidth)}  ${pad(tools, toolsWidth)}  ${auth}`;
+    `${pad(name, nameWidth)}  ${pad(type, typeWidth)}  ${pad(command, commandWidth)}  ${pad(enabled, enabledWidth)}  ${pad(tools, toolsWidth)}  ${pad(compression, compressionWidth)}  ${auth}`;
 
   return [
     header,
     '',
-    columns('Name', 'Type', 'CommandOrUrl', 'Enabled', 'Tools', 'Auth'),
-    ...rows.map((r) => columns(r.name, r.type, r.commandOrUrl, r.enabled, r.tools, r.auth)),
+    columns('Name', 'Type', 'CommandOrUrl', 'Enabled', 'Tools', 'Compression', 'Auth'),
+    ...rows.map((r) =>
+      columns(r.name, r.type, r.commandOrUrl, r.enabled, r.tools, r.compression, r.auth),
+    ),
   ].join('\n');
 }
 
@@ -135,6 +156,7 @@ export async function handleList(configPath: string): Promise<string> {
       enabled: entry.enabled,
       allowedTools: entry.allowedTools,
       disabledTools: entry.disabledTools,
+      compressionLevel: entry.compressionLevel as CompressionLevel | undefined,
     };
     return {
       name,
@@ -142,6 +164,7 @@ export async function handleList(configPath: string): Promise<string> {
       commandOrUrl: buildCommandOrUrl(typed),
       enabled: summarizeEnabled(typed),
       tools: summarizeTools(typed),
+      compression: summarizeCompression(typed),
       auth: computeAuthStatus(typed, credentials[name]),
     };
   });

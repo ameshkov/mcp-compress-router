@@ -42,6 +42,8 @@ export interface RawServerEntry {
   allowedTools?: string[];
   /** Glob patterns denylisting tool names; wins over allowedTools. */
   disabledTools?: string[];
+  /** Tool listing compression level (max, high, medium, low). */
+  compressionLevel?: string;
   /** OAuth client overrides (clientId/clientSecret/scope/callbackPort). */
   oauth?: Record<string, unknown>;
 }

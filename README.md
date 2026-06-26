@@ -97,7 +97,7 @@ The router is published on npm as
 You do not need to install it — just run it with `npx`:
 
 ```bash
-npx mcp-compress-router add playwright -- npx -y @playwright/mcp
+npx mcp-compress-router@latest add playwright -- npx -y @playwright/mcp
 ```
 
 This registers a downstream MCP server named `playwright` and writes it
@@ -107,7 +107,7 @@ you want to compress.
 Then point your [coding agent](#connecting-coding-agents) at the router:
 
 ```bash
-npx mcp-compress-router
+npx mcp-compress-router@latest
 ```
 
 When started without a subcommand, the router runs the MCP server over
@@ -165,11 +165,11 @@ far better than a bare name.
 **stdio server** (a local process):
 
 ```bash
-npx mcp-compress-router add github --description "GitHub API tools" \
+npx mcp-compress-router@latest add github --description "GitHub API tools" \
   -- npx -y @modelcontextprotocol/server-github
 
 # With environment variables
-npx mcp-compress-router add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
+npx mcp-compress-router@latest add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
   --description "GitHub API tools" \
   -- npx -y @modelcontextprotocol/server-github
 ```
@@ -178,10 +178,10 @@ npx mcp-compress-router add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
 URL):
 
 ```bash
-npx mcp-compress-router add my-http https://localhost:3100/mcp
+npx mcp-compress-router@latest add my-http https://localhost:3100/mcp
 
 # With a custom header
-npx mcp-compress-router add my-http \
+npx mcp-compress-router@latest add my-http \
   --header "Authorization: Bearer mytoken" \
   https://localhost:3100/mcp
 ```
@@ -214,9 +214,9 @@ supported. CLI commands write plain `.json`; hand-edited files may use
 Other management commands:
 
 ```bash
-npx mcp-compress-router list            # list all servers + auth status
-npx mcp-compress-router get my-http     # show one server's config
-npx mcp-compress-router remove my-http  # remove a server
+npx mcp-compress-router@latest list            # list all servers + auth status
+npx mcp-compress-router@latest get my-http     # show one server's config
+npx mcp-compress-router@latest remove my-http  # remove a server
 ```
 
 ### Per-Server Enable/Disable
@@ -231,14 +231,14 @@ enabled, keeping `mcp.json` clean and fully backward compatible.
 Toggle it from the CLI without touching the rest of the config:
 
 ```bash
-npx mcp-compress-router disable github   # writes "enabled": false
-npx mcp-compress-router enable github    # removes the field
+npx mcp-compress-router@latest disable github   # writes "enabled": false
+npx mcp-compress-router@latest enable github    # removes the field
 ```
 
 You can also set it at creation time:
 
 ```bash
-npx mcp-compress-router add archive --disabled -- npx -y server-archive
+npx mcp-compress-router@latest add archive --disabled -- npx -y server-archive
 ```
 
 ### Per-Server Tool Selection
@@ -275,7 +275,7 @@ hard error at startup. Set filters at creation time with repeatable
 flags:
 
 ```bash
-npx mcp-compress-router add github \
+npx mcp-compress-router@latest add github \
   --allowed-tools list_issues \
   --allowed-tools get_pull_request \
   -- npx -y server-github
@@ -288,7 +288,7 @@ To see exactly which tools a server advertises — and which are
 it live without starting the full router:
 
 ```bash
-npx mcp-compress-router tools github
+npx mcp-compress-router@latest tools github
 ```
 
 This works regardless of the server's `enabled` state (inspecting a
@@ -305,7 +305,7 @@ flow automatically if OAuth is advertised. You can also trigger it
 manually:
 
 ```bash
-npx mcp-compress-router login my-http
+npx mcp-compress-router@latest login my-http
 ```
 
 This opens your browser to complete the authorization-code flow. Tokens
@@ -355,7 +355,7 @@ ignore the port on `localhost`. If your provider demands a redirect URI
 with an **exact port**, pin it with `--port`:
 
 ```bash
-npx mcp-compress-router login my-http --port 8765
+npx mcp-compress-router@latest login my-http --port 8765
 ```
 
 This binds the callback server to `8765`, so the redirect URI becomes
@@ -393,7 +393,7 @@ organizations you want the MCP to access.
 3. **Add the GitHub MCP server by URL.**
 
    ```bash
-   npx mcp-compress-router add github https://api.githubcopilot.com/mcp
+   npx mcp-compress-router@latest add github https://api.githubcopilot.com/mcp
    ```
 
 4. **Set `oauth` credentials in `mcp.json`.**
@@ -420,7 +420,7 @@ organizations you want the MCP to access.
 5. **Run the login command.**
 
    ```bash
-   npx mcp-compress-router login github
+   npx mcp-compress-router@latest login github
    ```
 
    Your browser opens to authorize. After you approve, tokens are stored
@@ -481,7 +481,7 @@ pin it with `oauth.callbackPort`.
 3. **Add the Figma MCP server by URL.**
 
    ```bash
-   npx mcp-compress-router add --transport http figma https://mcp.figma.com/mcp
+   npx mcp-compress-router@latest add --transport http figma https://mcp.figma.com/mcp
    ```
 
 4. **Set `oauth` credentials in `mcp.json`.**
@@ -508,7 +508,7 @@ pin it with `oauth.callbackPort`.
 5. **Run the login command.**
 
    ```bash
-   npx mcp-compress-router login figma
+   npx mcp-compress-router@latest login figma
    ```
 
    Your browser opens to authorize. After you approve, tokens are stored
@@ -517,7 +517,7 @@ pin it with `oauth.callbackPort`.
 Other OAuth commands:
 
 ```bash
-npx mcp-compress-router logout my-http  # remove stored credentials
+npx mcp-compress-router@latest logout my-http  # remove stored credentials
 ```
 
 For headless or CI environments, override the browser with the
@@ -526,7 +526,7 @@ URL is appended as a single final argument (no shell):
 
 ```bash
 MCP_COMPRESS_ROUTER_BROWSER="node /path/to/headless-browser.js" \
-  npx mcp-compress-router login my-http
+  npx mcp-compress-router@latest login my-http
 ```
 
 The default login timeout is 120 seconds; override it with
@@ -539,7 +539,7 @@ token instead of OAuth, use the `headers` field. You can set it via the
 CLI or directly in `mcp.json`:
 
 ```bash
-npx mcp-compress-router add my-http \
+npx mcp-compress-router@latest add my-http \
   --header "Authorization: Bearer mytoken" \
   --header "X-Custom: value" \
   https://example.com/mcp
@@ -585,26 +585,26 @@ Shell environment variables always take precedence over `.env` values.
 
 Once your downstream servers are configured, connect your agent to the
 router the same way you would connect any other MCP server — by
-pointing it at `npx mcp-compress-router`. The examples below assume the
+pointing it at `npx mcp-compress-router@latest`. The examples below assume the
 default [config location](#config-file-location); pass `-c <path>` if
 you use a custom one.
 
 ### Opencode
 
 ```sh
-opencode mcp add mcp-compress-router -- npx -y mcp-compress-router
+opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
 ```
 
 ### Claude Code
 
 ```sh
-claude mcp add mcp-compress-router -- npx -y mcp-compress-router
+claude mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
 ```
 
 ### Codex
 
 ```sh
-codex mcp add mcp-compress-router -- npx -y mcp-compress-router
+codex mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
 ```
 
 ### GitHub Copilot (VS Code)
@@ -621,7 +621,7 @@ merged, with project-level taking precedence.
   "servers": {
     "mcp-compress-router": {
       "command": "npx",
-      "args": ["-y", "mcp-compress-router"]
+      "args": ["-y", "mcp-compress-router@latest"]
     }
   }
 }

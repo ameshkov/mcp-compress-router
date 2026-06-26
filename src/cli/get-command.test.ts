@@ -83,4 +83,38 @@ describe('handleGet', () => {
     await expect(handleGet(configPath, 'nonexistent')).rejects.toThrow('alpha');
     await expect(handleGet(configPath, 'nonexistent')).rejects.toThrow('beta');
   });
+
+  it('shows compressionLevel when explicitly set', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        myserver: {
+          type: 'stdio',
+          command: 'node',
+          compressionLevel: 'low',
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const result = await handleGet(configPath, 'myserver');
+    expect(result).toContain('compressionLevel: low');
+    expect(result).not.toContain('(default)');
+  });
+
+  it('shows compressionLevel default when field is absent', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        myserver: {
+          type: 'stdio',
+          command: 'node',
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const result = await handleGet(configPath, 'myserver');
+    expect(result).toContain('compressionLevel: high (default)');
+  });
 });

@@ -285,4 +285,64 @@ describe('handleList', () => {
 
     fetchSpy.mockRestore();
   });
+
+  it('includes a Compression column header', async () => {
+    const configPath = await writeConfig({
+      local: { type: 'stdio', command: 'npx', args: ['-y', 'fs-server'] },
+    });
+    const result = await handleList(configPath);
+    const headerLine = result.split('\n').find((l) => l.includes('Name'));
+    expect(headerLine).toBeDefined();
+    expect(headerLine).toContain('Compression');
+  });
+
+  it('shows the explicit compressionLevel value in the column', async () => {
+    const configPath = await writeConfig({
+      local: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'fs-server'],
+        compressionLevel: 'max',
+      },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toBeDefined();
+    expect(localRow).toMatch(/\bmax\b/);
+  });
+
+  it('shows "high" for the default compressionLevel in the column', async () => {
+    const configPath = await writeConfig({
+      local: { type: 'stdio', command: 'npx', args: ['-y', 'fs-server'] },
+    });
+    const result = await handleList(configPath);
+    const localRow = result.split('\n').find((l) => l.startsWith('local'));
+    expect(localRow).toBeDefined();
+    expect(localRow).toMatch(/\bhigh\b/);
+  });
+
+  it('renders distinct compression levels per row with no trailing whitespace', async () => {
+    const configPath = await writeConfig({
+      'srv-max': { type: 'stdio', command: 'a', compressionLevel: 'max' },
+      'srv-low': {
+        type: 'http',
+        url: 'https://example.com/mcp',
+        compressionLevel: 'low',
+      },
+      'srv-default': { type: 'stdio', command: 'b' },
+    });
+    const result = await handleList(configPath);
+    const lines = result.split('\n');
+
+    for (const line of lines) {
+      expect(line).toBe(line.trimEnd());
+    }
+
+    const maxRow = lines.find((l) => l.startsWith('srv-max'));
+    const lowRow = lines.find((l) => l.startsWith('srv-low'));
+    const defaultRow = lines.find((l) => l.startsWith('srv-default'));
+    expect(maxRow).toMatch(/\bmax\b/);
+    expect(lowRow).toMatch(/\blow\b/);
+    expect(defaultRow).toMatch(/\bhigh\b/);
+  });
 });
