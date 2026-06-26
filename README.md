@@ -97,7 +97,7 @@ The router is published on npm as
 You do not need to install it — just run it with `npx`:
 
 ```bash
-npx mcp-compress-router add playwright2 -- npx -y @playwright/mcp
+npx mcp-compress-router add playwright -- npx -y @playwright/mcp
 ```
 
 This registers a downstream MCP server named `playwright` and writes it
@@ -591,62 +591,28 @@ you use a custom one.
 
 ### Opencode
 
-Add the router to your `opencode.json` under `mcp`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "mcp-compress-router": {
-      "type": "local",
-      "command": ["npx", "-y", "mcp-compress-router"],
-      "enabled": true
-    }
-  }
-}
+```sh
+opencode mcp add mcp-compress-router -- npx -y mcp-compress-router
 ```
 
 ### Claude Code
 
-Add this to a project-level `.mcp.json` in your workspace root, or to
-your user-level config (applies to every project):
-
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux:** `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "mcp-compress-router": {
-      "command": "npx",
-      "args": ["-y", "mcp-compress-router"]
-    }
-  }
-}
+```sh
+claude mcp add mcp-compress-router -- npx -y mcp-compress-router
 ```
 
 ### Codex
 
-Add a `[mcp_servers.mcp-compress-router]` table to your Codex config (note
-the snake_case key). The config path is `~/.codex/config.toml` on
-macOS/Linux, or `%USERPROFILE%\.codex\config.toml` on Windows; you can
-also scope it to a single project via `.codex/config.toml` in trusted
-projects.
-
-```toml
-[mcp_servers.mcp-compress-router]
-command = "npx"
-args = ["-y", "mcp-compress-router"]
-enabled = true
+```sh
+codex mcp add mcp-compress-router -- npx -y mcp-compress-router
 ```
 
-### GitHub Copilot
+### GitHub Copilot (VS Code)
 
 Add this to `.vscode/mcp.json` in your workspace (project-level, applies
 only to that workspace), or to your **user-level** MCP settings which
-apply across every workspace: open the Command Palette →
-`Preferences: Open User Settings (JSON)` and add the same `servers`
+apply across every workspace: open the Command Palette (`Cmd+Shift+P`) →
+`MCP: Open User Configuration` and add the same `servers`
 block under the `mcp` key. Project-level and user-level entries are
 merged, with project-level taking precedence.
 
