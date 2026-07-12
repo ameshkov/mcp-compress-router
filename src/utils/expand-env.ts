@@ -2,7 +2,8 @@
  * Error thrown when a `${VAR}` reference references an undefined
  * environment variable and has no default value.
  *
- * @public
+ * @internal Exported for tests only; not part of the public module API.
+ *   Production code lets it propagate as a generic Error.
  */
 export class ExpandEnvError extends Error {
   /** The name of the unresolved variable. */

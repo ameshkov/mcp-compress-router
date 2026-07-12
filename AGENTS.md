@@ -55,64 +55,44 @@ mcp-compress-router/
 │   ├── cli/                   # Management CLI subcommands
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config-io.ts       # Raw mcp.json read/write with first-use creation
-│   │   ├── config-io.test.ts  # Unit tests for config I/O
 │   │   ├── add-command.ts     # add subcommand handler
-│   │   ├── add-command.test.ts # Unit tests for add command
 │   │   ├── disable-command.ts # disable subcommand handler
-│   │   ├── disable-command.test.ts # Unit tests for disable command
 │   │   ├── enable-command.ts # enable subcommand handler
-│   │   ├── enable-command.test.ts # Unit tests for enable command
 │   │   ├── remove-command.ts  # remove subcommand handler
-│   │   ├── remove-command.test.ts # Unit tests for remove command
 │   │   ├── get-command.ts     # get subcommand handler
-│   │   ├── get-command.test.ts # Unit tests for get command
 │   │   ├── list-command.ts    # list subcommand handler
-│   │   ├── list-command.test.ts # Unit tests for list command
 │   │   ├── tools-command.ts   # tools subcommand handler (live inspection)
-│   │   ├── tools-command.test.ts # Unit tests for tools command
+│   │   ├── login-command.ts   # login subcommand handler (OAuth flow)
+│   │   ├── logout-command.ts  # logout subcommand handler (clear credentials)
 │   │   ├── register-commands.ts # Wires all CLI subcommands onto a commander program
-│   │   ├── router-runner.ts   # Router startup: load config, discover, build catalog, serve
+│   │   └── router-runner.ts   # Router startup: connect servers, build catalog, serve
 │   ├── services/             # Core business logic
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
-│   │   ├── discovery.ts       # Downstream Connection Manager
+│   │   ├── discovery.ts       # Downstream server discovery (single-server connect + tool listing)
 │   │   ├── catalog.ts         # Catalog Builder & Cache
-│   │   ├── oauth.ts           # OAuth credential storage (credentials.json)
+│   │   ├── server-connection.ts # Per-server client lifecycle (connect, reconnect, invoke, close)
+│   │   ├── invoke-with-recovery.ts # Self-recovery orchestration on invoke_tool
+│   │   ├── guided-error.ts    # Detailed guided error message builder
+│   │   ├── auth-errors.ts     # GuidedAuthError tagged error class
+│   │   ├── tool-cache.ts      # Disk cache for tool schemas (tools-cache.json)
+│   │   ├── oauth.ts           # OAuth credential storage (credentials.json) + proactive refresh & invalidation
 │   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
-│   │   ├── config.test.ts     # Unit tests for config path resolution
-│   │   ├── config-load.test.ts # Unit tests for config loading
-│   │   ├── config-oauth.test.ts # Unit tests for oauth config block parsing
-│   │   ├── config-selection.test.ts # Unit tests for enabled/tool-selection config fields
-│   │   ├── discovery.test.ts  # Integration tests for downstream discovery
-│   │   ├── catalog.test.ts    # Unit tests for catalog and schema lookup
-│   │   ├── oauth.test.ts      # Unit tests for OAuth credential storage
-│   │   ├── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
-│   │   ├── oauth-discovery.test.ts # Unit tests for OAuth discovery
-│   │   ├── auth-status.test.ts # Unit tests for auth requirement & status
-│   │   ├── invoker.ts         # Downstream tool invocation
-│   │   └── invoker.test.ts    # Unit tests for tool invocation
+│   │   └── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
 │   ├── utils/                 # Shared utilities
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
-│   │   ├── expand-env.test.ts # Unit tests for env var expansion
 │   │   ├── argument-names.ts  # Argument Name Extractor (inputSchema.properties keys)
-│   │   ├── argument-names.test.ts # Unit tests for argument name extraction
 │   │   ├── description-truncator.ts # Description Truncator (medium-level first-sentence snippet)
-│   │   ├── description-truncator.test.ts # Unit tests for description truncator
 │   │   ├── compression-level.ts # CompressionLevel valid set + type guard
-│   │   ├── compression-level.test.ts # Unit tests for compression-level guard
-│   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing
-│   │   │                        commas)
-│   │   ├── parse-jsonc.test.ts # Unit tests for parseJsonc
+│   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing commas)
 │   │   ├── text-format.ts     # Compact catalog text renderer
-│   │   ├── text-format.test.ts # Unit tests for compact catalog renderer
 │   │   ├── tool-filter.ts     # Tool Filter (allow/deny glob matching)
-│   │   ├── tool-filter.test.ts # Unit tests for tool filter
 │   │   ├── types.ts           # Shared type definitions
-│   │   ├── validate-arguments.ts   # JSON Schema argument validation
-│   │   ├── validate-arguments.test.ts
-│   │   ├── open-browser.ts    # Platform-safe browser opener using spawn()
-│   │   └── open-browser.test.ts # Unit tests for browser opener
+│   │   ├── validate-arguments.ts # JSON Schema argument validation
+│   │   ├── validate-glob.ts   # Glob pattern validator
+│   │   ├── logger.ts          # Level-aware structured logger
+│   │   └── open-browser.ts    # Platform-safe browser opener using spawn()
 │   └── tools/                 # Router tool handlers
 │       ├── index.ts           # Barrel exports (public API)
 │       ├── get-tool-schema.ts
@@ -122,13 +102,7 @@ mcp-compress-router/
 │   ├── fixture-http-server.ts # Reusable fixture HTTP downstream MCP server
 │   └── e2e/                  # End-to-end tests
 │       ├── helpers.ts         # Shared E2E utilities (fixture paths, spawn)
-│       ├── client.ts          # JSON-RPC test client over stdio
-│       ├── cli.test.ts        # E2E tests for management CLI subcommands
-│       ├── fail-fast.test.ts  # Fail-fast startup behavior tests
-│       ├── stdio.test.ts      # E2E tests with stdio downstream server
-│       ├── http.test.ts       # E2E tests with HTTP downstream server
-│       ├── mixed.test.ts      # E2E tests with stdio + HTTP together
-│       └── tool-filter.test.ts # E2E tests for allowlist/denylist tool filtering
+│       └── client.ts          # JSON-RPC test client over stdio
 ├── docs/                     # Documentation and assets
 │   ├── configuration.md      # Full configuration & env var reference
 │   └── assets/               # Example JSON payloads
@@ -274,6 +248,15 @@ All code MUST meet documentation and style requirements before merge:
   resolved after a few attempts, ask the human for help.
 - **Error handling strategy**: Prefer throwing errors over returning error
   values. Handle errors at top-level entry points where they can be logged.
+- **Import style**: Use top-level static `import` statements exclusively.
+  Do NOT scatter dynamic `await import()` calls inside function bodies
+  ("inline imports"). Dynamic imports placed mid-function obscure
+  dependencies, bypass static analysis, and fragment module initialization
+  across call sites. When a dynamic import is genuinely necessary (e.g.,
+  breaking a circular dependency or deferring a heavy module load for
+  startup performance), extract it into a named, cached helper function at
+  module scope (e.g., `getSdkAuth()`) rather than invoking `await import()`
+  inline within business logic.
 - **File naming**: Use kebab-case for all file names. TypeScript source
   files MUST use lower-case kebab-case. Do NOT use PascalCase or camelCase
   file names.
@@ -288,11 +271,12 @@ All code MUST meet documentation and style requirements before merge:
   export is excluded (e.g., "Exported for tests only; not part of the
   public module API"). Do NOT use `@internal` to silence legitimate
   unused-export warnings — remove the export instead.
-- **`@public` tag usage**: Knip treats `@public` as a built-in tag that
-  suppresses unused-export warnings. Add `@public` **only** to exported
-  symbols that are part of the package's public API but are NOT
-  reachable from the entry point through internal imports (Knip would
-  otherwise report them as unused).
+- **No `@public` tag**: Do NOT use the `@public` JSDoc tag. This
+  project is an application (not a library), so no symbol is part of a
+  "public API" consumed by external consumers. Resolve Knip
+  unused-export findings by removing the export or marking it
+  `@internal` (for test-only symbols not re-exported from the barrel)
+  instead.
 - **File size limit**: Source files MUST stay within 300 lines of code.
   This is an enforced ESLint `max-lines` gate (`'error'` severity,
   `max: 300`; blank lines and comments are skipped) — a hard gate, not a

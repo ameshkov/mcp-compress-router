@@ -39,6 +39,10 @@ function renderServerBlock(server: CatalogServer): string {
   if (server.description) {
     lines.push(server.description);
   }
+  const statusHeader = renderStatusHeader(server);
+  if (statusHeader) {
+    lines.push(statusHeader);
+  }
   if (server.tools.length > 0) {
     lines.push('', 'Available tools:');
     if (server.compressionLevel === 'max') {
@@ -50,6 +54,23 @@ function renderServerBlock(server: CatalogServer): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * Renders a one-line status header for degraded servers. Returns an
+ * empty string for healthy ('ok') servers.
+ *
+ * @param server - The catalog server to render a status header for.
+ * @returns A status line, or empty string when the server is healthy.
+ */
+function renderStatusHeader(server: CatalogServer): string {
+  if (server.status === 'unauthorized') {
+    return `Requires authentication. Run: npx mcp-compress-router login ${server.name}`;
+  }
+  if (server.status === 'unavailable') {
+    return 'Server unavailable. Check connectivity and configuration.';
+  }
+  return '';
 }
 
 /**

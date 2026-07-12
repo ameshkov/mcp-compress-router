@@ -1,14 +1,13 @@
 /**
  * Log levels in order of increasing verbosity.
- *
- * @public
  */
-export type LogLevel = 'error' | 'info' | 'debug';
+type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
   error: 0,
-  info: 1,
-  debug: 2,
+  warn: 1,
+  info: 2,
+  debug: 3,
 };
 
 /**
@@ -68,7 +67,19 @@ export class Logger {
   }
 
   /**
-   * Emits an info-level log entry. Suppressed when level is 'error'.
+   * Emits a warn-level log entry. Suppressed when level is 'error'.
+   * Used for degraded-mode conditions and recoverable runtime failures.
+   *
+   * @param message - Human-readable warning message.
+   * @param context - Optional key-value metadata.
+   */
+  warn(message: string, context?: Record<string, unknown>): void {
+    this.log('warn', message, context);
+  }
+
+  /**
+   * Emits an info-level log entry. Suppressed when level is 'error' or
+   * 'warn'.
    *
    * @param message - Human-readable info message.
    * @param context - Optional key-value metadata.

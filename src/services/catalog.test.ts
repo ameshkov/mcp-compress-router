@@ -6,6 +6,31 @@ import type { CompressionLevel } from '../utils/index.js';
 import { Logger } from '../utils/logger.js';
 
 describe('buildCatalog', () => {
+  it('propagates status from DiscoveredServer to CatalogServer', () => {
+    const discovered: DiscoveredServer[] = [
+      {
+        name: 'srv',
+        tools: [{ name: 't', inputSchema: { type: 'object', properties: {} } }],
+        status: 'ok',
+      },
+    ];
+
+    const catalog = buildCatalog(discovered);
+    expect(catalog.servers[0].status).toBe('ok');
+  });
+
+  it('defaults status to ok when absent on DiscoveredServer', () => {
+    const discovered: DiscoveredServer[] = [
+      {
+        name: 'srv',
+        tools: [{ name: 't', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const catalog = buildCatalog(discovered);
+    expect(catalog.servers[0].status).toBe('ok');
+  });
+
   it('builds an immutable catalog with tool map', () => {
     const discovered: DiscoveredServer[] = [
       {

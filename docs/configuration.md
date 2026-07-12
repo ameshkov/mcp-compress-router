@@ -16,6 +16,8 @@ quick-start guide, see the
     - [Variable Expansion](#variable-expansion)
 - [OAuth Configuration](#oauth-configuration)
 - [Credential Storage](#credential-storage)
+- [Tool Cache](#tool-cache)
+- [Self-Recovery](#self-recovery)
 - [Environment Variables](#environment-variables)
     - [.env Auto-Loading](#env-auto-loading)
     - [MCP_COMPRESS_ROUTER_HOME](#mcp_compress_router_home)
@@ -49,7 +51,10 @@ to compress into the router. At startup the router:
 3. Probes each HTTP server for OAuth support and caches the result in
    `credentials.json` (see [Credential Storage](#credential-storage)).
 4. Connects to every downstream server, discovers their tools, and
-   builds a compact catalog.
+   builds a compact catalog. On success, tool schemas are cached to
+   `tools-cache.json`. On failure with a warm cache, the server starts
+   in degraded mode. On failure with no cache (first run), the router
+   exits (fail-fast).
 5. Exposes two tools (`get_tool_schema` and `invoke_tool`) on a stdio
    transport.
 
@@ -344,6 +349,61 @@ automatically — you do not edit it by hand.
 
 Add `credentials.json` to your `.gitignore` to avoid committing tokens.
 
+## Tool Cache
+
+Discovered tool schemas are persisted in a separate `tools-cache.json`
+file, stored in the same directory as `mcp.json` (alongside
+`credentials.json`). The router manages this file automatically.
+
+```json
+{
+  "figma": {
+    "tools": [
+      {
+        "name": "get_file",
+        "description": "Fetch a Figma file by key.",
+        "inputSchema": {
+          "type": "object",
+          "properties": { "key": { "type": "string" } }
+        }
+      }
+    ],
+    "cachedAt": "2026-07-11T12:00:00.000Z"
+  }
+}
+```
+
+- Written after every successful tool discovery (startup, after
+  `login`, after self-recovery).
+- Read when a server fails to connect at startup. If a cache exists,
+  the server enters degraded mode (cached tools + status header). If
+  no cache exists, the router fails fast.
+- No TTL or expiry in v1. The cache is purely informational; an
+  `invoke_tool` on a degraded server attempts self-recovery
+  regardless.
+- Add `tools-cache.json` to your `.gitignore`.
+
+## Self-Recovery
+
+When a server is in degraded mode (`unauthorized` or `unavailable`),
+the router automatically attempts to reconnect on the next
+`invoke_tool` call:
+
+1. **Re-reads credentials from disk** — if you ran
+   `mcp-compress-router login <name>` in another terminal, the router
+   picks up the new tokens automatically (no restart needed).
+2. **Creates a fresh client and transport** — the old broken connection
+   is discarded.
+3. **Connects and discovers tools** — if successful, the catalog is
+   updated with fresh tool schemas and the invocation proceeds.
+4. **Cooldown** — if the reconnect fails, subsequent `invoke_tool`
+   calls within 30 seconds return the cached error immediately without
+   retrying. This prevents hammering a dead server.
+
+Runtime failures on a healthy server (e.g. the HTTP server crashed
+mid-session) trigger one reconnect + retry before returning a guided
+error.
+
 ## Environment Variables
 
 The router reads the following environment variables. Before any config
@@ -578,7 +638,10 @@ The `Auth` column values:
 ### `login <name>`
 
 Runs the OAuth authorization-code flow for an HTTP server and stores
-the resulting tokens in `credentials.json`.
+the resulting tokens in `credentials.json`. After successful
+authentication, also discovers the server's current tools and writes
+them to `tools-cache.json` so the next router startup (or
+self-recovery) has an up-to-date cache.
 
 | Flag | Description |
 | --- | --- |

@@ -50,7 +50,8 @@ mkdir -p dev-home
 
 `dev-home/` is gitignored (see `.gitignore`), so it is safe for local
 experiments that may contain secrets. Everything the router writes (the
-config file, `credentials.json`, a `.env` file) will live here.
+config file, `credentials.json`, `tools-cache.json`, a `.env` file)
+will live here.
 
 ### 2. Copy the Example Files
 
@@ -153,12 +154,17 @@ MCP_COMPRESS_ROUTER_HOME="$PWD/dev-home" node build/index.js -v
 At startup the router:
 
 1. Loads `.env` and `mcp.jsonc` from the home directory.
-2. Connects to every downstream server and discovers their tools.
+2. Connects to every downstream server, discovers their tools, and
+   caches them to `tools-cache.json`.
 3. Builds a compact catalog and exposes only `get_tool_schema` and
    `invoke_tool` over stdio.
 
-If a downstream server fails to start, the router exits with a non-zero
-code and prints the reason to stderr (fail-fast behavior).
+If a downstream server fails to start and no tool cache exists for it
+(first run), the router exits with a non-zero code and prints the
+reason to stderr (fail-fast behavior). If a cache exists from a prior
+successful run, the router starts in degraded mode — the server's
+tools appear in the catalog with a status header, and `invoke_tool`
+attempts self-recovery on first use.
 
 ## Management Commands
 
@@ -288,7 +294,8 @@ catalog and decides for itself when to fetch a schema and invoke a tool —
 point a real agent at your local build.
 
 Add an entry to your agent's MCP configuration. Use `node` plus the
-absolute path to `build/index.js`, and pass the dev home with `-c`:
+absolute path to `build/index.js`, and point `MCP_COMPRESS_ROUTER_HOME`
+at the dev home directory:
 
 **Claude Desktop** (`claude_desktop_config.json`):
 
@@ -298,10 +305,11 @@ absolute path to `build/index.js`, and pass the dev home with `-c`:
     "compress-router": {
       "command": "node",
       "args": [
-        "/absolute/path/to/mcp-compress-router/build/index.js",
-        "-c",
-        "/absolute/path/to/mcp-compress-router/dev-home/mcp.jsonc"
-      ]
+        "/absolute/path/to/mcp-compress-router/build/index.js"
+      ],
+      "env": {
+        "MCP_COMPRESS_ROUTER_HOME": "/absolute/path/to/mcp-compress-router/dev-home"
+      }
     }
   }
 }
@@ -315,27 +323,32 @@ absolute path to `build/index.js`, and pass the dev home with `-c`:
     "compress-router": {
       "command": "node",
       "args": [
-        "/absolute/path/to/mcp-compress-router/build/index.js",
-        "-c",
-        "/absolute/path/to/mcp-compress-router/dev-home/mcp.jsonc"
-      ]
+        "/absolute/path/to/mcp-compress-router/build/index.js"
+      ],
+      "env": {
+        "MCP_COMPRESS_ROUTER_HOME": "/absolute/path/to/mcp-compress-router/dev-home"
+      }
     }
   }
 }
 ```
 
-**Cursor** — its MCP config file:
+**OpenCode** — `opencode.json` (project) or
+`~/.config/opencode/opencode.json` (global):
 
 ```json
 {
-  "mcpServers": {
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
     "compress-router": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/mcp-compress-router/build/index.js",
-        "-c",
-        "/absolute/path/to/mcp-compress-router/dev-home/mcp.jsonc"
-      ]
+      "type": "local",
+      "command": [
+        "node",
+        "/absolute/path/to/mcp-compress-router/build/index.js"
+      ],
+      "environment": {
+        "MCP_COMPRESS_ROUTER_HOME": "/absolute/path/to/mcp-compress-router/dev-home"
+      }
     }
   }
 }
@@ -500,3 +513,10 @@ attached.
 - **Inspector cannot reach the server** — run the inspector from the
   repository root and use an absolute path for the build, or rely on the
   working-directory-relative `node build/index.js`.
+- **"Server shows 'requires login' in catalog"** — Run
+  `mcp-compress-router login <name>`, then retry your request. The
+  router self-recovers on the next `invoke_tool`.
+- **"Server shows 'unavailable' in catalog"** — The downstream server
+  failed to connect. Check connectivity and configuration. The router
+  will attempt self-recovery on the next `invoke_tool`. If it persists,
+  restart the MCP server in your coding agent.

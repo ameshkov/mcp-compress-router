@@ -1,5 +1,5 @@
 import { filterTools } from '../utils/index.js';
-import type { CompressionLevel, Logger } from '../utils/index.js';
+import type { CompressionLevel, Logger, ServerStatus } from '../utils/index.js';
 import type { ToolCatalog, ToolDescriptor, ToolSelection } from '../utils/index.js';
 import type { DiscoveredServer } from './discovery.js';
 
@@ -60,10 +60,69 @@ export function buildCatalog(
       description: ds.description,
       tools: exposed,
       compressionLevel: compressionLevelByServer.get(ds.name) ?? 'high',
+      status: ds.status ?? 'ok',
     };
   });
 
   return { servers, toolMap, filteredToolNames };
+}
+
+/**
+ * Updates a single server's tools and status in an existing catalog
+ * (mutates in place). Removes old `toolMap` entries for the server,
+ * re-applies the tool filter, and inserts the new entries.
+ *
+ * Used by `invokeWithRecovery` after a successful reconnect to make
+ * the freshly-discovered tools visible to `get_tool_schema` and
+ * `invoke_tool` without restarting the router.
+ *
+ * @param catalog - The tool catalog to mutate.
+ * @param serverName - The server to update.
+ * @param tools - The newly-discovered tool descriptors.
+ * @param status - The new connection status.
+ * @param toolSelection - Optional allowlist/denylist to re-apply.
+ */
+export function updateServerInCatalog(
+  catalog: ToolCatalog,
+  serverName: string,
+  tools: ToolDescriptor[],
+  status: ServerStatus,
+  toolSelection?: ToolSelection,
+): void {
+  const server = catalog.servers.find((s) => s.name === serverName);
+  if (!server) {
+    return;
+  }
+
+  const prefix = `${serverName}::`;
+  for (const key of [...catalog.toolMap.keys()]) {
+    if (key.startsWith(prefix)) {
+      catalog.toolMap.delete(key);
+    }
+  }
+  for (const key of [...catalog.filteredToolNames]) {
+    if (key.startsWith(prefix)) {
+      catalog.filteredToolNames.delete(key);
+    }
+  }
+
+  const { exposed, entries } = filterTools(
+    tools,
+    toolSelection?.allowedTools,
+    toolSelection?.disabledTools,
+  );
+
+  for (const tool of exposed) {
+    catalog.toolMap.set(`${serverName}::${tool.name}`, tool);
+  }
+  for (const entry of entries) {
+    if (entry.decision === 'filtered') {
+      catalog.filteredToolNames.add(`${serverName}::${entry.descriptor.name}`);
+    }
+  }
+
+  server.tools = exposed;
+  server.status = status;
 }
 
 /**

@@ -145,8 +145,9 @@ startup, so you can keep secrets out of the config (see
 
 > **Note on `-c` and credential storage:** when you override the config
 > path with `-c /some/dir/mcp.json`, both `credentials.json` (OAuth
-> tokens) and `mcp.json` live in `/some/dir/` — i.e. next to the config
-> file you specified. The `.env` file, however, is loaded from the
+> tokens) and `tools-cache.json` (cached tool schemas) will be stored
+> in that directory — i.e. next to the config file you specified. The
+> `.env` file, however, is loaded from the
 > [configuration directory](#config-file-location) resolved by
 > `MCP_COMPRESS_ROUTER_HOME` or the platform default, *not* from beside
 > the explicit `-c` path. To co-locate `.env` with a custom config, set
@@ -367,8 +368,10 @@ npx mcp-compress-router@latest login my-http
 This opens your browser to complete the authorization-code flow. Tokens
 are stored in a separate `credentials.json` in the same directory as
 `mcp.json` (with `0600` permissions on Unix), so you can safely
-share or version-control `mcp.json` without exposing tokens. Add
-`credentials.json` to your `.gitignore`.
+share or version-control `mcp.json` without exposing tokens. Cached
+tool schemas are stored in `tools-cache.json` in the same directory.
+Add both `credentials.json` and `tools-cache.json` to your
+`.gitignore`.
 
 By default the router uses
 [Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591).

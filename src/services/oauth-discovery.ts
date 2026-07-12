@@ -5,12 +5,8 @@ import type {
 
 /**
  * Result of OAuth discovery for a downstream MCP server.
- *
- * @public Part of the services barrel public API: the return type of
- *   `discoverAuth`. Not named by internal callers (they rely on type
- *   inference), so Knip would otherwise report it as unused.
  */
-export interface DiscoveredAuth {
+interface DiscoveredAuth {
   /** RFC 9728 Protected Resource Metadata, when published by the server. */
   resourceMetadata?: OAuthProtectedResourceMetadata;
   /**

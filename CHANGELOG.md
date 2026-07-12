@@ -8,6 +8,42 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Tool schema disk cache (`tools-cache.json`): enables degraded-mode
+  startup when a downstream server is temporarily unavailable.
+- Self-recovery: `invoke_tool` automatically reconnects to degraded
+  servers (re-reading OAuth credentials from disk), so running `login`
+  in another terminal takes effect without restarting the router.
+- Runtime failure retry: when a healthy server fails mid-call, the
+  router attempts one reconnect + retry before returning an error.
+- Proactive OAuth token refresh: tokens within 60s of expiry are
+  refreshed automatically before each `invoke_tool` call.
+- Detailed guided error messages for unavailable or unauthorized
+  servers, including the underlying error and actionable next steps.
+
+### Changed
+
+- Startup no longer fails-fast when a server is unreachable and a tool
+  cache exists from a prior successful run; the router starts in
+  degraded mode with cached tools. First-run (cold cache) failures
+  still fail-fast.
+- The catalog text renderer now shows status headers for degraded
+  servers.
+
+### Fixed
+
+- Auth failures on retry are now reported as "authentication required"
+  rather than a generic "unavailable", so a mid-session login
+  requirement is never hidden.
+- A failed runtime reconnect now engages a 30-second cooldown instead
+  of retrying with no backoff.
+- Concurrent `invoke_tool` calls now coalesce with any in-flight
+  reconnect instead of short-circuiting on the cooldown or racing into
+  a torn-down client.
+- `connect()` now cleans up half-initialized clients when the
+  connection fails partway through.
+
 ## [v1.4.0] - 2026-06-26
 
 ### Added

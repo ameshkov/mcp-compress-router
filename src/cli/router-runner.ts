@@ -1,14 +1,12 @@
 import {
   resolveConfigPath,
-  invokeDownstreamTool,
-  OAuthCredentialManager,
   persistAuthRequirements,
   loadConfig,
-  connectAndDiscover,
+  ServerConnection,
+  invokeWithRecovery,
   buildCatalog,
 } from '../services/index.js';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { DiscoveredServerData } from '../services/index.js';
 import type {
   CompressionLevel,
   DownstreamServerConfig,
@@ -27,34 +25,61 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 /**
- * Creates OAuth credential managers for HTTP servers that have stored
- * credentials or oauth overrides, so the transport can handle auth.
+ * Connects to all enabled downstream servers via ServerConnection.
+ * Disabled servers are skipped entirely. On failure, warm-cache
+ * servers are degraded; cold-cache servers cause fail-fast.
+ *
+ * @param servers - Validated downstream server configs.
+ * @param configPath - Absolute path to the config file.
+ * @param logger - Structured logger.
+ * @returns Map of server name to ServerConnection and discovered data.
+ * @throws When a server cannot connect AND has no tool cache.
  */
-async function buildAuthProviders(
-  resolved: string,
+async function connectAllServers(
   servers: DownstreamServerConfig[],
-): Promise<Map<string, OAuthClientProvider>> {
-  const authProviders = new Map<string, OAuthClientProvider>();
-  for (const server of servers) {
-    if (server.type === 'http' || server.type === 'streamable-http') {
-      const mgr = new OAuthCredentialManager(resolved, server);
-      const hasCredentials = (await mgr.tokens()) !== undefined;
-      const hasOverrides = server.oauth?.clientId !== undefined;
-      if (hasCredentials || hasOverrides) {
-        authProviders.set(server.name, mgr);
-      }
+  configPath: string,
+  logger: Logger,
+): Promise<{ connections: Map<string, ServerConnection>; discovered: DiscoveredServerData[] }> {
+  const enabledServers = servers.filter((server) => {
+    if (server.enabled === false) {
+      logger.info(`Skipping disabled server "${server.name}"`, { server: server.name });
+      return false;
     }
+    return true;
+  });
+
+  const results = await Promise.all(
+    enabledServers.map(async (server) => {
+      const conn = new ServerConnection(server, configPath, logger);
+      const ds = await conn.connect();
+      return { conn, ds };
+    }),
+  );
+
+  const connections = new Map<string, ServerConnection>();
+  const discovered: DiscoveredServerData[] = [];
+
+  for (const { conn, ds } of results) {
+    connections.set(conn.serverName, conn);
+    discovered.push(ds);
   }
-  return authProviders;
+
+  return { connections, discovered };
 }
 
 /**
  * Creates the MCP server, registers router tools, and starts the
  * stdio transport.
+ *
+ * @param catalog - The mutable tool catalog.
+ * @param connections - Live ServerConnection instances keyed by name.
+ * @param selectionByServer - Per-server tool selection for re-filtering.
+ * @param logger - Structured logger.
  */
 async function startRouterServer(
   catalog: ToolCatalog,
-  clients: Map<string, Client>,
+  connections: Map<string, ServerConnection>,
+  selectionByServer: Map<string, ToolSelection>,
   logger: Logger,
 ): Promise<void> {
   const router = new McpServer({
@@ -72,8 +97,9 @@ async function startRouterServer(
     createGetToolSchemaHandler(catalog, logger),
   );
 
-  const invokeFn = (server: string, tool: string, args: Record<string, unknown>) =>
-    invokeDownstreamTool(clients, server, tool, args, logger);
+  const invokeFn = async (server: string, tool: string, args: Record<string, unknown>) => {
+    return invokeWithRecovery(server, tool, args, catalog, connections, selectionByServer, logger);
+  };
 
   router.registerTool(
     'invoke_tool',
@@ -117,22 +143,15 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
 
   await persistAuthRequirements(resolved, servers, logger);
 
-  const authProviders = await buildAuthProviders(resolved, servers);
-  const getAuthProvider = (server: DownstreamServerConfig) => authProviders.get(server.name);
-
   logger.info('Connecting to downstream servers', {
     servers: servers.map((s) => s.name),
   });
-  const { servers: discovered, clients } = await connectAndDiscover(
-    servers,
-    logger,
-    getAuthProvider,
-  );
+  const { connections, discovered } = await connectAllServers(servers, resolved, logger);
   logger.info('Tools discovered', {
     servers: discovered.map((d) => ({
       name: d.name,
       toolCount: d.tools.length,
-      tools: d.tools.map((t) => t.name),
+      status: d.status,
     })),
   });
 
@@ -147,5 +166,5 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
   }
 
   const catalog = buildCatalog(discovered, selectionByServer, logger, compressionLevelByServer);
-  await startRouterServer(catalog, clients, logger);
+  await startRouterServer(catalog, connections, selectionByServer, logger);
 }

@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { OAuthCredentialManager, OAUTH_CALLBACK_PATH } from './oauth.js';
+import { GuidedAuthError } from './index.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
@@ -140,6 +141,139 @@ describe('OAuthCredentialManager', () => {
     expect(store[server.name]?.authRequirement).toBe('oauth');
     expect(store[server.name]?.checkedAt).toBeDefined();
     expect(store[server.name]?.tokens?.access_token).toBe('at-456');
+  });
+
+  it('saveTokens stores expires_at derived from expires_in', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveTokens({
+      access_token: 'at-123',
+      token_type: 'Bearer',
+      refresh_token: 'rt-456',
+      expires_in: 3600,
+    });
+
+    const store = await readCredentials(configPath);
+    const expiresAt = store[server.name]?.tokens?.expires_at;
+    expect(expiresAt).toBeDefined();
+    // The stored expiry should be ~3600s in the future.
+    const expectedMs = Date.now() + 3600 * 1000;
+    const actualMs = Date.parse(expiresAt!);
+    expect(actualMs).toBeGreaterThan(expectedMs - 5000);
+    expect(actualMs).toBeLessThan(expectedMs + 5000);
+  });
+
+  it('saveTokens omits expires_at when expires_in is undefined', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveTokens({ access_token: 'at-123', token_type: 'Bearer' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.tokens?.expires_at).toBeUndefined();
+  });
+
+  it('invalidateCredentials("tokens") clears tokens but preserves client registration and auth requirement', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: { access_token: 'at-123', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.invalidateCredentials('tokens');
+
+    expect(await mgr.tokens()).toBeUndefined();
+    // Client registration survives so the next login can reuse DCR.
+    expect(await mgr.clientInformation()).toEqual({ client_id: 'reg-id' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.tokens).toBeUndefined();
+    expect(store[server.name]?.authRequirement).toBe('oauth');
+  });
+
+  it('invalidateCredentials("client") clears client registration but preserves tokens', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: { access_token: 'at-123', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.invalidateCredentials('client');
+
+    expect(await mgr.clientInformation()).toBeUndefined();
+    // Tokens survive so the access token remains usable until expiry.
+    const loaded = await mgr.tokens();
+    expect(loaded?.access_token).toBe('at-123');
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.clientRegistration).toBeUndefined();
+    expect(store[server.name]?.tokens).toBeDefined();
+    expect(store[server.name]?.authRequirement).toBe('oauth');
+  });
+
+  it('invalidateCredentials("all") clears tokens and client registration but preserves auth requirement', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: { access_token: 'at-123', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.invalidateCredentials('all');
+
+    expect(await mgr.tokens()).toBeUndefined();
+    expect(await mgr.clientInformation()).toBeUndefined();
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]).toEqual({
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+  });
+
+  it('invalidateCredentials("verifier") clears the in-memory code verifier only', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveCodeVerifier('pkce-verifier');
+    expect(await mgr.codeVerifier()).toBe('pkce-verifier');
+
+    await mgr.invalidateCredentials('verifier');
+
+    // The in-memory verifier is gone.
+    await expect(mgr.codeVerifier()).rejects.toThrow('No code verifier saved');
+    // credentials.json was never created (verifier is in-memory only).
+    const store = await readCredentials(configPath);
+    expect(store[server.name]).toBeUndefined();
+  });
+
+  it('invalidateCredentials("tokens") is a no-op when no credentials are stored', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await expect(mgr.invalidateCredentials('tokens')).resolves.toBeUndefined();
+    expect(await readCredentials(configPath)).toEqual({});
+  });
+
+  it('redirectToAuthorization throws GuidedAuthError with the server name', async () => {
+    // The router is a headless stdio server with no callback server
+    // running; opening a browser would point at a non-existent
+    // callback URL. It must fail fast with a tagged auth error so
+    // callers can discriminate auth failures from other errors.
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await expect(
+      mgr.redirectToAuthorization(new URL('https://as.example.com/authorize')),
+    ).rejects.toThrow(GuidedAuthError);
+  });
+
+  it('redirectToAuthorization includes the server name in the error message', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    try {
+      await mgr.redirectToAuthorization(new URL('https://as.example.com/authorize'));
+      expect.fail('Should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(GuidedAuthError);
+      expect((err as GuidedAuthError).serverName).toBe('test-server');
+      expect((err as Error).message).toContain('test-server');
+    }
   });
 
   it('uses oauth overrides when provided', () => {

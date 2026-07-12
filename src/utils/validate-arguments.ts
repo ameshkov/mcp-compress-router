@@ -1,9 +1,7 @@
 /**
  * Result of argument validation against a JSON Schema.
- *
- * @public
  */
-export type ValidationResult = { valid: true } | { valid: false; errors: string[] };
+type ValidationResult = { valid: true } | { valid: false; errors: string[] };
 
 // Allowed values for JSON Schema "type" in MCP tool input schemas.
 type JsonType = 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';

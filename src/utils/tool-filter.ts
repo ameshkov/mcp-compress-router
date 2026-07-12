@@ -7,16 +7,12 @@ import type { ToolDescriptor } from './types.js';
  * - `'exposed'` — the tool survives filtering and is available to the LLM.
  * - `'filtered'` — the tool is hidden from the catalog and blocked at
  *   invoke time.
- *
- * @public
  */
-export type ToolExposureDecision = 'exposed' | 'filtered';
+type ToolExposureDecision = 'exposed' | 'filtered';
 
 /**
  * A single tool paired with its exposure decision, produced by
  * {@link filterTools}. One entry exists per input tool, in input order.
- *
- * @public
  */
 export interface ToolExposureEntry {
   /** The original tool descriptor. */
@@ -27,10 +23,8 @@ export interface ToolExposureEntry {
 
 /**
  * Result of {@link filterTools}.
- *
- * @public
  */
-export interface ToolFilterResult {
+interface ToolFilterResult {
   /** Tools that survive filtering, in input order. */
   exposed: ToolDescriptor[];
   /** One entry per input tool, in input order, with its decision. */
@@ -96,7 +90,6 @@ function findUnmatched(patterns: string[] | undefined, names: string[]): string[
  * @param allowedTools - Optional allowlist glob patterns.
  * @param disabledTools - Optional denylist glob patterns.
  * @returns The exposed set, per-tool decisions, and unmatched patterns.
- * @public
  */
 export function filterTools(
   tools: ToolDescriptor[],

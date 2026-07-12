@@ -3,6 +3,7 @@ export type {
   DownstreamServerConfig,
   OAuthConfig,
   ServerTransportType,
+  ServerStatus,
   ToolDescriptor,
   ToolCatalog,
   ToolSelection,
@@ -10,9 +11,7 @@ export type {
   AuthRequirement,
   AuthStatus,
 } from './types.js';
-/** @public */
-export type { ToolExposureDecision, ToolExposureEntry, ToolFilterResult } from './tool-filter.js';
-/** @public */
+export type { ToolExposureEntry } from './tool-filter.js';
 export { filterTools } from './tool-filter.js';
 export { renderCompactCatalog } from './text-format.js';
 export { validateArguments } from './validate-arguments.js';
@@ -21,5 +20,3 @@ export { expandEnvField } from './expand-env.js';
 export { Logger } from './logger.js';
 export { parseJsonc } from './parse-jsonc.js';
 export { VALID_COMPRESSION_LEVELS, isCompressionLevel } from './compression-level.js';
-/** @public */
-export { openBrowser } from './open-browser.js';

@@ -10,7 +10,6 @@ import picomatch from 'picomatch';
  *
  * @param pattern - Glob pattern to validate.
  * @throws If picomatch rejects the pattern.
- * @public
  */
 export function validateGlobPattern(pattern: string): void {
   try {

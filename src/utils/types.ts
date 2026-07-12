@@ -12,6 +12,15 @@ export type ServerTransportType = 'stdio' | 'http' | 'streamable-http';
 export type CompressionLevel = 'max' | 'high' | 'medium' | 'low';
 
 /**
+ * Runtime status of a downstream server connection.
+ *
+ * - `'ok'` — connected, client is live.
+ * - `'unauthorized'` — auth failure, has tool cache, needs `login`.
+ * - `'unavailable'` — transport/network failure, has tool cache.
+ */
+export type ServerStatus = 'ok' | 'unauthorized' | 'unavailable';
+
+/**
  * Parsed definition of a single downstream MCP server from mcp.json.
  */
 export interface DownstreamServerConfig {
@@ -124,6 +133,15 @@ export interface StoredCredentials {
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
+    /**
+     * Absolute ISO-8601 timestamp marking when the access token
+     * expires, derived from `expires_in` at save time. Enables
+     * proactive refresh-on-expiry without a server round-trip.
+     * undefined when the token has no expiry or was stored before
+     * this field existed (legacy tokens fall back to reactive 401
+     * refresh).
+     */
+    expires_at?: string;
     scope?: string;
     token_type: string;
   };
@@ -163,6 +181,8 @@ export interface CatalogServer {
   tools: ToolDescriptor[];
   /** Resolved compression level (always concrete; never undefined). */
   compressionLevel: CompressionLevel;
+  /** Current connection status of this server. */
+  status: ServerStatus;
 }
 
 /**

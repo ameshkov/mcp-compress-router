@@ -6,10 +6,8 @@ import { lookupTools } from '../services/index.js';
 /**
  * Signature of the downstream invocation function injected by the
  * entry point.
- *
- * @public
  */
-export type InvokeDownstreamFn = (
+type InvokeDownstreamFn = (
   server: string,
   tool: string,
   args: Record<string, unknown>,

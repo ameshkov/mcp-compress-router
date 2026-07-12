@@ -1,7 +1,8 @@
 import type { DownstreamServerConfig } from '../utils/index.js';
+import { Logger } from '../utils/index.js';
 import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
 import { loadConfig } from '../services/config.js';
-import { discoverAuth } from '../services/index.js';
+import { discoverAuth, discoverSingleServer, saveToolCache } from '../services/index.js';
 
 /** SDK OAuth metadata type (non-null after discovery). */
 type OAuthMetadata = NonNullable<
@@ -398,6 +399,17 @@ export async function handleLogin(
   });
 
   await mgr.saveTokens(tokens);
+
+  // Best-effort: discover tools and save to cache so the next router
+  // startup (or self-recovery) has an up-to-date cache.
+  try {
+    const logger = new Logger('error');
+    const discovered = await discoverSingleServer(targetServer, logger, () => mgr);
+    await saveToolCache(configPath, name, discovered.tools);
+  } catch {
+    // Best-effort — tokens are saved, cache will refresh on next
+    // router startup.
+  }
 
   return `Successfully authenticated server "${name}". Tokens stored in credentials.json.`;
 }

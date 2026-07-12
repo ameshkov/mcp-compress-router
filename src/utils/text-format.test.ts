@@ -9,6 +9,7 @@ describe('renderCompactCatalog', () => {
         name: 'github',
         description: 'GitHub server',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [
           {
             name: 'list_issues',
@@ -32,6 +33,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'staged',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [],
       },
     ];
@@ -49,11 +51,13 @@ describe('renderCompactCatalog', () => {
         name: 'alpha',
         description: 'Alpha server',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [{ name: 'a1', inputSchema: { type: 'object' } }],
       },
       {
         name: 'beta',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [{ name: 'b1', inputSchema: { type: 'object' } }],
       },
     ];
@@ -70,6 +74,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -92,6 +97,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [{ name: 'ping', inputSchema: { type: 'object', properties: {} } }],
       },
     ];
@@ -106,6 +112,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'high',
+        status: 'ok',
         tools: [
           {
             name: 'first',
@@ -135,6 +142,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'max',
+        status: 'ok',
         tools: [
           { name: 'tool1', inputSchema: { type: 'object' } },
           { name: 'tool2', inputSchema: { type: 'object' } },
@@ -154,6 +162,7 @@ describe('renderCompactCatalog', () => {
         name: 'srv',
         description: 'A server',
         compressionLevel: 'max',
+        status: 'ok',
         tools: [
           { name: 'a', inputSchema: { type: 'object' } },
           { name: 'b', inputSchema: { type: 'object' } },
@@ -167,7 +176,9 @@ describe('renderCompactCatalog', () => {
   });
 
   it('renders max level with zero tools as just a header', () => {
-    const servers: CatalogServer[] = [{ name: 'empty', compressionLevel: 'max', tools: [] }];
+    const servers: CatalogServer[] = [
+      { name: 'empty', compressionLevel: 'max', status: 'ok', tools: [] },
+    ];
 
     const text = renderCompactCatalog(servers);
 
@@ -180,6 +191,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'medium',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -204,6 +216,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'medium',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -230,6 +243,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'medium',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -253,6 +267,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'medium',
+        status: 'ok',
         tools: [
           {
             name: 'ping',
@@ -273,6 +288,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'low',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -298,6 +314,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'low',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -320,6 +337,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'low',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -340,6 +358,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'srv',
         compressionLevel: 'low',
+        status: 'ok',
         tools: [
           {
             name: 'a',
@@ -366,6 +385,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'server-a',
         compressionLevel: 'max',
+        status: 'ok',
         tools: [
           { name: 'tool1', inputSchema: { type: 'object' } },
           { name: 'tool2', inputSchema: { type: 'object' } },
@@ -378,6 +398,7 @@ describe('renderCompactCatalog', () => {
         // is set in the config (resolution happens in the catalog
         // builder, not the renderer).
         compressionLevel: 'high',
+        status: 'ok',
         tools: [
           {
             name: 'fetch',
@@ -391,6 +412,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'server-c',
         compressionLevel: 'low',
+        status: 'ok',
         tools: [
           {
             name: 'ping',
@@ -408,5 +430,56 @@ describe('renderCompactCatalog', () => {
         '\n\n## server-b\nServer B\n\nAvailable tools:\nfetch(url, timeout)' +
         '\n\n## server-c\n\nAvailable tools:\n<tool>ping(): Health check.</tool>',
     );
+  });
+
+  it('renders a status header for an unauthorized server', () => {
+    const servers: CatalogServer[] = [
+      {
+        name: 'figma',
+        compressionLevel: 'high',
+        status: 'unauthorized',
+        tools: [{ name: 'get_file', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const text = renderCompactCatalog(servers);
+
+    expect(text).toContain('## figma');
+    expect(text).toContain('Requires authentication');
+    expect(text).toContain('npx mcp-compress-router login figma');
+    expect(text).toContain('get_file()');
+  });
+
+  it('renders a status header for an unavailable server', () => {
+    const servers: CatalogServer[] = [
+      {
+        name: 'my-api',
+        compressionLevel: 'high',
+        status: 'unavailable',
+        tools: [],
+      },
+    ];
+
+    const text = renderCompactCatalog(servers);
+
+    expect(text).toContain('## my-api');
+    expect(text).toContain('unavailable');
+  });
+
+  it('does not render a status header for an ok server', () => {
+    const servers: CatalogServer[] = [
+      {
+        name: 'fixture',
+        compressionLevel: 'high',
+        status: 'ok',
+        tools: [{ name: 'echo', inputSchema: { type: 'object', properties: {} } }],
+      },
+    ];
+
+    const text = renderCompactCatalog(servers);
+
+    expect(text).toContain('## fixture');
+    expect(text).not.toContain('Requires authentication');
+    expect(text).not.toContain('unavailable');
   });
 });
