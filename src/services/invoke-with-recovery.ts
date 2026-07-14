@@ -1,6 +1,6 @@
 import type { ServerConnection, InvokeResult } from './server-connection.js';
 import { updateServerInCatalog } from './catalog.js';
-import { buildGuidedError, GuidedAuthError } from './index.js';
+import { buildGuidedError, isAuthError } from './index.js';
 import type {
   DownstreamServerConfig,
   ServerStatus,
@@ -40,7 +40,7 @@ const RECOVERABLE_PATTERNS = [
  * @returns True when a reconnect + retry might succeed.
  */
 export function isRecoverable(err: unknown): boolean {
-  if (err instanceof GuidedAuthError) {
+  if (isAuthError(err)) {
     return true;
   }
   const message = err instanceof Error ? err.message : String(err);
@@ -199,7 +199,7 @@ async function invokeToolWithRetry(
         // server is reachable, so 'unavailable' would be misleading —
         // surface auth errors as 'authentication required', re-throw
         // the rest as-is so the caller sees the real downstream error.
-        if (retryErr instanceof GuidedAuthError) {
+        if (isAuthError(retryErr)) {
           throw buildGuidedError(serverConfig, retryErr, 'unauthorized', true);
         }
         throw retryErr;
@@ -207,8 +207,7 @@ async function invokeToolWithRetry(
       // Reconnect itself failed: the server is down or requires auth.
       // doReconnect has already transitioned the connection's status
       // + cooldown so subsequent calls back off.
-      const status: ServerStatus =
-        retryErr instanceof GuidedAuthError ? 'unauthorized' : 'unavailable';
+      const status: ServerStatus = isAuthError(retryErr) ? 'unauthorized' : 'unavailable';
       throw buildGuidedError(serverConfig, retryErr, status, true);
     }
   }

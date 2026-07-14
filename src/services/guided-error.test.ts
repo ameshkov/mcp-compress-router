@@ -37,6 +37,29 @@ describe('buildGuidedError', () => {
     expect(err.message).toContain('npx mcp-compress-router login figma');
   });
 
+  it('suggests the login command for an unauthorized server (not network advice)', () => {
+    const underlying = new Error(
+      'Streamable HTTP error: Error POSTing to endpoint: ' +
+        '{"error":"invalid_token","error_description":"Missing or invalid access token"}',
+    );
+    const err = buildGuidedError(
+      { name: 'notion', type: 'http', url: 'https://mcp.notion.com/mcp' },
+      underlying,
+      'unauthorized',
+      true,
+    );
+    expect(err.message).toContain('npx mcp-compress-router login notion');
+    expect(err.message).toContain('authentication is required');
+    expect(err.message).not.toContain('Verify the server is running');
+  });
+
+  it('does not name specific coding agents in the restart guidance', () => {
+    const err = buildGuidedError(httpServer, new Error('ECONNREFUSED'), 'unavailable', false);
+    expect(err.message).not.toContain('Claude Code');
+    expect(err.message).not.toContain('opencode');
+    expect(err.message).not.toContain('Codex');
+  });
+
   it('includes restart guidance for unavailable servers', () => {
     const err = buildGuidedError(httpServer, new Error('ECONNREFUSED'), 'unavailable', false);
     expect(err.message).toContain('restart');

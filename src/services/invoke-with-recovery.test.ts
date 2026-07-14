@@ -141,6 +141,31 @@ describe('invokeWithRecovery — OK server', () => {
     ).rejects.toThrow(/authentication is required/);
   });
 
+  it('reports an auth failure when retry fails with a raw invalid_token error', async () => {
+    const catalog = makeCatalog();
+    const authErr = new Error(
+      'Streamable HTTP error: Error POSTing to endpoint: ' +
+        '{"error":"invalid_token","error_description":"Missing or invalid access token"}',
+    );
+    const conn = makeMockConn({
+      invokeTool: vi.fn().mockRejectedValue(authErr),
+      reconnect: vi.fn().mockRejectedValue(authErr),
+    } as Partial<ServerConnection>);
+    const connections = new Map([['srv', conn]]);
+
+    await expect(
+      invokeWithRecovery(
+        'srv',
+        'echo',
+        {},
+        catalog,
+        connections,
+        new Map<string, ToolSelection>(),
+        new Logger('error'),
+      ),
+    ).rejects.toThrow(/authentication is required/);
+  });
+
   it('reports auth failure when reconnect succeeds but retried invoke fails with GuidedAuthError', async () => {
     const catalog = makeCatalog();
     const conn = makeMockConn({
@@ -367,6 +392,17 @@ describe('invokeWithRecovery — degraded server', () => {
 describe('isRecoverable', () => {
   it('returns true for GuidedAuthError', () => {
     expect(isRecoverable(new GuidedAuthError('srv'))).toBe(true);
+  });
+
+  it('returns true for a raw invalid_token auth error', () => {
+    expect(
+      isRecoverable(
+        new Error(
+          'Streamable HTTP error: Error POSTing to endpoint: ' +
+            '{"error":"invalid_token","error_description":"Missing or invalid access token"}',
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('returns true for ECONNRESET', () => {

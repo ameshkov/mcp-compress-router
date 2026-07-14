@@ -3,7 +3,7 @@ import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.
 import { createTransport, listToolsOrEmpty } from './discovery.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { saveToolCache, loadToolCache } from './tool-cache.js';
-import { GuidedAuthError } from './index.js';
+import { isAuthError } from './index.js';
 import type {
   DownstreamServerConfig,
   Logger,
@@ -147,7 +147,7 @@ export class ServerConnection {
         });
       }
 
-      const status: ServerStatus = err instanceof GuidedAuthError ? 'unauthorized' : 'unavailable';
+      const status: ServerStatus = isAuthError(err) ? 'unauthorized' : 'unavailable';
       this._status = status;
       this.logger.warn(
         `Server "${this.server.name}" failed (${status}) — using ${cachedTools.length} cached tools`,
@@ -231,7 +231,7 @@ export class ServerConnection {
       // backoff. Auth failures are classified as 'unauthorized' so
       // guided errors point at `login` instead of "connection failed".
       this._lastError = err instanceof Error ? err.message : String(err);
-      this._status = err instanceof GuidedAuthError ? 'unauthorized' : 'unavailable';
+      this._status = isAuthError(err) ? 'unauthorized' : 'unavailable';
       throw err;
     }
   }

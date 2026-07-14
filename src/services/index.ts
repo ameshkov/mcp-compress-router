@@ -11,5 +11,5 @@ export { saveToolCache } from './tool-cache.js';
 export { OAuthCredentialManager } from './oauth.js';
 export { computeAuthStatus, persistAuthRequirements } from './auth-status.js';
 export { discoverAuth } from './oauth-discovery.js';
-export { GuidedAuthError } from './auth-errors.js';
+export { GuidedAuthError, isAuthError } from './auth-errors.js';
 export { buildGuidedError } from './guided-error.js';

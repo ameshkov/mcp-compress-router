@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Auth-required servers are now correctly classified as `unauthorized`
+  instead of a generic connection failure. The router now recognises
+  raw transport errors carrying an OAuth error code (`invalid_token`,
+  `invalid_grant`, `invalid_client`) or an HTTP 401/403 status, plus
+  the SDK's clean 401 → `redirectToAuthorization` path. The guided
+  error now points the user at `npx mcp-compress-router login
+  <server>` instead of network troubleshooting.
+- Guided error restart guidance no longer names specific coding agents.
+
 ### Changed
 
 - Enabled npm provenance (OIDC Trusted Publishers) in the CI publish

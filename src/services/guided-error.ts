@@ -124,8 +124,7 @@ function restartGuidance(isStdio: boolean): string {
   return (
     restartClause +
     ' If you have already fixed the issue, restart the MCP server in your ' +
-    'coding agent (e.g. restart Claude Code, opencode, or Codex) so it ' +
-    're-initializes the connection.'
+    'coding agent so it re-initializes the connection.'
   );
 }
 

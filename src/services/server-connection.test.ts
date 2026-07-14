@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import * as http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { ServerConnection } from './server-connection.js';
@@ -141,6 +142,59 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
     // rather than calling into a half-initialized transport.
     await expect(conn.invokeTool('echo', {})).rejects.toThrow(/no active client/);
 
+    await fs.rm(path.dirname(configPath), { recursive: true, force: true });
+  });
+});
+
+describe('ServerConnection — connect (auth failure classification)', () => {
+  it('classifies an invalid_token response as unauthorized (not unavailable)', async () => {
+    // A downstream HTTP server that rejects every request with an OAuth
+    // invalid_token error in the response body — reproducing how servers
+    // like Notion surface a missing/expired access token without invoking
+    // the SDK's 401 -> redirectToAuthorization flow. The SDK wraps this as
+    // a transport error whose message carries the body, so isAuthError must
+    // classify it as 'unauthorized' (pointing the user at `login`) rather
+    // than a generic 'unavailable' connection failure.
+    const authRejecting = http.createServer((_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: 'invalid_token',
+          error_description: 'Missing or invalid access token',
+        }),
+      );
+    });
+
+    const port = await new Promise<number>((resolve, reject) => {
+      authRejecting.listen(0, () => {
+        const addr = authRejecting.address();
+        if (addr && typeof addr !== 'string') {
+          resolve(addr.port);
+        } else {
+          reject(new Error('failed to listen'));
+        }
+      });
+      authRejecting.on('error', reject);
+    });
+
+    const config: DownstreamServerConfig = {
+      name: 'notion-like',
+      type: 'http',
+      url: `http://localhost:${port}/mcp`,
+    };
+    const configPath = await makeTempConfigPath();
+    await saveToolCache(configPath, 'notion-like', sampleCachedTools);
+
+    const conn = new ServerConnection(config, configPath, new Logger('error'));
+    const result = await conn.connect();
+
+    expect(result.status).toBe('unauthorized');
+    expect(result.tools).toHaveLength(1);
+    expect(conn.status).toBe('unauthorized');
+    expect(conn.lastError).toContain('invalid_token');
+
+    await conn.close();
+    authRejecting.close();
     await fs.rm(path.dirname(configPath), { recursive: true, force: true });
   });
 });
