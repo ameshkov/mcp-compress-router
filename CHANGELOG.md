@@ -8,6 +8,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Ghost router processes no longer linger forever after the host
+  disconnects. The router now treats stdin EOF (the host closing the
+  input pipe without a signal) and `SIGINT`/`SIGTERM`/`SIGHUP` as
+  shutdown triggers, closes every downstream server connection (driving
+  the SDK's graduated kill so spawned child processes are terminated
+  rather than orphaned), and force-exits so lingering grandchild pipes
+  (e.g. browser processes forked by a downstream server) cannot keep
+  the router alive. Previously the router stayed running indefinitely
+  because the MCP SDK's stdio server transport ignores stdin EOF and no
+  signal handlers or connection teardown existed.
+
 ## [v1.5.0] - 2026-07-12
 
 ### Added

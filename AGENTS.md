@@ -65,7 +65,7 @@ mcp-compress-router/
 │   │   ├── login-command.ts   # login subcommand handler (OAuth flow)
 │   │   ├── logout-command.ts  # logout subcommand handler (clear credentials)
 │   │   ├── register-commands.ts # Wires all CLI subcommands onto a commander program
-│   │   └── router-runner.ts   # Router startup: connect servers, build catalog, serve
+│   │   └── router-runner.ts   # Router startup: connect servers, build catalog, serve, and shut down
 │   ├── services/             # Core business logic
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
@@ -78,7 +78,9 @@ mcp-compress-router/
 │   │   ├── tool-cache.ts      # Disk cache for tool schemas (tools-cache.json)
 │   │   ├── oauth.ts           # OAuth credential storage (credentials.json) + proactive refresh & invalidation
 │   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
-│   │   └── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
+│   │   ├── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
+│   │   ├── shutdown-coordinator.ts # Graceful shutdown orchestration (run cleanup hooks once)
+│   │   └── shutdown-triggers.ts # Signal & stdin-EOF triggers that start a shutdown
 │   ├── utils/                 # Shared utilities
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
@@ -228,6 +230,22 @@ catalog from discovered servers and injects it into tool handlers. Tool
 handlers MUST NOT receive transport clients, raw server connections, or
 configuration objects. These are implementation details wired inside the
 entry point.
+
+**Own your process lifecycle**: The long-running router entry point is
+responsible for shutting itself down, not the host. The host may close
+the router's stdin pipe without sending a signal (the most common case)
+or send `SIGINT`/`SIGTERM`/`SIGHUP`; the MCP SDK's stdio server transport
+does NOT listen for stdin EOF, so the router would otherwise linger as a
+ghost process forever while spawned downstream servers (and their own
+child processes, e.g. browser processes forked by a downstream server)
+keep the event loop alive. Therefore the router entry point MUST wire a
+`ShutdownCoordinator` that registers cleanup hooks for every spawned
+resource (each `ServerConnection`, the MCP server), install
+`installShutdownTriggers` to trip the coordinator on signal or stdin EOF,
+await `whenShutdown()` so the process stays alive while serving and exits
+the moment cleanup finishes, and force-exit (`process.exit`) afterwards
+so lingering grandchild pipes cannot trap it. Any new long-running entry
+path or spawned resource MUST register a cleanup hook.
 
 ### Code Quality
 

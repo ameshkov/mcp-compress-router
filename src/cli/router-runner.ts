@@ -1,3 +1,4 @@
+import process from 'node:process';
 import {
   resolveConfigPath,
   persistAuthRequirements,
@@ -5,8 +6,10 @@ import {
   ServerConnection,
   invokeWithRecovery,
   buildCatalog,
+  ShutdownCoordinator,
+  installShutdownTriggers,
 } from '../services/index.js';
-import type { DiscoveredServerData } from '../services/index.js';
+import type { AsyncCleanup, DiscoveredServerData } from '../services/index.js';
 import type {
   CompressionLevel,
   DownstreamServerConfig,
@@ -75,13 +78,15 @@ async function connectAllServers(
  * @param connections - Live ServerConnection instances keyed by name.
  * @param selectionByServer - Per-server tool selection for re-filtering.
  * @param logger - Structured logger.
+ * @returns A cleanup function that closes the MCP server (and its stdio
+ *   transport) during shutdown.
  */
 async function startRouterServer(
   catalog: ToolCatalog,
   connections: Map<string, ServerConnection>,
   selectionByServer: Map<string, ToolSelection>,
   logger: Logger,
-): Promise<void> {
+): Promise<AsyncCleanup> {
   const router = new McpServer({
     name: 'mcp-compress-router',
     version: '1.0.0',
@@ -117,6 +122,33 @@ async function startRouterServer(
   const transport = new StdioServerTransport();
   await router.connect(transport);
   logger.info('Server started on stdio');
+
+  return async () => {
+    try {
+      await router.close();
+    } catch {
+      // Ignore close errors during shutdown — the process is exiting.
+    }
+  };
+}
+
+/**
+ * Closes every downstream server connection in parallel. Each
+ * `ServerConnection.close()` drives the SDK's graduated kill (end stdin,
+ * SIGTERM, then SIGKILL) so spawned downstream servers are terminated
+ * rather than orphaned when the router exits.
+ *
+ * @param connections - Live ServerConnection instances keyed by name.
+ * @param logger - Structured logger.
+ */
+async function closeAllConnections(
+  connections: Map<string, ServerConnection>,
+  logger: Logger,
+): Promise<void> {
+  logger.info('Closing downstream server connections', {
+    servers: [...connections.keys()],
+  });
+  await Promise.all([...connections.values()].map((conn) => conn.close().catch(() => {})));
 }
 
 /**
@@ -166,5 +198,17 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
   }
 
   const catalog = buildCatalog(discovered, selectionByServer, logger, compressionLevelByServer);
-  await startRouterServer(catalog, connections, selectionByServer, logger);
+  const closeRouter = await startRouterServer(catalog, connections, selectionByServer, logger);
+
+  const coordinator = new ShutdownCoordinator(logger);
+  coordinator.register(() => closeAllConnections(connections, logger));
+  coordinator.register(closeRouter);
+  installShutdownTriggers(coordinator, logger);
+
+  // Block here until a shutdown trigger fires (signal or stdin EOF), then
+  // force-exit so lingering grandchild pipes (e.g. browser processes
+  // forked by a downstream server) cannot keep the router alive. Without
+  // this, the router would linger as a ghost process forever.
+  await coordinator.whenShutdown();
+  process.exit(0);
 }
