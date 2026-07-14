@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Enabled npm provenance (OIDC Trusted Publishers) in the CI publish
+  workflow now that the repo is public.
+
 ## [v1.5.1] - 2026-07-14
 
 ### Fixed
