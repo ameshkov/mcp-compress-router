@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.5.1] - 2026-07-14
+
 ### Fixed
 
 - Ghost router processes no longer linger forever after the host
@@ -217,7 +219,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.0...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.1...HEAD
+[v1.5.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.1
 [v1.5.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.0
 [v1.4.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.4.0
 [v1.3.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.3.1
