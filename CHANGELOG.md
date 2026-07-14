@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.5.2] - 2026-07-14
+
 ### Fixed
 
 - Auth-required servers are now correctly classified as `unauthorized`
@@ -235,7 +237,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.1...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.2...HEAD
+[v1.5.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.2
 [v1.5.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.1
 [v1.5.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.0
 [v1.4.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.4.0
