@@ -9,7 +9,7 @@ quick-start guide, see the
 
 - [How Configuration Works](#how-configuration-works)
 - [Configuration File Location](#configuration-file-location)
-- [The mcp.json File](#the-mcpjson-file)
+- [The mcp.json / mcp.jsonc File](#the-mcpjson--mcpjsonc-file)
     - [Server Entry Fields](#server-entry-fields)
     - [Server Types](#server-types)
     - [Tool Selection](#tool-selection)

@@ -15,6 +15,7 @@ tool listings with a compact routing layer.
 - [Code Guidelines](#code-guidelines)
     - [Architecture](#architecture)
     - [Code Quality](#code-quality)
+    - [Testing](#testing)
     - [Dependency Management](#dependency-management)
     - [Configuration & Documentation](#configuration--documentation)
     - [Markdown Formatting](#markdown-formatting)

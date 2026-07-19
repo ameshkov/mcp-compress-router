@@ -23,6 +23,9 @@ repository. For installation as an end user, see the
     - [What to Verify](#what-to-verify)
 - [Code Quality Gates](#code-quality-gates)
 - [Releasing](#releasing)
+    - [One-time setup](#one-time-setup)
+    - [Cutting a release](#cutting-a-release)
+    - [Notes](#notes)
 - [Troubleshooting](#troubleshooting)
 
 ## Prerequisites

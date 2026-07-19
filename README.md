@@ -29,17 +29,17 @@
     - [Inspecting Tools](#inspecting-tools)
     - [OAuth](#oauth)
         - [Redirect URL](#redirect-url)
-        - [GitHub MCP (special case)](#github-mcp-special-case)
-        - [Figma MCP (special case)](#figma-mcp-special-case)
+        - [GitHub MCP with OAuth (special case)](#github-mcp-with-oauth-special-case)
+        - [Figma MCP with OAuth (special case)](#figma-mcp-with-oauth-special-case)
     - [Custom Headers](#custom-headers)
     - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
 - [Connecting Coding Agents](#connecting-coding-agents)
     - [Opencode](#opencode)
     - [Claude Code](#claude-code)
     - [Codex](#codex)
-    - [GitHub Copilot](#github-copilot)
+    - [GitHub Copilot (VS Code)](#github-copilot-vs-code)
 - [How It Works](#how-it-works)
-- [Aknowledgements](#acknowledgements)
+- [Acknowledgements](#acknowledgements)
 
 ## The Problem
 
