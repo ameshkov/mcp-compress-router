@@ -106,31 +106,36 @@ other MCP server. The router reads its server list from a
 it at the **user** scope (or your agent's equivalent) — every project
 then gets the same compressed catalog with no per-project setup.
 
-- **Claude Code** — add it at `user` scope so it applies everywhere
-  (Claude Code also supports `local` for a single private project and
-  `project` for a shareable `.mcp.json`):
+- **Claude Code** — see the
+  [Claude Code MCP docs](https://code.claude.com/docs/en/mcp).
+  Add it at `user` scope so it applies everywhere (Claude Code also
+  supports `local` for a single private project and `project` for a
+  shareable `.mcp.json`):
 
   ```sh
-  claude mcp add --scope user mcp-compress-router -- npx -y mcp-compress-router@latest
+  claude mcp add mcp-compress-router --scope user -- npx -y mcp-compress-router@latest
   ```
 
-- **Opencode**:
+- **Opencode** — see the
+  [opencode MCP servers docs](https://opencode.ai/docs/mcp-servers/).
 
   ```sh
   opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
   ```
 
-- **Codex**:
+- **Codex** — see the
+  [Codex MCP docs](https://developers.openai.com/codex/mcp).
 
   ```sh
   codex mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
   ```
 
-- **GitHub Copilot (VS Code)** — open the Command Palette
-  (`Cmd+Shift+P`) → `MCP: Open User Configuration` and add the server
-  block under `mcp.servers` (project-level `.vscode/mcp.json` is also
-  supported and merged with the user-level settings, project taking
-  precedence):
+- **GitHub Copilot (VS Code)** — see the
+  [VS Code MCP docs](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+  Open the Command Palette (`Cmd+Shift+P`) →
+  `MCP: Open User Configuration` and add the server block under
+  `mcp.servers` (project-level `.vscode/mcp.json` is also supported
+  and merged with the user-level settings, project taking precedence):
 
   ```json
   {
