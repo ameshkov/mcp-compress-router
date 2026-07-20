@@ -20,6 +20,9 @@
 - [The Solution](#the-solution)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
+    - [1. Connect your coding agent](#1-connect-your-coding-agent)
+    - [2. Add downstream MCP servers](#2-add-downstream-mcp-servers)
+    - [3. Verify and use](#3-verify-and-use)
 - [Configuration](#configuration)
     - [Config File Location](#config-file-location)
     - [Adding Downstream Servers](#adding-downstream-servers)
@@ -33,11 +36,6 @@
         - [Figma MCP with OAuth (special case)](#figma-mcp-with-oauth-special-case)
     - [Custom Headers](#custom-headers)
     - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
-- [Connecting Coding Agents](#connecting-coding-agents)
-    - [Opencode](#opencode)
-    - [Claude Code](#claude-code)
-    - [Codex](#codex)
-    - [GitHub Copilot (VS Code)](#github-copilot-vs-code)
 - [How It Works](#how-it-works)
 - [Acknowledgements](#acknowledgements)
 
@@ -95,17 +93,94 @@ have, the more you save.
 
 The router is published on npm as
 [`mcp-compress-router`](https://www.npmjs.com/package/mcp-compress-router).
-You do not need to install it — just run it with `npx`:
+You do not need to install it — just run it with `npx`.
+
+Setup is two steps: first connect your coding agent to the router, then
+add the MCP servers you want to compress behind it.
+
+### 1. Connect your coding agent
+
+Point your agent at the router the same way you would point it at any
+other MCP server. The router reads its server list from a
+[user-wide config file](#config-file-location) by default, so register
+it at the **user** scope (or your agent's equivalent) — every project
+then gets the same compressed catalog with no per-project setup.
+
+- **Claude Code** — add it at `user` scope so it applies everywhere
+  (Claude Code also supports `local` for a single private project and
+  `project` for a shareable `.mcp.json`):
+
+  ```sh
+  claude mcp add --scope user mcp-compress-router -- npx -y mcp-compress-router@latest
+  ```
+
+- **Opencode**:
+
+  ```sh
+  opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
+  ```
+
+- **Codex**:
+
+  ```sh
+  codex mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
+  ```
+
+- **GitHub Copilot (VS Code)** — open the Command Palette
+  (`Cmd+Shift+P`) → `MCP: Open User Configuration` and add the server
+  block under `mcp.servers` (project-level `.vscode/mcp.json` is also
+  supported and merged with the user-level settings, project taking
+  precedence):
+
+  ```json
+  {
+    "servers": {
+      "mcp-compress-router": {
+        "command": "npx",
+        "args": ["-y", "mcp-compress-router@latest"]
+      }
+    }
+  }
+  ```
+
+### 2. Add downstream MCP servers
+
+Use the `add` command to register each MCP server you want to compress.
+The router writes them to its [config file](#config-file-location) and
+they appear in the catalog the next time the router starts.
 
 ```bash
 npx mcp-compress-router@latest add playwright -- npx -y @playwright/mcp
 ```
 
-This registers a downstream MCP server named `playwright` and writes it
-to your [config file](#config-file-location). Repeat for every MCP server
-you want to compress.
+Add a description so the LLM can pick the right server, and use
+environment variables to keep secrets out of the config:
 
-Then point your [coding agent](#connecting-coding-agents) at the router:
+```bash
+npx mcp-compress-router@latest add github \
+  --description "GitHub API tools" \
+  -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
+  -- npx -y @modelcontextprotocol/server-github
+```
+
+Repeat for every MCP server you want to compress. See
+[Adding Downstream Servers](#adding-downstream-servers) for HTTP
+servers, custom headers, OAuth, and other options.
+
+### 3. Verify and use
+
+Check that everything is wired up:
+
+```bash
+npx mcp-compress-router@latest list
+```
+
+Then start a new session in your coding agent. The agent picks up the
+router's two tools — `get_tool_schema` and `invoke_tool` — and uses
+them to discover and call every server you added, without the agent
+ever seeing the raw tool listings of each downstream server.
+
+Under the hood your agent spawns the router as a child process with:
 
 ```bash
 npx mcp-compress-router@latest
@@ -113,7 +188,8 @@ npx mcp-compress-router@latest
 
 When started without a subcommand, the router runs the MCP server over
 stdio and exposes exactly two tools (`get_tool_schema`,
-`invoke_tool`) to the agent.
+`invoke_tool`) to the agent. You normally do not run this yourself —
+your agent spawns the router automatically.
 
 ## Configuration
 
@@ -639,52 +715,6 @@ MY_SERVER_TOKEN=secret-token
 ```
 
 Shell environment variables always take precedence over `.env` values.
-
-## Connecting Coding Agents
-
-Once your downstream servers are configured, connect your agent to the
-router the same way you would connect any other MCP server — by
-pointing it at `npx mcp-compress-router@latest`. The examples below assume the
-default [config location](#config-file-location); pass `-c <path>` if
-you use a custom one.
-
-### Opencode
-
-```sh
-opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
-```
-
-### Claude Code
-
-```sh
-claude mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
-```
-
-### Codex
-
-```sh
-codex mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
-```
-
-### GitHub Copilot (VS Code)
-
-Add this to `.vscode/mcp.json` in your workspace (project-level, applies
-only to that workspace), or to your **user-level** MCP settings which
-apply across every workspace: open the Command Palette (`Cmd+Shift+P`) →
-`MCP: Open User Configuration` and add the same `servers`
-block under the `mcp` key. Project-level and user-level entries are
-merged, with project-level taking precedence.
-
-```json
-{
-  "servers": {
-    "mcp-compress-router": {
-      "command": "npx",
-      "args": ["-y", "mcp-compress-router@latest"]
-    }
-  }
-}
-```
 
 ## How It Works
 
