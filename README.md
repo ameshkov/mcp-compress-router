@@ -414,6 +414,16 @@ A good rule of thumb:
 - Use `low` sparingly — only when full descriptions must be visible
   without a `get_tool_schema` call, since it costs the most tokens.
 
+> **Note for Claude Code:** Claude Code truncates any single tool
+> description at 2000 characters. The router renders the entire
+> compressed catalog into the `get_tool_schema` description that the
+> agent receives on every turn, so with several downstream servers or
+> many tools per server the `high`, `medium`, or `low` listings can
+> exceed that limit and get truncated — breaking routing. When using
+> Claude Code, set `compressionLevel: "max"` on your servers (or pass
+> `--compression-level max` to `add`) so each server's tool listing
+> collapses to a comma-separated single line.
+
 ### Inspecting Tools
 
 To see exactly which tools a server advertises — and which are
