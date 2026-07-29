@@ -16,6 +16,6 @@ export function validateGlobPattern(pattern: string): void {
     picomatch.makeRe(pattern, { strictBrackets: true });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid glob pattern "${pattern}": ${reason}`);
+    throw new Error(`Invalid glob pattern "${pattern}": ${reason}`, { cause: err });
   }
 }

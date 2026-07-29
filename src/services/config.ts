@@ -366,7 +366,9 @@ function validateToolList(
       validateGlobPattern(entry);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      throw new Error(`Server "${name}" has invalid "${field}" pattern "${entry}": ${reason}`);
+      throw new Error(`Server "${name}" has invalid "${field}" pattern "${entry}": ${reason}`, {
+        cause: err,
+      });
     }
     patterns.push(entry);
   }

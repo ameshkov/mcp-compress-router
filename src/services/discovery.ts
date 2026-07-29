@@ -126,7 +126,7 @@ export async function discoverSingleServer(
       type: server.type,
       error: message,
     });
-    throw new Error(`Failed to connect to server "${server.name}": ${message}`);
+    throw new Error(`Failed to connect to server "${server.name}": ${message}`, { cause: err });
   } finally {
     await client.close().catch(() => {});
   }

@@ -606,11 +606,16 @@ describe('MCP Compress Router E2E — stdio', () => {
     // Should NOT have debug messages by default
     expect(stderr).not.toContain('"level":"debug"');
 
-    // Parse the stderr to verify structured format
+    // Parse the stderr to verify structured format. The SDK transport
+    // forwards a downstream server's stderr into the router's stderr
+    // stream, so non-JSON lines (e.g. Node deprecation warnings emitted
+    // by the test fixture runner) are not part of the router's structured
+    // log contract and must be skipped here.
     const lines = stderr
       .trim()
       .split('\n')
       .filter((l) => l.length > 0)
+      .filter((l) => l.startsWith('{'))
       .map((l) => JSON.parse(l));
 
     expect(lines.length).toBeGreaterThan(0);

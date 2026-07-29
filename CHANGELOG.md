@@ -8,6 +8,29 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped major dependencies: `eslint` 9 → 10, `@eslint/js` 9 → 10,
+  `vitest` 3 → 4, `commander` 14 → 15, `zod` 3 → 4, `@types/node` 24 →
+  26, and `typescript-eslint` 8.57 → 8.65 (adds ESLint 10 support).
+- The MCP SDK already supports `zod ^3.25 || ^4.0` and bundles
+  `zod-to-json-schema` 3.25.x, so the router's tool schemas now flow
+  through Zod 4 unchanged.
+- TypeScript remains on 5.9.3: `typescript-eslint` 8.x caps
+  `typescript` at `<6.1.0`, so TypeScript 7 cannot be adopted until a
+  `typescript-eslint` release that supports it ships.
+
+### Fixed
+
+- Satisfied ESLint 10's new `preserve-caught-error` rule by attaching
+  the original error as `cause` at the four re-throw sites
+  (`add-command.ts`, `config.ts`, `discovery.ts`, `validate-glob.ts`).
+- Made the `stdio` E2E log-shape test tolerant of non-JSON stderr
+  lines. The SDK transport forwards a downstream server's stderr into
+  the router's stderr stream, and the test fixture runner (`tsx`)
+  emits a Node `DEP0205` deprecation on newer Node; the test now skips
+  non-JSON lines when verifying the router's structured logs.
+
 ## [v1.5.2] - 2026-07-14
 
 ### Fixed
