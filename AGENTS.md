@@ -118,7 +118,8 @@ mcp-compress-router/
 ├── oxlint.config.ts         # oxlint category-based config
 ├── knip.config.ts            # Knip unused-export analysis config
 ├── mcp.example.jsonc         # Example JSONC config template (committed)
-├── tsconfig.json             # TypeScript configuration (production)
+├── tsconfig.json             # TypeScript solution config (references app + test)
+├── tsconfig.app.json         # TypeScript configuration (production build)
 ├── tsconfig.test.json        # TypeScript configuration (tests, noEmit)
 ├── vitest.config.ts          # Vitest configuration
 └── package.json              # Project dependencies and scripts

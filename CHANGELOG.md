@@ -10,48 +10,19 @@ and this project adheres to
 
 ### Changed
 
-- Replaced `eslint` + `typescript-eslint` with `oxlint` 1.76.0. Lint is
-  now `oxlint src && pnpm knip`; the oxlint config (`oxlint.config.ts`)
-  enables the `correctness` category plus the project's explicit rules
-  (`no-unused-vars`, `max-lines`, `max-lines-per-function`,
-  `preserve-caught-error`). Removing `typescript-eslint` also removed the
-  cap that previously blocked TypeScript 7 (oxlint type-checks with tsgo
-  and has no dependency on `typescript-eslint`), so TypeScript was
-  upgraded to 7.0.2 (see below).
-- Upgraded TypeScript 5.9.3 → 7.0.2. `tsc` and `tsc --project
-  tsconfig.test.json` both type-check cleanly under TS 7.
-- Bumped dev dependencies: `knip` 6.6.2 → 6.29.0, `prettier` 3.7.4 →
-  3.9.6, `tsx` 4.20.3 → 4.23.1, `markdownlint-cli2` 0.22.0 → 0.23.2.
-- Bumped runtime dependency `picomatch` 4.0.4 → 4.0.5 (patch).
-- Bumped major dependencies (earlier pass): `vitest` 3 → 4, `commander`
-  14 → 15, `zod` 3 → 4, `@types/node` 24 → 26. The MCP SDK already
-  supports `zod ^3.25 || ^4.0` and bundles `zod-to-json-schema` 3.25.x,
-  so the router's tool schemas flow through Zod 4 unchanged.
-- Upgraded `@modelcontextprotocol/sdk` 1.24.3 → 1.30.0. The 1.30.0 client
-  remains **backward compatible with downstream MCP servers on older
-  protocol versions**: it advertises `2025-11-25` during `initialize` but
-  accepts whatever version the server replies with (`SUPPORTED_PROTOCOL_
-  VERSIONS` still includes `2025-06-18`, `2025-03-26`, `2024-11-05`,
-  `2024-10-07`), then only sends the `Mcp-Protocol-Version` header with
-  the negotiated version — which older servers ignore. The router's own
-  server is stdio, so the new server-side `Mcp-Protocol-Version`
-  enforcement does not affect production. The only behavior change was in
-  the E2E HTTP fixtures: SDK 1.30.0's stateless `StreamableHTTPServer_
-  Transport` now requires a fresh `McpServer` + transport per request
-  (a reused transport's `_initialized` state made every post-`initialize`
-  request 500). `test/fixture-http-server.ts` and `test/fixture-auth-
-  server.ts` were switched to that per-request pattern.
+- Upgraded the `@modelcontextprotocol/sdk` runtime dependency to 1.30.0.
+  The router stays compatible with downstream MCP servers on older
+  protocol versions: it negotiates the server's version and only applies
+  the `Mcp-Protocol-Version` header with the agreed version (which older
+  servers ignore).
 
-### Fixed
+### Internal
 
-- Kept the `preserve-caught-error` discipline (now enforced by oxlint) by
-  attaching the original error as `cause` at the four re-throw sites
-  (`add-command.ts`, `config.ts`, `discovery.ts`, `validate-glob.ts`).
-- Made the `stdio` E2E log-shape test tolerant of non-JSON stderr
-  lines. The SDK transport forwards a downstream server's stderr into
-  the router's stderr stream, and the test fixture runner (`tsx`)
-  emits a Node `DEP0205` deprecation on newer Node; the test now skips
-  non-JSON lines when verifying the router's structured logs.
+- Split the TypeScript configs into a solution `tsconfig.json` referencing
+  `tsconfig.app.json` (build) and `tsconfig.test.json`.
+- Updated developer tooling and dependencies (oxlint, TypeScript 7, knip,
+  prettier, vitest 4, commander 15, zod 4, picomatch). No user-facing
+  behavior change.
 
 ## [v1.5.2] - 2026-07-14
 
