@@ -26,7 +26,6 @@ function getCredentialsPath(configPath: string): string {
 
 /**
  * Raw server entry as stored in mcp.json (unvalidated).
- * @internal — Exported for tests only; not part of the public module API.
  */
 export interface RawServerEntry {
   type: string;
@@ -50,7 +49,6 @@ export interface RawServerEntry {
 
 /**
  * Map of server names to their raw entries.
- * @internal — Exported for internal CLI module use; not part of the public module API.
  */
 export type McpServers = Record<string, RawServerEntry>;
 

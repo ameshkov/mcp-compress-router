@@ -15,7 +15,6 @@ import {
 
 /**
  * Options for the add subcommand, parsed from CLI flags.
- * @internal — Exported for tests only; not part of the public module API.
  */
 export interface AddOptions {
   name: string;

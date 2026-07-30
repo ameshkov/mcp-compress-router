@@ -16,7 +16,7 @@ import { runRouter } from './router-runner.js';
 
 /**
  * Collects repeated `--header "K: V"` flags into a headers record.
- * @internal — Exported for tests only; not part of the public module API.
+ * @internal Exported for tests only; not part of the public module API.
  */
 export function collectHeaders(
   value: string,
@@ -33,7 +33,7 @@ export function collectHeaders(
 
 /**
  * Collects repeated `-e KEY=value` flags into an env record.
- * @internal — Exported for tests only; not part of the public module API.
+ * @internal Exported for tests only; not part of the public module API.
  */
 export function collectEnv(
   value: string,
@@ -50,7 +50,7 @@ export function collectEnv(
 
 /**
  * Collects repeated `--flag <value>` flags into an ordered string array.
- * @internal — Exported for tests only; not part of the public module API.
+ * @internal Exported for tests only; not part of the public module API.
  */
 export function collectStringArray(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -60,7 +60,7 @@ export function collectStringArray(value: string, previous: string[]): string[] 
  * Coerces a `--port` flag value into an integer. Throws on non-numeric
  * values so the user gets a clear error before any network activity.
  * Range validation is deferred to the command handlers.
- * @internal — Exported for tests only; not part of the public module API.
+ * @internal Exported for tests only; not part of the public module API.
  */
 export function parsePort(value: string): number {
   const port = Number(value);

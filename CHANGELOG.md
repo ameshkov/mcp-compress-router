@@ -8,6 +8,24 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored the build step inside the `check` script so the compiled
+  `build/index.js` exists before the end-to-end tests run. When the
+  TypeScript configs were split, `typecheck` switched from an emitting
+  `tsc` to `tsc --noEmit`, which silently removed the implicit build
+  the tests relied on; in CI (which runs `pnpm check` before `pnpm
+  build`) this caused every E2E test to fail with a missing
+  `build/index.js`. The `check` script now builds explicitly before
+  tests, matching the previous behavior.
+
+- Removed incorrect `@internal` JSDoc tags from `RawServerEntry`,
+  `McpServers` (`src/cli/config-io.ts`) and `AddOptions`
+  (`src/cli/add-command.ts`). These symbols are consumed by production
+  code (other CLI command modules and the `cli` barrel), so the tag was
+  misleading and produced Knip "Unused tag" hints. The remaining
+  `@internal`-tagged exports are test-only by design and stay tagged.
+
 ## [v1.5.3] - 2026-07-30
 
 ### Changed

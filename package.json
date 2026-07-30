@@ -35,7 +35,7 @@
     "lint": "oxlint src && pnpm knip",
     "lint:fix": "oxlint src --fix",
     "knip": "knip --production",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test",
     "prepare": "husky || true"
   },
   "files": [

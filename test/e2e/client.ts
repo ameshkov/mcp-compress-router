@@ -4,7 +4,7 @@ import { createInterface, Interface } from 'node:readline';
 /**
  * JSON-RPC message exchanged between test client and router.
  *
- * @internal — exported for E2E test files only; not part of the public
+ * @internal exported for E2E test files only; not part of the public
  *   module API.
  */
 export interface JsonRpcMessage {
@@ -21,7 +21,7 @@ export interface JsonRpcMessage {
  * subprocess over stdio. Handles MCP initialization handshake
  * automatically.
  *
- * @internal — exported for E2E test files only; not part of the public
+ * @internal exported for E2E test files only; not part of the public
  *   module API.
  */
 export class McpTestClient {
