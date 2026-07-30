@@ -43,7 +43,7 @@ coding session with 3 MCP servers.
 | Runtime | Node.js 24+ |
 | Package Manager | pnpm 10+ |
 | Framework | MCP SDK (`@modelcontextprotocol/sdk`) |
-| Linting | ESLint 9.x + typescript-eslint |
+| Linting | oxlint (category-based config) + Knip |
 | Formatting | Prettier 3.x, Markdownlint (markdownlint-cli2) |
 | Project Type | MCP server (stdio transport) |
 
@@ -115,7 +115,7 @@ mcp-compress-router/
 ├── .github/                  # GitHub Actions workflows
 │   └── workflows/
         └── ci.yml            # Quality gate + npm publish on version tags
-├── eslint.config.mjs         # ESLint flat config
+├── oxlint.config.ts         # oxlint category-based config
 ├── knip.config.ts            # Knip unused-export analysis config
 ├── mcp.example.jsonc         # Example JSONC config template (committed)
 ├── tsconfig.json             # TypeScript configuration (production)
@@ -129,7 +129,7 @@ mcp-compress-router/
 - `pnpm build` — compile TypeScript to `build/` and make executable
 - `pnpm typecheck` — check for TypeScript type errors in production
   and test code
-- `pnpm lint` — lint source files with ESLint and check for unused
+- `pnpm lint` — lint source files with oxlint and check for unused
   exports with Knip
 - `pnpm lint:fix` — lint and auto-fix issues
 - `pnpm knip` — run Knip unused-export analysis separately
@@ -146,7 +146,7 @@ You MUST follow the following rules for EVERY task that you perform:
 
   Use the following commands:
     - `pnpm typecheck` to check for TypeScript type errors
-    - `pnpm lint` to run the linter (ESLint) and Knip unused-export
+    - `pnpm lint` to run the linter (oxlint) and Knip unused-export
       analysis
     - `pnpm lint:fix` to fix linting issues that can be fixed
       automatically
@@ -257,14 +257,24 @@ All code MUST meet documentation and style requirements before merge:
   arguments, return values, and thrown errors (use `@throws` only for
   specific errors).
 - **Static analysis gates**: Every change MUST pass TypeScript compilation
-  (`pnpm typecheck`), ESLint (`pnpm lint`), and Prettier/Markdownlint
+  (`pnpm typecheck`), oxlint (`pnpm lint`), and Prettier/Markdownlint
   (`pnpm format:check`) before merge.
 - **Do not modify linter or formatter configurations**: Never change
-  ESLint, Prettier, Markdownlint, or TypeScript configuration files
-  (`eslint.config.mjs`, `.prettierrc`, `.prettierignore`,
+  oxlint, Prettier, Markdownlint, or TypeScript configuration files
+  (`oxlint.config.ts`, `.prettierrc`, `.prettierignore`,
   `.markdownlint-cli2.yaml`, `tsconfig.json`) to work around lint or
   formatting errors. Fix the source code instead. If the issue cannot be
   resolved after a few attempts, ask the human for help.
+- **oxlint category selection**: oxlint groups rules into categories
+  rather than a single `recommended` preset. This project enables only the
+  `correctness` category (error) plus explicit project rules
+  (`no-unused-vars`, `max-lines`, `max-lines-per-function`,
+  `preserve-caught-error`). The `suspicious`, `restriction`, `pedantic`,
+  and `style` categories, and the `unicorn` plugin, are intentionally
+  disabled: they forbid idiomatic TypeScript (async/await, optional
+  chaining, object spread, `undefined`) and the project's `_`-prefixed
+  private-field convention — none of which the previous ESLint setup
+  enforced. Do not re-enable these without explicit justification.
 - **Error handling strategy**: Prefer throwing errors over returning error
   values. Handle errors at top-level entry points where they can be logged.
 - **Import style**: Use top-level static `import` statements exclusively.
@@ -297,7 +307,7 @@ All code MUST meet documentation and style requirements before merge:
   `@internal` (for test-only symbols not re-exported from the barrel)
   instead.
 - **File size limit**: Source files MUST stay within 300 lines of code.
-  This is an enforced ESLint `max-lines` gate (`'error'` severity,
+  This is an enforced oxlint `max-lines` gate (`'error'` severity,
   `max: 300`; blank lines and comments are skipped) — a hard gate, not a
   soft target. When a file approaches or exceeds this limit, your FIRST
   and default response MUST be

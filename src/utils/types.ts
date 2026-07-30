@@ -103,12 +103,7 @@ export type AuthRequirement = 'oauth' | 'none' | 'unknown';
  * - `'unknown'` — http server whose OAuth support could not be determined.
  */
 export type AuthStatus =
-  | 'none'
-  | 'header'
-  | 'authenticated'
-  | 'requires login'
-  | 'public'
-  | 'unknown';
+  'none' | 'header' | 'authenticated' | 'requires login' | 'public' | 'unknown';
 
 /**
  * OAuth tokens and client registration for a single downstream server,

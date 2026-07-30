@@ -38,49 +38,49 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   // In-memory store: access_token -> { refresh_token, expires_at }
   const issuedTokens = new Map<string, { refreshToken: string; expiresAt: number }>();
 
-  // Create the protected MCP server
-  const mcp = new McpServer({
-    name: 'test-fixture-auth',
-    version: '1.0.0',
-  });
+  // Create the protected MCP server (fresh per request in stateless mode).
+  function makeAuthMcpServer(): McpServer {
+    const mcp = new McpServer({
+      name: 'test-fixture-auth',
+      version: '1.0.0',
+    });
 
-  mcp.registerTool(
-    'echo',
-    {
-      title: 'Echo Tool',
-      description: 'Returns the input message unchanged.',
-      inputSchema: {
-        message: z.string().describe('The message to echo.'),
+    mcp.registerTool(
+      'echo',
+      {
+        title: 'Echo Tool',
+        description: 'Returns the input message unchanged.',
+        inputSchema: {
+          message: z.string().describe('The message to echo.'),
+        },
       },
-    },
-    async (params) => {
-      return {
-        content: [{ type: 'text' as const, text: params.message }],
-      };
-    },
-  );
-
-  mcp.registerTool(
-    'add',
-    {
-      title: 'Add Tool',
-      description: 'Adds two numbers together.',
-      inputSchema: {
-        a: z.number().describe('The first number.'),
-        b: z.number().describe('The second number.'),
+      async (params) => {
+        return {
+          content: [{ type: 'text' as const, text: params.message }],
+        };
       },
-    },
-    async (params) => {
-      const result = params.a + params.b;
-      return {
-        content: [{ type: 'text' as const, text: String(result) }],
-      };
-    },
-  );
+    );
 
-  const authTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
+    mcp.registerTool(
+      'add',
+      {
+        title: 'Add Tool',
+        description: 'Adds two numbers together.',
+        inputSchema: {
+          a: z.number().describe('The first number.'),
+          b: z.number().describe('The second number.'),
+        },
+      },
+      async (params) => {
+        const result = params.a + params.b;
+        return {
+          content: [{ type: 'text' as const, text: String(result) }],
+        };
+      },
+    );
+
+    return mcp;
+  }
 
   let port = 0;
 
@@ -251,15 +251,27 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
       }
     }
 
-    // Delegate to MCP transport — collect body and pass parsed JSON
+    // Delegate to MCP transport — collect body and pass parsed JSON.
+    // A fresh McpServer + transport is required per request (stateless
+    // mode) so the post-initialize requests succeed under SDK 1.30.0.
     let body: string | undefined;
     if (req.method === 'POST') {
       body = await readBody(req);
     }
-    await authTransport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+    const mcp = makeAuthMcpServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    await mcp.connect(transport);
+    try {
+      await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+    } finally {
+      res.on('close', () => {
+        transport.close().catch(() => {});
+        mcp.close().catch(() => {});
+      });
+    }
   });
-
-  await mcp.connect(authTransport);
 
   return new Promise((resolve, reject) => {
     server.listen(0, () => {
