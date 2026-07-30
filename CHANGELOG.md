@@ -8,23 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
-### Fixed
+## [v1.5.4] - 2026-07-31
 
-- Restored the build step inside the `check` script so the compiled
-  `build/index.js` exists before the end-to-end tests run. When the
-  TypeScript configs were split, `typecheck` switched from an emitting
-  `tsc` to `tsc --noEmit`, which silently removed the implicit build
-  the tests relied on; in CI (which runs `pnpm check` before `pnpm
-  build`) this caused every E2E test to fail with a missing
-  `build/index.js`. The `check` script now builds explicitly before
-  tests, matching the previous behavior.
+### Internal
 
+- Restored the build step in `check` so `build/index.js` exists before
+  E2E tests (regressed in the tsconfig split; CI ran tests before
+  build).
 - Removed incorrect `@internal` JSDoc tags from `RawServerEntry`,
-  `McpServers` (`src/cli/config-io.ts`) and `AddOptions`
-  (`src/cli/add-command.ts`). These symbols are consumed by production
-  code (other CLI command modules and the `cli` barrel), so the tag was
-  misleading and produced Knip "Unused tag" hints. The remaining
-  `@internal`-tagged exports are test-only by design and stay tagged.
+  `McpServers`, and `AddOptions` (flagged by Knip "Unused tag" hints).
 
 ## [v1.5.3] - 2026-07-30
 
@@ -273,7 +265,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.3...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.4...HEAD
+[v1.5.4]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.4
 [v1.5.3]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.3
 [v1.5.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.2
 [v1.5.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.1
