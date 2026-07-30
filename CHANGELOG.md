@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.5.3] - 2026-07-30
+
 ### Changed
 
 - Upgraded the `@modelcontextprotocol/sdk` runtime dependency to 1.30.0.
@@ -253,7 +255,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.2...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.3...HEAD
+[v1.5.3]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.3
 [v1.5.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.2
 [v1.5.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.1
 [v1.5.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.0
