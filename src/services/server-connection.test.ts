@@ -327,6 +327,56 @@ describe('ServerConnection — reconnect', () => {
   });
 });
 
+describe('ServerConnection — connect (timeout on hung server)', () => {
+  it('fails fast when a downstream HTTP server accepts the connection but never replies', async () => {
+    // A server that accepts every request but never responds, simulating a
+    // hung Streamable HTTP endpoint. Without a connect timeout the SDK's
+    // 60s default would stall the command; with the configured budget the
+    // connection must fail promptly.
+    const hanging = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      // Intentionally never end the response.
+    });
+
+    const port = await new Promise<number>((resolve, reject) => {
+      hanging.listen(0, () => {
+        const addr = hanging.address();
+        if (addr && typeof addr !== 'string') {
+          resolve(addr.port);
+        } else {
+          reject(new Error('failed to listen'));
+        }
+      });
+      hanging.on('error', reject);
+    });
+
+    const prev = process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
+    process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = '500';
+    const config: DownstreamServerConfig = {
+      name: 'hanging',
+      type: 'http',
+      url: `http://localhost:${port}/mcp`,
+    };
+    const configPath = await makeTempConfigPath();
+    const conn = new ServerConnection(config, configPath, new Logger('error'));
+
+    const start = Date.now();
+    await expect(conn.connect()).rejects.toThrow();
+    const elapsed = Date.now() - start;
+
+    // Caps at the 500ms budget (allow scheduling + close slack), far under
+    // the SDK's 60s default.
+    expect(elapsed).toBeLessThan(5000);
+
+    if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
+    else process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = prev;
+    await conn.close();
+    hanging.closeAllConnections();
+    await new Promise<void>((resolve) => hanging.close(() => resolve()));
+    await fs.rm(path.dirname(configPath), { recursive: true, force: true });
+  });
+});
+
 describe('ServerConnection — invokeTool', () => {
   it('invokes a tool on a connected stdio server', async () => {
     const resolved = await resolveCommand();

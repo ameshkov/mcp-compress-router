@@ -167,3 +167,42 @@ describe('discoverAuth', () => {
     expect(discovered.serverMetadata).toBeUndefined();
   });
 });
+
+describe('discoverAuth — timeout on hung well-known endpoint', () => {
+  // A server that accepts every request but never responds, simulating a
+  // CDN/proxy that hangs the OAuth well-known probes forever. Without the
+  // timeout fetch, discoverAuth would block indefinitely.
+  function startHangingServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      // Intentionally never end the response.
+    });
+    return new Promise((resolve) => {
+      server.listen(0, () => {
+        const addr = server.address() as AddressInfo;
+        resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+      });
+    });
+  }
+
+  it('does not hang forever when well-known endpoints never respond', async () => {
+    const prev = process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+    process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = '150';
+    const hanging = await startHangingServer();
+    try {
+      const start = Date.now();
+      await expect(discoverAuth(new URL(hanging.mcpUrl))).rejects.toThrow();
+      const elapsed = Date.now() - start;
+      // Each candidate probe times out at 150ms; with up to 4 probes
+      // (PRM path-aware + root, then AS at the URL + origin) the whole
+      // flow must still finish in well under the 30s SDK default.
+      expect(elapsed).toBeLessThan(5000);
+    } finally {
+      if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+      else process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = prev;
+      // Force-close the hanging connections so the test process can exit.
+      hanging.server.closeAllConnections();
+      await closeServer(hanging.server);
+    }
+  });
+});

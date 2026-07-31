@@ -24,6 +24,8 @@ quick-start guide, see the
     - [MCP_COMPRESS_ROUTER_VERBOSE](#mcp_compress_router_verbose)
     - [MCP_COMPRESS_ROUTER_BROWSER](#mcp_compress_router_browser)
     - [MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS](#mcp_compress_router_login_timeout_ms)
+    - [MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS](#mcp_compress_router_downstream_timeout_ms)
+    - [MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS](#mcp_compress_router_auth_discovery_timeout_ms)
 - [CLI Flags](#cli-flags)
     - [add](#add-name-commandorurl-rest)
     - [disable](#disable-name)
@@ -418,6 +420,8 @@ values.
 | `MCP_COMPRESS_ROUTER_VERBOSE` | unset | Set to `true` to enable debug-level logging to stderr. Same as `-v, --verbose` |
 | `MCP_COMPRESS_ROUTER_BROWSER` | unset | Override the browser command used to open OAuth URLs. The authorization URL is appended as a single final argument; no shell is used |
 | `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` | `120000` (120 s) | Time in milliseconds to wait for the OAuth callback during `login` |
+| `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `30000` (30 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s) |
+| `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `10000` (10 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
 
 ### `.env` Auto-Loading
 
@@ -488,6 +492,34 @@ the default of 120 seconds.
 ```bash
 MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS=300000 \
   mcp-compress-router login my-http
+```
+
+### `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS`
+
+Time in milliseconds the router waits for a downstream server's
+`initialize` handshake and `tools/list` call before giving up. This caps
+the `tools <name>` command, router startup, and self-recovery reconnects
+so a server that accepts the connection but never replies (observed on
+some Streamable HTTP servers behind CDNs) surfaces a clear error instead
+of hanging indefinitely. Must be a positive integer; invalid values fall
+back to the default of 30 seconds.
+
+```bash
+MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=60000 \
+  mcp-compress-router tools my-http
+```
+
+### `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS`
+
+Per-request timeout in milliseconds for the OAuth metadata (RFC 9728 /
+RFC 8414 well-known) discovery probes run at startup, `add`, and `tools`.
+A server that hangs its well-known endpoint must not stall startup. Must
+be a positive integer; invalid values fall back to the default of 10
+seconds.
+
+```bash
+MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS=20000 \
+  mcp-compress-router
 ```
 
 ## CLI Flags

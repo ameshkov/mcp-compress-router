@@ -1,9 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { createTransport, listToolsOrEmpty } from './discovery.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { saveToolCache, loadToolCache } from './tool-cache.js';
 import { isAuthError } from './index.js';
+import { getDownstreamTimeoutMs } from '../utils/index.js';
 import type {
   DownstreamServerConfig,
   Logger,
@@ -253,8 +255,13 @@ export class ServerConnection {
       : undefined;
     const transport = createTransport(this.server, getAuthProvider);
 
-    await this.client.connect(transport);
-    const listResult = await listToolsOrEmpty(this.client);
+    // Cap the initialize handshake and tools/list call so a hung
+    // downstream server fails fast instead of stalling startup (or
+    // self-recovery) for the SDK's 60s default.
+    const requestOptions: RequestOptions = { timeout: getDownstreamTimeoutMs() };
+
+    await this.client.connect(transport, requestOptions);
+    const listResult = await listToolsOrEmpty(this.client, requestOptions);
 
     return listResult.tools.map((t) => ({
       name: t.name,

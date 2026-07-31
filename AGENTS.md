@@ -94,6 +94,7 @@ mcp-compress-router/
 │   │   ├── types.ts           # Shared type definitions
 │   │   ├── validate-arguments.ts # JSON Schema argument validation
 │   │   ├── validate-glob.ts   # Glob pattern validator
+│   │   ├── timeout.ts         # Downstream/discovery timeout budgets + timeout fetch
 │   │   ├── logger.ts          # Level-aware structured logger
 │   │   └── open-browser.ts    # Platform-safe browser opener using spawn()
 │   └── tools/                 # Router tool handlers

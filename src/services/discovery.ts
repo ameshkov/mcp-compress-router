@@ -1,7 +1,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import { getDownstreamTimeoutMs } from '../utils/index.js';
 import type {
   DownstreamServerConfig,
   ToolDescriptor,
@@ -33,14 +35,19 @@ function isMethodNotFound(err: unknown): boolean {
  * propagated as a connection failure.
  *
  * @param client - A connected MCP client.
+ * @param options - Optional {@link RequestOptions} (e.g. `timeout`)
+ *   forwarded to `client.listTools()`.
  * @returns The list-tools result (possibly empty).
  * @throws Any non-"Method not found" error from `listTools()`.
  */
-export async function listToolsOrEmpty(client: Client): Promise<{
+export async function listToolsOrEmpty(
+  client: Client,
+  options?: RequestOptions,
+): Promise<{
   tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
 }> {
   try {
-    return await client.listTools();
+    return await client.listTools(undefined, options);
   } catch (err) {
     if (isMethodNotFound(err)) {
       return { tools: [] };
@@ -97,9 +104,15 @@ export async function discoverSingleServer(
 
   const transport = createTransport(server, getAuthProvider);
 
+  // Cap the initialize handshake and tools/list call so a server that
+  // accepts the connection but never replies surfaces a clear error
+  // instead of hanging the command indefinitely (the SDK's own default
+  // is 60s; we use a shorter, configurable budget).
+  const requestOptions: RequestOptions = { timeout: getDownstreamTimeoutMs() };
+
   try {
-    await client.connect(transport);
-    const listResult = await listToolsOrEmpty(client);
+    await client.connect(transport, requestOptions);
+    const listResult = await listToolsOrEmpty(client, requestOptions);
 
     logger.info(`Connected to "${server.name}" — ${listResult.tools.length} tools discovered`, {
       server: server.name,

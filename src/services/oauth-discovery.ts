@@ -2,6 +2,7 @@ import type {
   AuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { createTimeoutFetch, getAuthDiscoveryTimeoutMs } from '../utils/index.js';
 
 /**
  * Result of OAuth discovery for a downstream MCP server.
@@ -55,6 +56,11 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
   const { discoverOAuthProtectedResourceMetadata, discoverAuthorizationServerMetadata } =
     await import('@modelcontextprotocol/sdk/client/auth.js');
 
+  // The SDK discovery helpers use a raw fetch with no timeout; a server
+  // that hangs its well-known endpoint would trap discovery forever. Pass
+  // a fetch that aborts after a short, configurable budget.
+  const fetchFn = createTimeoutFetch(getAuthDiscoveryTimeoutMs());
+
   // Tracks the last error seen across all candidates so the caller can be
   // notified when discovery failed entirely (vs. cleanly finding nothing).
   let lastError: unknown;
@@ -63,7 +69,7 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
   // recorded and treated as "not found" so the next candidate is tried.
   const safeDiscoverAs = async (url: URL): Promise<AuthorizationServerMetadata | undefined> => {
     try {
-      return await discoverAuthorizationServerMetadata(url);
+      return await discoverAuthorizationServerMetadata(url, { fetchFn });
     } catch (err) {
       lastError = err;
       return undefined;
@@ -76,7 +82,7 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
   // legacy-server path, not a probe failure.
   let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
   try {
-    resourceMetadata = await discoverOAuthProtectedResourceMetadata(serverUrl);
+    resourceMetadata = await discoverOAuthProtectedResourceMetadata(serverUrl, {}, fetchFn);
   } catch {
     // No PRM published; fall through to direct AS discovery below.
   }

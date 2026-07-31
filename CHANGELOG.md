@@ -8,6 +8,23 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Downstream HTTP servers that accept the connection but never reply
+  no longer hang the `tools <name>` command, router startup, or
+  self-recovery indefinitely. The `initialize` handshake and `tools/list`
+  call now time out after a configurable budget (default 30 s, down from
+  the MCP SDK's 60 s default) and surface a clear `Request timed out`
+  error. The OAuth metadata (well-known) discovery probes likewise time
+  out (default 10 s) instead of blocking forever on a hung endpoint.
+
+### Added
+
+- `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` and
+  `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` environment variables to
+  override the downstream connect/listTools and OAuth discovery probe
+  timeouts.
+
 ## [v1.5.4] - 2026-07-31
 
 ### Internal
