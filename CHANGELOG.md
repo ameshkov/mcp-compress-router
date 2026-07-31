@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.5.5] - 2026-07-31
+
 ### Fixed
 
 - Downstream HTTP servers that accept the connection but never reply
@@ -282,7 +284,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.4...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.5...HEAD
+[v1.5.5]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.5
 [v1.5.4]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.4
 [v1.5.3]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.3
 [v1.5.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.2
