@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.5.6] - 2026-08-01
+
 ### Changed
 
 - Startup is faster when a downstream server is unresponsive: OAuth
@@ -304,7 +306,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.5...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.6...HEAD
+[v1.5.6]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.6
 [v1.5.5]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.5
 [v1.5.4]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.4
 [v1.5.3]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.3
