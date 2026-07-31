@@ -420,8 +420,8 @@ values.
 | `MCP_COMPRESS_ROUTER_VERBOSE` | unset | Set to `true` to enable debug-level logging to stderr. Same as `-v, --verbose` |
 | `MCP_COMPRESS_ROUTER_BROWSER` | unset | Override the browser command used to open OAuth URLs. The authorization URL is appended as a single final argument; no shell is used |
 | `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` | `120000` (120 s) | Time in milliseconds to wait for the OAuth callback during `login` |
-| `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `30000` (30 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s) |
-| `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `10000` (10 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
+| `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `10000` (10 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s). Stays well below the 30 s host startup budget: connects run in parallel, so one timed-out server costs at most this budget |
+| `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `5000` (5 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
 
 ### `.env` Auto-Loading
 
@@ -502,7 +502,12 @@ the `tools <name>` command, router startup, and self-recovery reconnects
 so a server that accepts the connection but never replies (observed on
 some Streamable HTTP servers behind CDNs) surfaces a clear error instead
 of hanging indefinitely. Must be a positive integer; invalid values fall
-back to the default of 30 seconds.
+back to the default of 10 seconds.
+
+At startup all downstream servers are connected **in parallel**, so a
+single server that times out costs at most this budget — and the default
+keeps worst-case startup well under the 30 seconds most MCP hosts allow
+for initialization.
 
 ```bash
 MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=60000 \
@@ -513,8 +518,11 @@ MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=60000 \
 
 Per-request timeout in milliseconds for the OAuth metadata (RFC 9728 /
 RFC 8414 well-known) discovery probes run at startup, `add`, and `tools`.
-A server that hangs its well-known endpoint must not stall startup. Must
-be a positive integer; invalid values fall back to the default of 10
+A server that hangs its well-known endpoint must not stall startup: at
+startup the probes run **concurrently with the downstream connects**, and
+the per-server candidates are probed **in parallel** (first hit wins), so
+this budget is a per-request cap rather than a serialized startup cost.
+Must be a positive integer; invalid values fall back to the default of 5
 seconds.
 
 ```bash

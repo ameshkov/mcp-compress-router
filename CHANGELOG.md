@@ -8,6 +8,26 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Startup is faster when a downstream server is unresponsive: OAuth
+  metadata probes now run concurrently with the downstream connects
+  instead of blocking ahead of them, and the per-server OAuth discovery
+  candidates are probed in parallel (first hit wins) so a hung
+  well-known endpoint never delays a hit found at another candidate.
+  The default `initialize`/`tools/list` timeout dropped from 30 s to
+  10 s and the OAuth discovery probe timeout from 10 s to 5 s, keeping
+  worst-case startup well under the 30 s budget most MCP hosts allow
+  even when one server times out.
+
+### Fixed
+
+- A downstream HTTP server that answers the OAuth metadata probes with a
+  non-JSON body (e.g. an HTML page) is no longer reported as a probe
+  failure. Such a response means the server publishes no OAuth metadata;
+  the router now treats it as `'none'` (shown as `public` in `list`)
+  instead of logging an error and recording `'unknown'`.
+
 ## [v1.5.5] - 2026-07-31
 
 ### Fixed

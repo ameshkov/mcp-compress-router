@@ -117,15 +117,92 @@ function startBareServer(): Promise<{ server: http.Server; mcpUrl: string }> {
   });
 }
 
+/**
+ * Starts a server that answers every request with an HTML page (an SPA
+ * catch-all route or a plain web page). The well-known endpoints are not
+ * OAuth metadata endpoints, so discovery must treat this as a clean
+ * "no OAuth published" rather than a probe error.
+ */
+function startHtmlServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<!doctype html><html><body>not an MCP server</body></html>');
+  });
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+    });
+  });
+}
+
+/**
+ * Starts a server where every authorization-server metadata probe under
+ * the `/hang` subpath never responds, while PRM probes 404 immediately
+ * and the origin root serves AS metadata instantly. Verifies that the
+ * server-URL and origin-root candidates are probed in parallel: the hung
+ * candidate must not delay discovery via the healthy origin root.
+ */
+function startParallelProbeServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+
+    // PRM probes must answer immediately so discovery reaches the AS
+    // candidates (the hang belongs to the AS probes of the /hang path).
+    if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) {
+      res.writeHead(404);
+      res.end('{}');
+      return;
+    }
+
+    // Every AS metadata probe under the /hang subpath hangs forever.
+    if (url.pathname.includes('/hang')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      // Intentionally never end the response.
+      return;
+    }
+
+    // RFC 8414 AS metadata at the origin root.
+    if (url.pathname === '/.well-known/oauth-authorization-server') {
+      const origin = `http://${req.headers.host}`;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          response_types_supported: ['code'],
+          grant_types_supported: ['authorization_code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('{}');
+  });
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/hang` });
+    });
+  });
+}
+
 describe('discoverAuth', () => {
   let prm: Awaited<ReturnType<typeof startPrmServer>>;
   let legacy: Awaited<ReturnType<typeof startLegacyServer>>;
   let bare: Awaited<ReturnType<typeof startBareServer>>;
+  let html: Awaited<ReturnType<typeof startHtmlServer>>;
+  let parallelProbe: Awaited<ReturnType<typeof startParallelProbeServer>>;
 
   beforeAll(async () => {
     prm = await startPrmServer();
     legacy = await startLegacyServer();
     bare = await startBareServer();
+    html = await startHtmlServer();
+    parallelProbe = await startParallelProbeServer();
   });
 
   afterAll(async () => {
@@ -133,6 +210,8 @@ describe('discoverAuth', () => {
       closeServer(prm.server),
       closeServer(legacy.server),
       closeServer(bare.server),
+      closeServer(html.server),
+      closeServer(parallelProbe.server),
     ]);
   });
 
@@ -166,6 +245,38 @@ describe('discoverAuth', () => {
     expect(discovered.resourceMetadata).toBeUndefined();
     expect(discovered.serverMetadata).toBeUndefined();
   });
+
+  it('treats a non-JSON (HTML) response as "no OAuth published" instead of an error', async () => {
+    // A server that answers every well-known endpoint with an HTML page
+    // is not an OAuth server. This must be a clean miss (no throw, no
+    // probe failure recorded), not an "Unexpected token" error.
+    const discovered = await discoverAuth(new URL(html.mcpUrl));
+
+    expect(discovered.resourceMetadata).toBeUndefined();
+    expect(discovered.serverMetadata).toBeUndefined();
+  });
+
+  it('probes fallback candidates in parallel so a hung candidate does not delay discovery', async () => {
+    const prev = process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+    // Keep the per-fetch budget far above the test's time budget so the
+    // hung /hang candidate would block sequential discovery for minutes.
+    process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = '60000';
+    try {
+      const start = Date.now();
+      const discovered = await discoverAuth(new URL(parallelProbe.mcpUrl));
+
+      // The server-URL candidate (/hang) hangs; only the parallel
+      // origin-root candidate can answer, and it does so instantly.
+      expect(discovered.serverMetadata).toBeDefined();
+      expect(Date.now() - start).toBeLessThan(3000);
+    } finally {
+      if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+      else process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = prev;
+      // Force-close the hung /hang connections so the test process can
+      // exit (the pending fetches reject inside safeDiscoverAs).
+      parallelProbe.server.closeAllConnections();
+    }
+  });
 });
 
 describe('discoverAuth — timeout on hung well-known endpoint', () => {
@@ -193,8 +304,8 @@ describe('discoverAuth — timeout on hung well-known endpoint', () => {
       const start = Date.now();
       await expect(discoverAuth(new URL(hanging.mcpUrl))).rejects.toThrow();
       const elapsed = Date.now() - start;
-      // Each candidate probe times out at 150ms; with up to 4 probes
-      // (PRM path-aware + root, then AS at the URL + origin) the whole
+      // Each candidate probe times out at 150ms: the PRM probe, then the
+      // server-URL and origin-root AS candidates in parallel. The whole
       // flow must still finish in well under the 30s SDK default.
       expect(elapsed).toBeLessThan(5000);
     } finally {

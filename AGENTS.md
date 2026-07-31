@@ -198,6 +198,11 @@ Universal design principles this codebase follows:
   and interact through narrow interfaces.
 - **Make Invalid States Impossible** — use TypeScript strict mode and
   validation to prevent illegal combinations at compile time.
+- **Bounded Startup Latency** — network-bound startup phases (e.g.
+  downstream connects and OAuth metadata probes) MUST run concurrently,
+  never stacked sequentially, and each default timeout MUST stay well
+  below the host's startup budget (typically 30 s) so a hung downstream
+  dependency degrades fast instead of blocking initialization.
 - **Keep It Boring** — prefer well-understood patterns over clever or
   novel solutions.
 

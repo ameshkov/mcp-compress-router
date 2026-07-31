@@ -42,6 +42,15 @@ describe('timeout — env defaults', () => {
       expect(getAuthDiscoveryTimeoutMs()).toBe(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS);
     }
   });
+
+  it('keeps both defaults well under the 30 s host startup budget', () => {
+    // Most MCP hosts allow ~30 s for the router to initialize. Startup
+    // checks run in parallel (auth probes concurrently with connects),
+    // and a single timed-out downstream server costs at most one default
+    // timeout — so each default must stay far below the 30 s budget.
+    expect(DEFAULT_DOWNSTREAM_TIMEOUT_MS).toBeLessThan(30_000);
+    expect(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS).toBeLessThan(30_000);
+  });
 });
 
 describe('createTimeoutFetch', () => {

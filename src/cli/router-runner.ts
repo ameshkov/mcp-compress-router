@@ -173,12 +173,30 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
   const servers = await loadConfig(resolved);
   logger.info('Configuration loaded', { serverCount: servers.length });
 
-  await persistAuthRequirements(resolved, servers, logger);
-
+  // Refresh the cached OAuth auth requirements CONCURRENTLY with the
+  // downstream connects. Both phases are network-bound, so running them
+  // sequentially would stack their worst-case latencies; in parallel the
+  // startup time is bounded by the slower of the two — and each default
+  // timeout (see timeout.ts) stays well below the 30 s startup budget
+  // most MCP hosts allow, so even a hung server cannot blow it.
+  // `Promise.allSettled` avoids unhandled rejections when both phases
+  // fail; the connect failure is surfaced first because it is the one
+  // the host needs to act on.
   logger.info('Connecting to downstream servers', {
     servers: servers.map((s) => s.name),
   });
-  const { connections, discovered } = await connectAllServers(servers, resolved, logger);
+  const [authRefresh, connectResult] = await Promise.allSettled([
+    persistAuthRequirements(resolved, servers, logger),
+    connectAllServers(servers, resolved, logger),
+  ]);
+
+  if (connectResult.status === 'rejected') {
+    throw connectResult.reason;
+  }
+  if (authRefresh.status === 'rejected') {
+    throw authRefresh.reason;
+  }
+  const { connections, discovered } = connectResult.value;
   logger.info('Tools discovered', {
     servers: discovered.map((d) => ({
       name: d.name,

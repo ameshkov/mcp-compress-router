@@ -29,11 +29,28 @@ function createErroringServer(): Promise<{ server: http.Server; url: string }> {
   });
 }
 
+/** Creates a server that answers every request with an HTML page (e.g.
+ *  an SPA catch-all route), which is NOT an OAuth metadata endpoint. */
+function createHtmlServer(): Promise<{ server: http.Server; url: string }> {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<!doctype html><html><body>not an MCP server</body></html>');
+  });
+  return new Promise((resolve, reject) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, url: `http://localhost:${addr.port}` });
+    });
+    server.on('error', reject);
+  });
+}
+
 describe('probeAuthRequirement', () => {
   let authFixture: Awaited<ReturnType<typeof createAuthFixtureServer>>;
   let httpFixture: Awaited<ReturnType<typeof createHttpFixtureServer>>;
   let httpUrl: string;
   let erroring: { server: http.Server; url: string };
+  let html: { server: http.Server; url: string };
 
   beforeAll(async () => {
     authFixture = await createAuthFixtureServer();
@@ -41,6 +58,7 @@ describe('probeAuthRequirement', () => {
     const addr = httpFixture.server.address() as AddressInfo;
     httpUrl = `http://localhost:${addr.port}`;
     erroring = await createErroringServer();
+    html = await createHtmlServer();
   });
 
   afterAll(async () => {
@@ -48,6 +66,7 @@ describe('probeAuthRequirement', () => {
       closeServer(authFixture.server),
       closeServer(httpFixture.server),
       closeServer(erroring.server),
+      closeServer(html.server),
     ]);
   });
 
@@ -76,6 +95,17 @@ describe('probeAuthRequirement', () => {
       url: erroring.url,
     };
     expect(await probeAuthRequirement(server)).toBe('unknown');
+  });
+
+  it('returns "none" when the probe gets a non-JSON (HTML) response', async () => {
+    // An HTML page at the well-known endpoints means the server
+    // publishes no OAuth metadata — a clean miss, not a probe error.
+    const server: DownstreamServerConfig = {
+      name: 'html',
+      type: 'http',
+      url: html.url,
+    };
+    expect(await probeAuthRequirement(server)).toBe('none');
   });
 
   it('returns "none" for stdio servers without any network access', async () => {
