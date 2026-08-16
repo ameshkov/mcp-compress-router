@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.6.0] - 2026-08-16
+
 ### Changed
 
 - Each downstream HTTP server's Streamable HTTP transport now runs on
@@ -317,7 +319,8 @@ and this project adheres to
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.5.6...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v1.6.0...HEAD
+[v1.6.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.6.0
 [v1.5.6]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.6
 [v1.5.5]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.5
 [v1.5.4]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v1.5.4
