@@ -71,6 +71,7 @@ mcp-compress-router/
 │   │   ├── index.ts           # Barrel exports (public API)
 │   │   ├── config.ts          # Configuration loader
 │   │   ├── discovery.ts       # Downstream server discovery (single-server connect + tool listing)
+│   │   ├── dedicated-fetch.ts  # Dedicated per-server undici fetch (isolated connection pool)
 │   │   ├── catalog.ts         # Catalog Builder & Cache
 │   │   ├── server-connection.ts # Per-server client lifecycle (connect, reconnect, invoke, close)
 │   │   ├── invoke-with-recovery.ts # Self-recovery orchestration on invoke_tool

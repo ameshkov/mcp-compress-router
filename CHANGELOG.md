@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Each downstream HTTP server's Streamable HTTP transport now runs on
+  its own dedicated undici connection pool instead of the shared default
+  fetch pool. The OAuth metadata probes (and every other router request)
+  keep using the default pool, so a probe or another server can never
+  reuse a socket that belongs to a server's MCP session — a downstream
+  server or an intermediary proxy that treats one TCP connection as one
+  logical session never sees unrelated requests on the same connection.
+  `undici` is now a direct dependency.
+
 ## [v1.5.6] - 2026-08-01
 
 ### Changed

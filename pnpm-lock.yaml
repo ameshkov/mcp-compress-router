@@ -23,6 +23,9 @@ importers:
       picomatch:
         specifier: 4.0.5
         version: 4.0.5
+      undici:
+        specifier: 8.10.0
+        version: 8.10.0
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -1843,6 +1846,10 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
+  undici@8.10.0:
+    resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
+    engines: {node: '>=22.19.0'}
+
   unicorn-magic@0.4.0:
     resolution: {integrity: sha512-wH590V9VNgYH9g3lH9wWjTrUoKsjLF6sGLjhR4sH1LWpLmCOH0Zf7PukhDA8BiS7KHe4oPNkcTHqYkj7SOGUOw==}
     engines: {node: '>=20'}
@@ -3593,6 +3600,8 @@ snapshots:
   unbash@4.0.4: {}
 
   undici-types@8.3.0: {}
+
+  undici@8.10.0: {}
 
   unicorn-magic@0.4.0: {}
 

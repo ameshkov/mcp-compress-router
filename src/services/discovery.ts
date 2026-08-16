@@ -4,6 +4,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { getDownstreamTimeoutMs } from '../utils/index.js';
+import { createDedicatedFetch } from './dedicated-fetch.js';
 import type {
   DownstreamServerConfig,
   ToolDescriptor,
@@ -180,5 +181,8 @@ export function createTransport(
   return new StreamableHTTPClientTransport(new URL(server.url), {
     requestInit: Object.keys(requestInit).length > 0 ? requestInit : undefined,
     authProvider,
+    // Route all of this server's traffic through its own undici agent so
+    // it uses a private connection pool instead of the shared default one.
+    fetch: createDedicatedFetch(),
   });
 }

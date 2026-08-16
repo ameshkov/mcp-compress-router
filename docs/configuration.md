@@ -525,6 +525,14 @@ this budget is a per-request cap rather than a serialized startup cost.
 Must be a positive integer; invalid values fall back to the default of 5
 seconds.
 
+Each downstream HTTP server's MCP transport runs on its own dedicated
+undici connection pool instead of the shared default fetch pool. The
+OAuth metadata probes (and every other router request) use the default
+pool, so a probe or another server can never reuse a socket that belongs
+to a server's MCP session — a downstream server or an intermediary proxy
+that treats one TCP connection as one logical session never sees
+unrelated requests on the same connection.
+
 ```bash
 MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS=20000 \
   mcp-compress-router
