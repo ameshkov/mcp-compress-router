@@ -19,6 +19,7 @@ export { validateGlobPattern } from './validate-glob.js';
 export { expandEnvField } from './expand-env.js';
 export { Logger } from './logger.js';
 export { parseJsonc } from './parse-jsonc.js';
+export { atomicWriteFile } from './atomic-write.js';
 export { VALID_COMPRESSION_LEVELS, isCompressionLevel } from './compression-level.js';
 export {
   getDownstreamTimeoutMs,

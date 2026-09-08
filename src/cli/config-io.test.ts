@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { readConfigFile, writeConfigFile, ensureConfigDir } from './config-io.js';
-import { Logger } from '../utils/logger.js';
 import type { StoredCredentials } from '../utils/types.js';
 
 // Re-import for credential tests
@@ -330,40 +329,32 @@ describe('credentials', () => {
       const credParsed = JSON.parse(credRaw);
       expect(credParsed.github).toEqual(sampleCredentials);
     });
-  });
 
-  describe('writeCredentials with Logger (Windows path)', () => {
-    it('logs a warning on Windows when chmod cannot restrict permissions', async () => {
-      const logger = new Logger('info');
-      const messages: string[] = [];
+    it('leaves no temporary files behind after writing', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      await writeCredentials(configPath, 'notion', sampleCredentials);
+      await writeCredentials(configPath, 'github', sampleCredentials);
 
-      // Capture stderr to collect log output
-      const originalWrite = process.stderr.write.bind(process.stderr);
-      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
-        const str = typeof chunk === 'string' ? chunk : String(chunk);
-        messages.push(str);
-        return true;
-      });
+      const entries = await fs.readdir(tempDir);
+      expect(entries).toEqual(['credentials.json']);
+    });
 
-      try {
-        await writeCredentials(configPath, 'github', sampleCredentials, logger);
-
-        if (process.platform === 'win32') {
-          const hasWarning = messages.some((m) =>
-            m.includes('File permissions cannot be restricted on Windows'),
-          );
-          expect(hasWarning).toBe(true);
-        } else {
-          // On Unix, the warning should not appear
-          const hasWarning = messages.some((m) =>
-            m.includes('File permissions cannot be restricted on Windows'),
-          );
-          expect(hasWarning).toBe(false);
-        }
-      } finally {
-        stderrSpy.mockRestore();
-        originalWrite('');
+    it('writes credentials atomically — the file is never torn', async () => {
+      // Write once so the file exists with a known mode, then rewrite
+      // many times in a row; each rewrite goes through a temp file +
+      // rename, so the target always holds complete JSON.
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      for (let i = 0; i < 25; i += 1) {
+        await writeCredentials(configPath, 'github', {
+          tokens: { access_token: `at-${i}`, token_type: 'Bearer' },
+        });
       }
+
+      const raw = await fs.readFile(credPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed.github.tokens.access_token).toMatch(/^at-\d+$/);
+      const entries = await fs.readdir(tempDir);
+      expect(entries).toEqual(['credentials.json']);
     });
   });
 

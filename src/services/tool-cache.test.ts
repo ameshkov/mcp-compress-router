@@ -145,6 +145,14 @@ describe('saveToolCache + loadToolCache', () => {
     expect(Object.keys(raw)).toEqual(['figma']);
   });
 
+  it('leaves no temporary files behind after saving', async () => {
+    await saveToolCache(configPath, 'figma', sampleTools);
+    await saveToolCache(configPath, 'github', sampleTools);
+
+    const entries = await fs.readdir(tempDir);
+    expect(entries).toEqual(['tools-cache.json']);
+  });
+
   it('returns undefined when the server is not in the cache file', async () => {
     await saveToolCache(configPath, 'figma', sampleTools);
     const loaded = await loadToolCache(configPath, 'github');

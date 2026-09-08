@@ -15,9 +15,14 @@ and this project adheres to
   time) no longer prevents the router from starting. The cache is
   disposable and rebuilt on the next successful `tools/list`, so an
   unreadable file is now logged as a warning and treated as an empty
-  cache instead of aborting startup. Cache writes are also atomic now
-  (temp file + rename), so a reader can never observe a half-written
-  file in the first place.
+  cache instead of aborting startup.
+- `credentials.json`, `mcp.json`, and `tools-cache.json` are now written
+  atomically (temp file + rename), so a crash or concurrent router
+  processes can no longer tear or truncate them. Previously a
+  non-atomic write interrupted mid-flight could leave `credentials.json`
+  empty, silently destroying stored OAuth tokens. Credential rewrites
+  preserve the file mode; a new credentials file is created with
+  owner-only permissions (`0o600`) as before.
 
 ## [v1.6.0] - 2026-08-16
 

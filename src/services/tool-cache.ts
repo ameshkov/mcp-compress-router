@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { atomicWriteFile } from '../utils/index.js';
 import type { Logger, ToolDescriptor } from '../utils/index.js';
 
 /**
@@ -34,8 +35,9 @@ type ToolCacheStore = Record<string, CachedToolEntry>;
  * The queue only serializes writers within one process. Multiple router
  * instances (e.g. several coding-agent sessions spawning the router
  * simultaneously) still race on the same file, so `atomicWriteFile`
- * (temp-file + rename) guarantees readers never observe a torn file and
- * `readCacheStore` tolerates any file that ends up corrupted anyway.
+ * (temp-file + rename, see utils/atomic-write.ts) guarantees readers
+ * never observe a torn file and `readCacheStore` tolerates any file
+ * that ends up corrupted anyway.
  */
 const writeQueues = new Map<string, Promise<void>>();
 
@@ -118,28 +120,6 @@ async function readCacheStore(configPath: string, logger?: Logger): Promise<Tool
     return {};
   }
   return parsed as ToolCacheStore;
-}
-
-/**
- * Writes a file atomically: writes the content to a unique temporary
- * file in the same directory, then renames it over the target. Rename is
- * atomic on POSIX (and on modern Windows via `MoveFileEx`), so a reader
- * or a concurrent writer from another process can only ever observe the
- * old complete content or the new complete content — never a torn file.
- * The temporary file is removed when the write fails.
- *
- * @param filePath - Absolute path to the destination file.
- * @param content - The full content to write.
- */
-async function atomicWriteFile(filePath: string, content: string): Promise<void> {
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fs.writeFile(tempPath, content);
-    await fs.rename(tempPath, filePath);
-  } catch (err) {
-    await fs.unlink(tempPath).catch(() => {});
-    throw err;
-  }
 }
 
 /**

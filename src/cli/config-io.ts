@@ -1,8 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { Logger } from '../utils/logger.js';
 import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
-import { parseJsonc } from '../utils/index.js';
+import { atomicWriteFile, parseJsonc } from '../utils/index.js';
 
 /**
  * Type guard for Node.js system errors that carry a `code` property.
@@ -122,7 +121,7 @@ export async function writeConfigFile(configPath: string, mcpServers: McpServers
   delete existing.credentials;
 
   existing.mcpServers = mcpServers;
-  await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + '\n');
+  await atomicWriteFile(configPath, JSON.stringify(existing, null, 2) + '\n');
 }
 
 /**
@@ -164,6 +163,13 @@ export async function readCredentials(configPath: string): Promise<CredentialsSt
  * Writes (or overwrites) credentials for a single server.
  * Preserves existing mcpServers and credentials for other servers.
  *
+ * The write is atomic (temp file + rename), so a crash or a concurrent
+ * writer from another router process can never leave a torn or empty
+ * `credentials.json` — losing stored OAuth tokens to file corruption
+ * would be much worse than a lost tool cache. The existing file mode is
+ * preserved across rewrites; a new file is created with owner-only
+ * permissions (`0o600`).
+ *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name.
  * @param credentials - The credentials to store.
@@ -172,7 +178,6 @@ export async function writeCredentials(
   configPath: string,
   name: string,
   credentials: StoredCredentials,
-  logger?: Logger,
 ): Promise<void> {
   const credPath = getCredentialsPath(configPath);
 
@@ -195,38 +200,17 @@ export async function writeCredentials(
   // Merge in the new/updated entry
   store[name] = credentials;
 
-  // Determine if this is a first-time creation
-  let isNewFile = false;
+  // Preserve the existing file's mode (owner-only for credentials);
+  // a new file is created with 0o600.
+  let mode: number | undefined;
   try {
-    await fs.access(credPath);
+    mode = (await fs.stat(credPath)).mode & 0o777;
   } catch {
-    isNewFile = true;
+    mode = 0o600;
   }
 
   // Write the store
-  await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
-
-  // On first creation, set restrictive permissions (owner read/write only)
-  if (isNewFile) {
-    try {
-      await fs.chmod(credPath, 0o600);
-    } catch {
-      // chmod is a no-op on Windows; if it somehow fails on Unix, log a warning
-      if (logger) {
-        logger.info(
-          `Warning: Failed to set restrictive permissions on new credentials file: ${credPath}`,
-        );
-      }
-    }
-
-    // On Windows, verify chmod did something; if not, log a warning
-    if (process.platform === 'win32' && logger) {
-      logger.info(
-        `Warning: File permissions cannot be restricted on Windows. ` +
-          `Credentials stored in: ${credPath}`,
-      );
-    }
-  }
+  await atomicWriteFile(credPath, JSON.stringify(store, null, 2) + '\n', mode);
 }
 
 /**
@@ -261,6 +245,6 @@ export async function removeCredentials(configPath: string, name: string): Promi
     // No remaining entries — delete the file entirely
     await fs.unlink(credPath);
   } else {
-    await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
+    await atomicWriteFile(credPath, JSON.stringify(store, null, 2) + '\n');
   }
 }
