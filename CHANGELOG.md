@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `credentials.json` and `mcp.json` are now written atomically (temp
+  file + rename) instead of with a plain `fs.writeFile`. The router's
+  startup auth-probe (`persistAuthRequirements`) rewrites
+  `credentials.json` on every run, and with multiple router instances
+  (one per coding-agent session) or a kill mid-write, a non-atomic
+  write could truncate the file and silently destroy stored OAuth
+  tokens. Credential rewrites preserve the file mode; a new
+  credentials file is created with owner-only permissions (`0o600`) as
+  before.
+
 ## [v1.6.1] - 2026-09-08
 
 ### Fixed
