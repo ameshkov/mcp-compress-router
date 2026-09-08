@@ -118,7 +118,7 @@ export class ServerConnection {
       const tools = await this.doConnect();
       this._status = 'ok';
       this._lastError = undefined;
-      await saveToolCache(this.configPath, this.server.name, tools);
+      await saveToolCache(this.configPath, this.server.name, tools, this.logger);
       this.logger.info(`Connected to "${this.server.name}" — ${tools.length} tools discovered`, {
         server: this.server.name,
         toolCount: tools.length,
@@ -137,7 +137,7 @@ export class ServerConnection {
       // a fresh client on demand via reconnect().
       await this.closeClient();
 
-      const cachedTools = await loadToolCache(this.configPath, this.server.name);
+      const cachedTools = await loadToolCache(this.configPath, this.server.name, this.logger);
       if (cachedTools === undefined) {
         this.logger.error(`Failed to connect to server "${this.server.name}" (no cache)`, {
           server: this.server.name,
@@ -215,7 +215,7 @@ export class ServerConnection {
       const tools = await this.doConnect();
       this._status = 'ok';
       this._lastError = undefined;
-      await saveToolCache(this.configPath, this.server.name, tools);
+      await saveToolCache(this.configPath, this.server.name, tools, this.logger);
       this.logger.info(`Reconnected to "${this.server.name}" — ${tools.length} tools discovered`, {
         server: this.server.name,
         toolCount: tools.length,

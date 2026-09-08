@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolDescriptor } from '../utils/index.js';
+import type { Logger, ToolDescriptor } from '../utils/index.js';
 
 /**
  * Shape of a single server's cached tool entry in `tools-cache.json`.
@@ -30,6 +30,12 @@ type ToolCacheStore = Record<string, CachedToolEntry>;
  * back — so only the last writer's entry survives and the others are
  * silently lost. The queue keys by cache path (not config path) so a
  * single process-wide mutex guards each file.
+ *
+ * The queue only serializes writers within one process. Multiple router
+ * instances (e.g. several coding-agent sessions spawning the router
+ * simultaneously) still race on the same file, so `atomicWriteFile`
+ * (temp-file + rename) guarantees readers never observe a torn file and
+ * `readCacheStore` tolerates any file that ends up corrupted anyway.
  */
 const writeQueues = new Map<string, Promise<void>>();
 
@@ -77,13 +83,19 @@ function isNodeError(err: unknown): err is NodeJS.ErrnoException {
 
 /**
  * Reads the full tool cache store from disk. Returns an empty object
- * when the file does not exist.
+ * when the file does not exist or when its content is unusable
+ * (invalid JSON, an empty file, or a non-object value) — the cache is
+ * disposable and gets rebuilt on the next successful `listTools()`, so
+ * a file corrupted by a crash, a kill mid-write, or concurrent writers
+ * must not break startup. A warning is logged when a logger is provided.
  *
  * @param configPath - Absolute path to the mcp.json file.
- * @returns The tool cache store, or empty object if file is absent.
- * @throws If the file exists but contains invalid JSON.
+ * @param logger - Optional logger; corruption is logged as a warning.
+ * @returns The tool cache store, or empty object when the file is
+ *   missing or unusable.
+ * @throws If the file exists but cannot be read (e.g. permissions).
  */
-async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
+async function readCacheStore(configPath: string, logger?: Logger): Promise<ToolCacheStore> {
   const cachePath = getCachePath(configPath);
   let raw: string;
   try {
@@ -97,13 +109,37 @@ async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`Tool cache file contains invalid JSON: ${cachePath}`, { cause: err });
+  } catch {
+    logger?.warn(`Tool cache file contains invalid JSON, ignoring it: ${cachePath}`);
+    return {};
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`Tool cache file must contain a JSON object: ${cachePath}`);
+    logger?.warn(`Tool cache file does not contain a JSON object, ignoring it: ${cachePath}`);
+    return {};
   }
   return parsed as ToolCacheStore;
+}
+
+/**
+ * Writes a file atomically: writes the content to a unique temporary
+ * file in the same directory, then renames it over the target. Rename is
+ * atomic on POSIX (and on modern Windows via `MoveFileEx`), so a reader
+ * or a concurrent writer from another process can only ever observe the
+ * old complete content or the new complete content — never a torn file.
+ * The temporary file is removed when the write fails.
+ *
+ * @param filePath - Absolute path to the destination file.
+ * @param content - The full content to write.
+ */
+async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(tempPath, content);
+    await fs.rename(tempPath, filePath);
+  } catch (err) {
+    await fs.unlink(tempPath).catch(() => {});
+    throw err;
+  }
 }
 
 /**
@@ -116,38 +152,43 @@ async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
  * @param configPath - Absolute path to the mcp.json file.
  * @param serverName - The server whose tools to cache.
  * @param tools - The discovered tool descriptors.
+ * @param logger - Optional logger; a corrupt existing cache is logged.
  */
 export async function saveToolCache(
   configPath: string,
   serverName: string,
   tools: ToolDescriptor[],
+  logger?: Logger,
 ): Promise<void> {
   const cachePath = getCachePath(configPath);
   await serializeCacheWrite(cachePath, async () => {
-    const store = await readCacheStore(configPath);
+    const store = await readCacheStore(configPath, logger);
     store[serverName] = {
       tools,
       cachedAt: new Date().toISOString(),
     };
-    await fs.writeFile(cachePath, JSON.stringify(store, null, 2) + '\n');
+    await atomicWriteFile(cachePath, JSON.stringify(store, null, 2) + '\n');
   });
 }
 
 /**
  * Loads cached tools for a single server from disk. Returns `undefined`
  * when the file does not exist, the server is not in the cache, or the
- * server's entry has no tools array.
+ * server's entry has no tools array. A corrupt cache file is treated as
+ * "not cached" (with a logged warning) instead of throwing — the cache
+ * is disposable and rebuilt on the next successful connect.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param serverName - The server whose cached tools to load.
+ * @param logger - Optional logger; a corrupt cache file is logged.
  * @returns The cached tool descriptors, or `undefined` when not cached.
- * @throws If the cache file exists but contains invalid JSON.
  */
 export async function loadToolCache(
   configPath: string,
   serverName: string,
+  logger?: Logger,
 ): Promise<ToolDescriptor[] | undefined> {
-  const store = await readCacheStore(configPath);
+  const store = await readCacheStore(configPath, logger);
   const entry = store[serverName];
   if (!entry || !Array.isArray(entry.tools)) {
     return undefined;
@@ -178,7 +219,7 @@ export async function clearToolCache(configPath: string, serverName: string): Pr
     if (Object.keys(store).length === 0) {
       await fs.unlink(cachePath).catch(() => {});
     } else {
-      await fs.writeFile(cachePath, JSON.stringify(store, null, 2) + '\n');
+      await atomicWriteFile(cachePath, JSON.stringify(store, null, 2) + '\n');
     }
   });
 }

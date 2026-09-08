@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- A corrupted `tools-cache.json` (e.g. truncated by a crash, a kill
+  mid-write, or concurrent router processes writing the file at the same
+  time) no longer prevents the router from starting. The cache is
+  disposable and rebuilt on the next successful `tools/list`, so an
+  unreadable file is now logged as a warning and treated as an empty
+  cache instead of aborting startup. Cache writes are also atomic now
+  (temp file + rename), so a reader can never observe a half-written
+  file in the first place.
+
 ## [v1.6.0] - 2026-08-16
 
 ### Changed

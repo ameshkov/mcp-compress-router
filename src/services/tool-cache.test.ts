@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { saveToolCache, loadToolCache, clearToolCache } from './tool-cache.js';
+import { Logger } from '../utils/index.js';
 import type { ToolDescriptor } from '../utils/index.js';
 
 const sampleTools: ToolDescriptor[] = [
@@ -86,6 +87,62 @@ describe('saveToolCache + loadToolCache', () => {
   it('returns undefined when no cache file exists', async () => {
     const loaded = await loadToolCache(configPath, 'figma');
     expect(loaded).toBeUndefined();
+  });
+
+  it('treats an empty cache file as "not cached" instead of throwing', async () => {
+    // A cache file truncated to zero bytes (e.g. a previous write
+    // interrupted by a crash or a kill) must not break startup — the
+    // cache is disposable and gets rebuilt on the next successful connect.
+    const cachePath = path.join(tempDir, 'tools-cache.json');
+    await fs.writeFile(cachePath, '');
+
+    const loaded = await loadToolCache(configPath, 'figma');
+    expect(loaded).toBeUndefined();
+  });
+
+  it('treats a cache file with invalid JSON as "not cached" instead of throwing', async () => {
+    const cachePath = path.join(tempDir, 'tools-cache.json');
+    await fs.writeFile(cachePath, '{ "figma": { "tools": [ { "name": "truncated"');
+
+    const loaded = await loadToolCache(configPath, 'figma');
+    expect(loaded).toBeUndefined();
+  });
+
+  it('treats a cache file with a non-object value as "not cached" instead of throwing', async () => {
+    const cachePath = path.join(tempDir, 'tools-cache.json');
+    await fs.writeFile(cachePath, '[1, 2, 3]');
+
+    const loaded = await loadToolCache(configPath, 'figma');
+    expect(loaded).toBeUndefined();
+  });
+
+  it('logs a warning when a corrupt cache file is read', async () => {
+    const cachePath = path.join(tempDir, 'tools-cache.json');
+    await fs.writeFile(cachePath, 'corrupted {');
+    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    try {
+      await loadToolCache(configPath, 'figma', new Logger('info'));
+      const output = (writeSpy.mock.calls.map((c) => String(c[0])).join('') ?? '').trim();
+      expect(output).toContain('"level":"warn"');
+      expect(output).toContain('invalid JSON, ignoring it');
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('recovers a corrupt cache file on the next save', async () => {
+    const cachePath = path.join(tempDir, 'tools-cache.json');
+    await fs.writeFile(cachePath, 'not json at all');
+
+    await saveToolCache(configPath, 'figma', sampleTools);
+
+    const loaded = await loadToolCache(configPath, 'figma');
+    expect(loaded).toHaveLength(2);
+    expect(loaded![0].name).toBe('echo');
+    const raw = JSON.parse(await fs.readFile(cachePath, 'utf-8'));
+    expect(raw.figma).toBeDefined();
+    expect(Object.keys(raw)).toEqual(['figma']);
   });
 
   it('returns undefined when the server is not in the cache file', async () => {
