@@ -76,12 +76,39 @@ function isNodeError(err: unknown): err is NodeJS.ErrnoException {
 }
 
 /**
+ * Sanitizes a parsed cache store: keeps only entries that are plain
+ * objects carrying a `tools` array, and drops everything else. A cache
+ * file that is damaged in parts therefore degrades to the subset of
+ * still-valid entries instead of being rejected wholesale; a root that
+ * is not a plain object degrades to an empty store.
+ *
+ * @param parsed - The raw JSON.parse() result of the cache file.
+ * @returns A validated store containing only well-formed entries.
+ */
+function sanitizeStore(parsed: unknown): ToolCacheStore {
+  const store: ToolCacheStore = {};
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return store;
+  }
+  for (const [serverName, entry] of Object.entries(parsed)) {
+    const candidate = entry as CachedToolEntry | null;
+    if (candidate !== null && typeof candidate === 'object' && Array.isArray(candidate.tools)) {
+      store[serverName] = candidate;
+    }
+  }
+  return store;
+}
+
+/**
  * Reads the full tool cache store from disk. Returns an empty object
- * when the file does not exist.
+ * when the file does not exist. A corrupted cache file (invalid JSON,
+ * a non-object root, or entries without a `tools` array) never throws:
+ * it is treated as empty or partially empty so a damaged cache can
+ * never break the router. The next write simply rebuilds the file.
  *
  * @param configPath - Absolute path to the mcp.json file.
- * @returns The tool cache store, or empty object if file is absent.
- * @throws If the file exists but contains invalid JSON.
+ * @returns The tool cache store (possibly empty or partial).
+ * @throws Only on unexpected I/O errors (e.g. permission denied).
  */
 async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
   const cachePath = getCachePath(configPath);
@@ -94,16 +121,35 @@ async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
     }
     throw new Error(`Failed to read tool cache file: ${cachePath}`, { cause: err });
   }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    return sanitizeStore(JSON.parse(raw));
+  } catch {
+    // Invalid JSON: treat the whole cache as empty rather than throwing.
+    // loadToolCache reports "no cache" and saveToolCache rebuilds it.
+    return {};
+  }
+}
+
+/**
+ * Writes `data` to `cachePath` atomically: the content is first written
+ * to a unique temporary sibling file and then renamed over the target.
+ * Renaming within the same directory is atomic on POSIX, so a reader
+ * (or a crash mid-write) can never observe a truncated or half-written
+ * cache file — it sees either the previous complete file or the new
+ * complete file.
+ *
+ * @param cachePath - Target cache file path.
+ * @param data - Full file content to write.
+ */
+async function writeCacheFileAtomic(cachePath: string, data: string): Promise<void> {
+  const tempPath = `${cachePath}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  try {
+    await fs.writeFile(tempPath, data);
+    await fs.rename(tempPath, cachePath);
   } catch (err) {
-    throw new Error(`Tool cache file contains invalid JSON: ${cachePath}`, { cause: err });
+    await fs.unlink(tempPath).catch(() => {});
+    throw err;
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`Tool cache file must contain a JSON object: ${cachePath}`);
-  }
-  return parsed as ToolCacheStore;
 }
 
 /**
@@ -129,7 +175,7 @@ export async function saveToolCache(
       tools,
       cachedAt: new Date().toISOString(),
     };
-    await fs.writeFile(cachePath, JSON.stringify(store, null, 2) + '\n');
+    await writeCacheFileAtomic(cachePath, JSON.stringify(store, null, 2) + '\n');
   });
 }
 
@@ -140,8 +186,8 @@ export async function saveToolCache(
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param serverName - The server whose cached tools to load.
- * @returns The cached tool descriptors, or `undefined` when not cached.
- * @throws If the cache file exists but contains invalid JSON.
+ * @returns The cached tool descriptors, or `undefined` when not cached
+ *   (including when the cache file is missing or corrupted).
  */
 export async function loadToolCache(
   configPath: string,
@@ -178,7 +224,7 @@ export async function clearToolCache(configPath: string, serverName: string): Pr
     if (Object.keys(store).length === 0) {
       await fs.unlink(cachePath).catch(() => {});
     } else {
-      await fs.writeFile(cachePath, JSON.stringify(store, null, 2) + '\n');
+      await writeCacheFileAtomic(cachePath, JSON.stringify(store, null, 2) + '\n');
     }
   });
 }

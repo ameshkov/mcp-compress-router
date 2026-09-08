@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- The tool cache (`tools-cache.json`) is now written atomically: content
+  goes to a unique temporary sibling file first, then is renamed over
+  the target, so a crash mid-write or a concurrent reader can never
+  observe a truncated or half-written cache file.
+- A corrupted tool cache no longer breaks the router. Invalid JSON, a
+  non-object root, or entries without a `tools` array are treated as
+  absent (respectively, dropped) instead of throwing, so a damaged cache
+  degrades to fewer cached schemas and is rebuilt on the next write
+  instead of failing startup or a successful connection.
+
 ## [v1.6.0] - 2026-08-16
 
 ### Changed

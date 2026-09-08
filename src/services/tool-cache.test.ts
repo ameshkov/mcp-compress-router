@@ -172,3 +172,85 @@ describe('clearToolCache', () => {
     expect(figma).toHaveLength(2);
   });
 });
+
+describe('broken cache resilience', () => {
+  let tempDir: string;
+  let configPath: string;
+  let cachePath: string;
+
+  beforeEach(async () => {
+    tempDir = path.join(tmpdir(), `mcp-cache-broken-${Date.now()}-${Math.random()}`);
+    await fs.mkdir(tempDir, { recursive: true });
+    configPath = path.join(tempDir, 'mcp.json');
+    cachePath = path.join(tempDir, 'tools-cache.json');
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('loads as "no cache" (undefined) when the file contains invalid JSON', async () => {
+    await fs.writeFile(cachePath, '{ this is not json', 'utf-8');
+
+    await expect(loadToolCache(configPath, 'figma')).resolves.toBeUndefined();
+  });
+
+  it('does not break a subsequent save after invalid JSON (self-heals)', async () => {
+    await fs.writeFile(cachePath, '{ not json at all', 'utf-8');
+
+    await saveToolCache(configPath, 'figma', sampleTools);
+
+    const loaded = await loadToolCache(configPath, 'figma');
+    expect(loaded).toHaveLength(2);
+    const raw = JSON.parse(await fs.readFile(cachePath, 'utf-8'));
+    expect(raw.figma.tools).toHaveLength(2);
+  });
+
+  it('treats a non-object cache root as empty', async () => {
+    // Roots like an array, a string, or a number are not valid stores.
+    for (const broken of ['[1, 2, 3]', '"hello"', '42', 'null']) {
+      await fs.writeFile(cachePath, broken, 'utf-8');
+      await expect(loadToolCache(configPath, 'figma')).resolves.toBeUndefined();
+    }
+  });
+
+  it('keeps valid entries and drops broken ones', async () => {
+    const valid = {
+      tools: [{ name: 'good_tool', inputSchema: { type: 'object' } }],
+      cachedAt: '2026-08-01T00:00:00.000Z',
+    };
+    const noToolsArray = { description: 'entry missing the tools array' };
+    const toolsNotArray = { tools: 'not-an-array', cachedAt: '2026-08-01T00:00:00.000Z' };
+    await fs.writeFile(
+      cachePath,
+      JSON.stringify({ good: valid, broken1: noToolsArray, broken2: toolsNotArray }),
+      'utf-8',
+    );
+
+    // Damaged entries are treated as absent, valid ones are preserved.
+    const good = await loadToolCache(configPath, 'good');
+    expect(good).toHaveLength(1);
+    expect(good![0].name).toBe('good_tool');
+    await expect(loadToolCache(configPath, 'broken1')).resolves.toBeUndefined();
+    await expect(loadToolCache(configPath, 'broken2')).resolves.toBeUndefined();
+
+    // A save preserves the still-valid entry and drops the broken ones.
+    await saveToolCache(configPath, 'new', [{ name: 'new_tool', inputSchema: { type: 'object' } }]);
+    const raw = JSON.parse(await fs.readFile(cachePath, 'utf-8'));
+    expect(Object.keys(raw).sort()).toEqual(['good', 'new']);
+  });
+
+  it('leaves no temporary files behind after atomic writes', async () => {
+    const serverNames = Array.from({ length: 8 }, (_, i) => `srv-${i}`);
+    await Promise.all(
+      serverNames.map((name) =>
+        saveToolCache(configPath, name, [
+          { name: `tool-${name}`, inputSchema: { type: 'object' } },
+        ]),
+      ),
+    );
+
+    const leftovers = (await fs.readdir(tempDir)).filter((name) => name.includes('.tmp-'));
+    expect(leftovers).toEqual([]);
+  });
+});
