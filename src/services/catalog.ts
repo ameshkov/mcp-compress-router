@@ -126,6 +126,31 @@ export function updateServerInCatalog(
 }
 
 /**
+ * Replaces the contents of a live catalog with a freshly-built one
+ * (mutates the same object in place).
+ *
+ * Used by the entry point to publish discovered servers into the catalog
+ * that tool handlers hold by reference: the router starts serving the
+ * host immediately with an empty catalog, then swaps the final contents
+ * in once discovery completes — without re-registering tool handlers.
+ *
+ * @param catalog - The catalog to fill (kept by reference by handlers).
+ * @param built - The catalog whose contents replace `catalog`'s.
+ */
+export function replaceCatalogContents(catalog: ToolCatalog, built: ToolCatalog): void {
+  catalog.servers.length = 0;
+  catalog.servers.push(...built.servers);
+  catalog.toolMap.clear();
+  for (const [key, value] of built.toolMap) {
+    catalog.toolMap.set(key, value);
+  }
+  catalog.filteredToolNames.clear();
+  for (const key of built.filteredToolNames) {
+    catalog.filteredToolNames.add(key);
+  }
+}
+
+/**
  * Looks up tool schemas in the catalog by server and tool names.
  *
  * @param catalog - The tool catalog.

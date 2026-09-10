@@ -310,6 +310,20 @@ describe('credentials', () => {
       }
     });
 
+    it('replaces the file atomically and leaves no temporary files behind', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+      await writeCredentials(configPath, 'github', {
+        tokens: { access_token: 'at-2', token_type: 'Bearer' },
+      });
+
+      // No temporary sibling survives the atomic rename, and the target
+      // contains the complete replacement (valid JSON, new token).
+      const entries = await fs.readdir(tempDir);
+      expect(entries.filter((entry) => entry.includes('.tmp-'))).toEqual([]);
+      const parsed = JSON.parse(await fs.readFile(credPath, 'utf-8'));
+      expect(parsed.github.tokens.access_token).toBe('at-2');
+    });
+
     it('does not write credentials to mcp.json', async () => {
       // Create mcp.json first with some servers
       await fs.writeFile(

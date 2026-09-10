@@ -204,7 +204,7 @@ describe('MCP Compress Router E2E — OAuth', () => {
     // authorize URL redirects, delivering the authorization code back to the
     // login command's local callback server.
     const result = await runCliAsync(['login', 'authsrv', '--config', configPath], {
-      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node "${browserMockPath}"` },
       timeout: 20000,
     });
 
@@ -237,7 +237,7 @@ describe('MCP Compress Router E2E — OAuth', () => {
     const result = await runCliAsync(
       ['login', 'authsrv', '--port', String(port), '--config', configPath],
       {
-        extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+        extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node "${browserMockPath}"` },
         timeout: 20000,
       },
     );
@@ -267,7 +267,7 @@ describe('MCP Compress Router E2E — OAuth', () => {
     );
 
     const result = await runCliAsync(['login', 'authsrv', '--config', configPath], {
-      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node ${browserMockPath}` },
+      extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node "${browserMockPath}"` },
       timeout: 20000,
     });
 

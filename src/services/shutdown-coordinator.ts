@@ -35,6 +35,10 @@ export class ShutdownCoordinator {
   private readonly shutdownPromise = new Promise<void>((resolve) => {
     this.resolveShutdown = resolve;
   });
+  private resolveShutdownStarted!: () => void;
+  private readonly shutdownStartedPromise = new Promise<void>((resolve) => {
+    this.resolveShutdownStarted = resolve;
+  });
   private triggered = false;
 
   /**
@@ -71,6 +75,16 @@ export class ShutdownCoordinator {
   }
 
   /**
+   * Resolves as soon as shutdown is triggered, BEFORE cleanup hooks run.
+   * Lets long-running phases (downstream connects, pending MCP requests)
+   * abort promptly the moment the host disconnects, instead of waiting
+   * for the full cleanup window.
+   */
+  whenShutdownStarted(): Promise<void> {
+    return this.shutdownStartedPromise;
+  }
+
+  /**
    * Triggers shutdown: runs every registered hook (each racing the shared
    * cleanup timeout), never rejecting. Safe to call repeatedly — only the
    * first call runs the hooks; later calls return the same promise.
@@ -84,6 +98,7 @@ export class ShutdownCoordinator {
       return this.shutdownPromise;
     }
     this.triggered = true;
+    this.resolveShutdownStarted();
     this.logger.info('Shutdown triggered', { reason });
     void this.runCleanups(reason).finally(() => this.resolveShutdown());
     return this.shutdownPromise;

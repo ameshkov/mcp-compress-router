@@ -49,83 +49,39 @@ coding session with 3 MCP servers.
 
 ## Project Structure
 
+The repo is organized as a small set of modules, each owning one concern:
+
 ```text
 mcp-compress-router/
-├── src/                      # Application source code
-│   ├── index.ts              # MCP server entry point (stdio transport) + CLI dispatch
-│   ├── cli/                   # Management CLI subcommands
-│   │   ├── index.ts           # Barrel exports (public API)
-│   │   ├── config-io.ts       # Raw mcp.json read/write with first-use creation
-│   │   ├── add-command.ts     # add subcommand handler
-│   │   ├── disable-command.ts # disable subcommand handler
-│   │   ├── enable-command.ts # enable subcommand handler
-│   │   ├── remove-command.ts  # remove subcommand handler
-│   │   ├── get-command.ts     # get subcommand handler
-│   │   ├── list-command.ts    # list subcommand handler
-│   │   ├── tools-command.ts   # tools subcommand handler (live inspection)
-│   │   ├── login-command.ts   # login subcommand handler (OAuth flow)
-│   │   ├── logout-command.ts  # logout subcommand handler (clear credentials)
-│   │   ├── register-commands.ts # Wires all CLI subcommands onto a commander program
-│   │   └── router-runner.ts   # Router startup: connect servers, build catalog, serve, and shut down
-│   ├── services/             # Core business logic
-│   │   ├── index.ts           # Barrel exports (public API)
-│   │   ├── config.ts          # Configuration loader
-│   │   ├── discovery.ts       # Downstream server discovery (single-server connect + tool listing)
-│   │   ├── dedicated-fetch.ts  # Dedicated per-server undici fetch (isolated connection pool)
-│   │   ├── catalog.ts         # Catalog Builder & Cache
-│   │   ├── server-connection.ts # Per-server client lifecycle (connect, reconnect, invoke, close)
-│   │   ├── invoke-with-recovery.ts # Self-recovery orchestration on invoke_tool
-│   │   ├── guided-error.ts    # Detailed guided error message builder
-│   │   ├── auth-errors.ts     # GuidedAuthError tagged error class
-│   │   ├── tool-cache.ts      # Disk cache for tool schemas (tools-cache.json)
-│   │   ├── oauth.ts           # OAuth credential storage (credentials.json) + proactive refresh & invalidation
-│   │   ├── auth-status.ts     # OAuth requirement probe & auth-status lookup
-│   │   ├── oauth-discovery.ts # Spec-compliant two-step OAuth discovery (PRM -> AS)
-│   │   ├── shutdown-coordinator.ts # Graceful shutdown orchestration (run cleanup hooks once)
-│   │   └── shutdown-triggers.ts # Signal & stdin-EOF triggers that start a shutdown
-│   ├── utils/                 # Shared utilities
-│   │   ├── index.ts           # Barrel exports (public API)
-│   │   ├── expand-env.ts      # ${VAR} / ${VAR:-default} expansion
-│   │   ├── argument-names.ts  # Argument Name Extractor (inputSchema.properties keys)
-│   │   ├── description-truncator.ts # Description Truncator (medium-level first-sentence snippet)
-│   │   ├── compression-level.ts # CompressionLevel valid set + type guard
-│   │   ├── parse-jsonc.ts     # JSONC parser wrapper (comments + trailing commas)
-│   │   ├── text-format.ts     # Compact catalog text renderer
-│   │   ├── tool-filter.ts     # Tool Filter (allow/deny glob matching)
-│   │   ├── types.ts           # Shared type definitions
-│   │   ├── validate-arguments.ts # JSON Schema argument validation
-│   │   ├── validate-glob.ts   # Glob pattern validator
-│   │   ├── timeout.ts         # Downstream/discovery timeout budgets + timeout fetch
-│   │   ├── logger.ts          # Level-aware structured logger
-│   │   └── open-browser.ts    # Platform-safe browser opener using spawn()
-│   └── tools/                 # Router tool handlers
-│       ├── index.ts           # Barrel exports (public API)
-│       ├── get-tool-schema.ts
-│       └── invoke-tool.ts
-├── test/                     # Shared test infrastructure
-│   ├── fixture-server.ts     # Reusable fixture stdio downstream MCP server
-│   ├── fixture-http-server.ts # Reusable fixture HTTP downstream MCP server
-│   └── e2e/                  # End-to-end tests
-│       ├── helpers.ts         # Shared E2E utilities (fixture paths, spawn)
-│       └── client.ts          # JSON-RPC test client over stdio
-├── docs/                     # Documentation and assets
-│   ├── configuration.md      # Full configuration & env var reference
-│   └── assets/               # Example JSON payloads
-├── DEVELOPMENT.md            # Local setup & manual testing guide
-├── .env                      # Local environment (gitignored)
-├── .env.example              # Environment variable template (committed)
-├── .github/                  # GitHub Actions workflows
-│   └── workflows/
-        └── ci.yml            # Quality gate + npm publish on version tags
-├── oxlint.config.ts         # oxlint category-based config
-├── knip.config.ts            # Knip unused-export analysis config
-├── mcp.example.jsonc         # Example JSONC config template (committed)
-├── tsconfig.json             # TypeScript solution config (references app + test)
-├── tsconfig.app.json         # TypeScript configuration (production build)
-├── tsconfig.test.json        # TypeScript configuration (tests, noEmit)
-├── vitest.config.ts          # Vitest configuration
-└── package.json              # Project dependencies and scripts
+├── src/                  # Application source code
+│   ├── index.ts          # Entry point: stdio transport + CLI dispatch
+│   ├── cli/              # Management CLI module: config I/O, subcommands
+│   │                     #   (add/remove, enable/disable, get/list, tools,
+│   │                     #   login/logout), router startup orchestration
+│   ├── services/         # Core business logic module: config loading,
+│   │                     #   downstream discovery and connection lifecycle,
+│   │                     #   catalog, invoke recovery, OAuth, shutdown
+│   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
+│   └── utils/            # Shared utility module: parsing, validation,
+│                         #   filtering, formatting, timeouts, logging
+├── test/                 # Test support: reusable fixture downstream MCP
+│                         #   servers (stdio, HTTP, auth) and browser mock
+│   └── e2e/              # End-to-end tests against the compiled router
+├── docs/                 # Configuration reference and example payloads
+├── DEVELOPMENT.md        # Local setup and manual testing guide
+├── mcp.example.jsonc     # Example JSONC config template (committed)
+├── .env.example          # Environment variable template (committed)
+├── .github/workflows/    # CI quality gate and npm publish on version tags
+└── package.json          # Dependencies and scripts
 ```
+
+Root-level build and tooling configuration (`tsconfig.*.json`,
+`oxlint.config.ts`, `knip.config.ts`, `vitest.config.ts`, Prettier and
+Markdownlint settings) is intentionally left out of the tree.
+
+Every source directory exposes its public API through an `index.ts`
+barrel, and unit tests are co-located with the modules they cover (see
+[Testing](#testing)).
 
 ## Build and Test Commands
 
@@ -203,7 +159,20 @@ Universal design principles this codebase follows:
   downstream connects and OAuth metadata probes) MUST run concurrently,
   never stacked sequentially, and each default timeout MUST stay well
   below the host's startup budget (typically 30 s) so a hung downstream
-  dependency degrades fast instead of blocking initialization.
+  dependency degrades fast instead of blocking initialization. Every
+  await in the connect phase MUST be bounded, including the ones the
+  SDK leaves unbounded: the stdio child-process spawn, the HTTP SSE
+  session GET, and the OAuth metadata/token handshakes (bounded at the
+  response-header phase only — long-lived SSE bodies and long-running
+  tool-call POSTs must NOT be capped).
+- **Host first, downstream second** — the router MUST answer the host's
+  `initialize` before any downstream has connected, and MUST install its
+  shutdown triggers (stdin EOF / signals) and connection-cleanup hook
+  before spawning ANY downstream child. A host disconnect mid-connect
+  must terminate the in-flight children rather than orphan them;
+  `tools/list` and tool calls wait for discovery (bounded by the
+  per-server connect timeouts, aborted on shutdown) so the compact
+  catalog always reflects the final discovery state.
 - **Keep It Boring** — prefer well-understood patterns over clever or
   novel solutions.
 

@@ -176,56 +176,117 @@ export async function writeCredentials(
 ): Promise<void> {
   const credPath = getCredentialsPath(configPath);
 
-  // Read existing store (or start fresh)
-  let store: CredentialsStore = {};
+  const store = (await readCredentialsStore(credPath, 'writing')) ?? {};
+  store[name] = credentials;
+
+  const { isNewFile, mode } = await resolveCredentialsMode(credPath);
+
+  // Write atomically (unique temporary sibling + rename): a crash or
+  // forced exit can never leave credentials.json truncated, and
+  // readCredentials treats invalid JSON as a hard startup error.
+  await writeCredentialsFileAtomic(credPath, JSON.stringify(store, null, 2) + '\n', mode);
+
+  // On first creation, set restrictive permissions (owner read/write only)
+  if (isNewFile) {
+    await restrictNewCredentialsFile(credPath, logger);
+  }
+}
+
+/**
+ * Reads the credentials store for a read-modify-write update. A missing
+ * file yields `undefined`; any other failure (unreadable file or invalid
+ * JSON) is fatal so a damaged store is never silently overwritten.
+ *
+ * @param credPath - Absolute path to credentials.json.
+ * @param action - Action named in the error message.
+ * @returns The stored credentials, or undefined when no file exists.
+ */
+async function readCredentialsStore(
+  credPath: string,
+  action: 'writing' | 'removal',
+): Promise<CredentialsStore | undefined> {
   try {
     const raw = await fs.readFile(credPath, 'utf-8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (typeof parsed === 'object' && parsed !== null) {
-      store = parsed as CredentialsStore;
+      return parsed as CredentialsStore;
     }
+    return {};
   } catch (err) {
     if (isNodeError(err) && err.code === 'ENOENT') {
-      // File does not exist — will be created below
-    } else {
-      throw new Error(`Failed to read credentials file for writing: ${credPath}`, { cause: err });
+      return undefined;
     }
+    throw new Error(`Failed to read credentials file for ${action}: ${credPath}`, { cause: err });
   }
+}
 
-  // Merge in the new/updated entry
-  store[name] = credentials;
-
-  // Determine if this is a first-time creation
-  let isNewFile = false;
+/**
+ * Resolves the permissions to use when replacing the credentials file:
+ * an existing file keeps its mode, a new file is created owner-only.
+ *
+ * @param credPath - Absolute path to credentials.json.
+ * @returns Whether the file is new, and the mode to apply.
+ */
+async function resolveCredentialsMode(
+  credPath: string,
+): Promise<{ isNewFile: boolean; mode: number }> {
   try {
-    await fs.access(credPath);
+    const stat = await fs.stat(credPath);
+    return { isNewFile: false, mode: stat.mode & 0o777 };
   } catch {
-    isNewFile = true;
+    return { isNewFile: true, mode: 0o600 };
   }
+}
 
-  // Write the store
-  await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
+/**
+ * Writes `data` atomically: the content goes to a unique temporary
+ * sibling file first, then is renamed over the target, so a crash or a
+ * forced exit can never leave a truncated credentials file behind.
+ *
+ * @param credPath - Target credentials file path.
+ * @param data - Full file content to write.
+ * @param mode - Permissions to create the replacement file with.
+ */
+async function writeCredentialsFileAtomic(
+  credPath: string,
+  data: string,
+  mode: number,
+): Promise<void> {
+  const tempPath = `${credPath}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  try {
+    await fs.writeFile(tempPath, data, { mode });
+    await fs.rename(tempPath, credPath);
+  } catch (err) {
+    await fs.unlink(tempPath).catch(() => {});
+    throw err;
+  }
+}
 
-  // On first creation, set restrictive permissions (owner read/write only)
-  if (isNewFile) {
-    try {
-      await fs.chmod(credPath, 0o600);
-    } catch {
-      // chmod is a no-op on Windows; if it somehow fails on Unix, log a warning
-      if (logger) {
-        logger.info(
-          `Warning: Failed to set restrictive permissions on new credentials file: ${credPath}`,
-        );
-      }
-    }
-
-    // On Windows, verify chmod did something; if not, log a warning
-    if (process.platform === 'win32' && logger) {
+/**
+ * Restricts a freshly created credentials file to owner read/write and
+ * warns when the platform cannot enforce it.
+ *
+ * @param credPath - Absolute path to credentials.json.
+ * @param logger - Optional logger for permission warnings.
+ */
+async function restrictNewCredentialsFile(credPath: string, logger?: Logger): Promise<void> {
+  try {
+    await fs.chmod(credPath, 0o600);
+  } catch {
+    // chmod is a no-op on Windows; if it somehow fails on Unix, log a warning
+    if (logger) {
       logger.info(
-        `Warning: File permissions cannot be restricted on Windows. ` +
-          `Credentials stored in: ${credPath}`,
+        `Warning: Failed to set restrictive permissions on new credentials file: ${credPath}`,
       );
     }
+  }
+
+  // On Windows, verify chmod did something; if not, log a warning
+  if (process.platform === 'win32' && logger) {
+    logger.info(
+      `Warning: File permissions cannot be restricted on Windows. ` +
+        `Credentials stored in: ${credPath}`,
+    );
   }
 }
 
@@ -240,19 +301,10 @@ export async function writeCredentials(
 export async function removeCredentials(configPath: string, name: string): Promise<void> {
   const credPath = getCredentialsPath(configPath);
 
-  let store: CredentialsStore = {};
-  try {
-    const raw = await fs.readFile(credPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed === 'object' && parsed !== null) {
-      store = parsed as CredentialsStore;
-    }
-  } catch (err) {
-    if (isNodeError(err) && err.code === 'ENOENT') {
-      // File does not exist — nothing to remove
-      return;
-    }
-    throw new Error(`Failed to read credentials file for removal: ${credPath}`, { cause: err });
+  const store = await readCredentialsStore(credPath, 'removal');
+  if (store === undefined) {
+    // File does not exist — nothing to remove
+    return;
   }
 
   delete store[name];
@@ -261,6 +313,7 @@ export async function removeCredentials(configPath: string, name: string): Promi
     // No remaining entries — delete the file entirely
     await fs.unlink(credPath);
   } else {
-    await fs.writeFile(credPath, JSON.stringify(store, null, 2) + '\n');
+    const { mode } = await resolveCredentialsMode(credPath);
+    await writeCredentialsFileAtomic(credPath, JSON.stringify(store, null, 2) + '\n', mode);
   }
 }

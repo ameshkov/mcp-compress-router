@@ -21,6 +21,23 @@ describe('ShutdownCoordinator — shutdown()', () => {
     expect(b).toHaveBeenCalledTimes(1);
   });
 
+  it('whenShutdownStarted() resolves as soon as shutdown is triggered', async () => {
+    const coordinator = new ShutdownCoordinator(silentLogger());
+    let hookRan = false;
+    coordinator.register(async () => {
+      hookRan = true;
+    });
+
+    let started = false;
+    void coordinator.whenShutdownStarted().then(() => {
+      started = true;
+    });
+
+    await coordinator.shutdown('test');
+    expect(started).toBe(true);
+    expect(hookRan).toBe(true);
+  });
+
   it('whenShutdown() resolves only after shutdown completes', async () => {
     const coordinator = new ShutdownCoordinator(silentLogger());
     let cleanedUp = false;

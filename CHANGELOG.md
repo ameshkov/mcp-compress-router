@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Shutdown triggers (stdin EOF / signals) and the connection cleanup
+  hook are now installed before any downstream child is spawned, so a
+  host disconnect during startup tears down in-flight children instead
+  of orphaning them.
+- `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` now also bounds the stdio
+  spawn, the HTTP SSE session GET, and the OAuth metadata/token
+  handshakes — including the metadata/token response bodies, so a server
+  that sends headers and then stalls its body cannot hold up startup.
+  Long-running tool calls and SSE bodies are unaffected.
+- HTTP connect timeouts now surface a descriptive error naming the
+  budget ("Timed out after Xms waiting for response headers/the response
+  body...") instead of undici's bare `AbortError`.
+- `credentials.json` is now written atomically (temporary sibling file +
+  rename), so a forced exit during the connect phase can no longer
+  truncate the file and break every subsequent startup.
+- The router answers the host's `initialize` immediately; only
+  `tools/list` and tool calls wait for discovery, so a slow downstream no
+  longer stalls the session handshake.
+- `MCP_COMPRESS_ROUTER_BROWSER` overrides now honor quoted arguments, so
+  paths with spaces are passed through intact.
+
+### Changed
+
+- Router `tools/list` entries now expose proper JSON Schemas
+  (`z.toJSONSchema`) instead of raw Zod serialization, and the
+  `get_tool_schema` catalog is rebuilt per request to reflect reconnects
+  and live status.
+- The `AGENTS.md` Project Structure section is now a module-level map
+  instead of a file-by-file inventory.
+
 ## [v1.6.1] - 2026-09-08
 
 ### Fixed

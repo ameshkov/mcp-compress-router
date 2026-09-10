@@ -1,4 +1,4 @@
-export { buildCatalog, lookupTools } from './catalog.js';
+export { buildCatalog, lookupTools, replaceCatalogContents } from './catalog.js';
 export { resolveConfigDir, resolveConfigPath, loadConfig } from './config.js';
 export { discoverSingleServer } from './discovery.js';
 export { ServerConnection } from './server-connection.js';

@@ -1,13 +1,49 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 
 /**
+ * Splits a command line into executable + arguments, honoring shell-style
+ * quoting so paths with spaces work. Supports single and double quotes;
+ * no escape sequences (environment overrides never need them).
+ *
+ * @param input - The command line to split.
+ * @returns The program and its pre-set arguments.
+ */
+function splitCommandLine(input: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | undefined;
+  for (const char of input) {
+    if (quote !== undefined) {
+      if (char === quote) {
+        quote = undefined;
+      } else {
+        current += char;
+      }
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ' ' || char === '\t') {
+      if (current.length > 0) {
+        parts.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current.length > 0) {
+    parts.push(current);
+  }
+  return parts;
+}
+
+/**
  * Opens a URL in the default browser using the platform-native command.
  *
  * The browser command can be overridden with the
  * `MCP_COMPRESS_ROUTER_BROWSER` environment variable. Set it to the
  * executable plus any preset arguments (e.g.
- * `node /path/to/headless-browser.js --flag`); the URL is always appended
- * as a single, final argument. No shell is used, so there is no
+ * `node "/path/with spaces/headless-browser.js" --flag`); the URL is always
+ * appended as a single, final argument. No shell is used, so there is no
  * shell-injection risk — this also makes the override safe to drive OAuth
  * flows in headless and CI environments.
  *
@@ -16,7 +52,7 @@ import { spawn, type SpawnOptions } from 'node:child_process';
 export async function openBrowser(url: string): Promise<void> {
   const customBrowser = process.env.MCP_COMPRESS_ROUTER_BROWSER;
   if (customBrowser && customBrowser.trim().length > 0) {
-    const [command, ...presetArgs] = customBrowser.trim().split(/\s+/);
+    const [command, ...presetArgs] = splitCommandLine(customBrowser.trim());
     return spawnBrowser(command, [...presetArgs, url]);
   }
 

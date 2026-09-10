@@ -1,10 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { getDownstreamTimeoutMs } from '../utils/index.js';
-import { createDedicatedFetch } from './dedicated-fetch.js';
+import { createDedicatedFetch, createConnectTimeoutFetch } from './dedicated-fetch.js';
 import type {
   DownstreamServerConfig,
   ToolDescriptor,
@@ -14,6 +15,49 @@ import type {
 
 /** JSON-RPC error code for "Method not found". */
 const METHOD_NOT_FOUND = -32601;
+
+/**
+ * A {@link StdioClientTransport} whose `start()` (the child-process spawn
+ * wait inside `client.connect()`) is bounded by a timeout. The SDK's own
+ * transport resolves `start()` only on the process `'spawn'` event, so a
+ * spawn that never completes — e.g. an executable on a stalled filesystem —
+ * would stall the connect phase forever with no timeout of any kind.
+ *
+ * On timeout the child is force-closed (graduated kill) and the attempt
+ * is rejected, so the router degrades or fails fast instead of hanging.
+ */
+class TimeoutStdioClientTransport extends StdioClientTransport {
+  constructor(
+    params: StdioServerParameters,
+    private readonly spawnTimeoutMs: number,
+  ) {
+    super(params);
+  }
+
+  override async start(): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const spawnTimeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new Error(
+            `Timed out after ${this.spawnTimeoutMs}ms waiting for the stdio server process to start.`,
+          ),
+        );
+      }, this.spawnTimeoutMs);
+      timer.unref?.();
+    });
+    try {
+      await Promise.race([super.start(), spawnTimeout]);
+    } catch (err) {
+      await this.close().catch(() => {});
+      throw err;
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
+}
 
 /**
  * Returns true when an error is a JSON-RPC "Method not found" response,
@@ -162,11 +206,14 @@ export function createTransport(
     if (!server.command) {
       throw new Error(`Server "${server.name}" (stdio) is missing command`);
     }
-    return new StdioClientTransport({
-      command: server.command,
-      args: server.args,
-      env: server.env,
-    });
+    return new TimeoutStdioClientTransport(
+      {
+        command: server.command,
+        args: server.args,
+        env: server.env,
+      },
+      getDownstreamTimeoutMs(),
+    );
   }
 
   // http or streamable-http
@@ -182,7 +229,10 @@ export function createTransport(
     requestInit: Object.keys(requestInit).length > 0 ? requestInit : undefined,
     authProvider,
     // Route all of this server's traffic through its own undici agent so
-    // it uses a private connection pool instead of the shared default one.
-    fetch: createDedicatedFetch(),
+    // it uses a private connection pool instead of the shared default one,
+    // and bound the connect/auth handshakes (SSE session GET, OAuth
+    // metadata + token flows) so a silent server cannot stall startup —
+    // runtime message POSTs are deliberately left unbounded.
+    fetch: createConnectTimeoutFetch(createDedicatedFetch(), getDownstreamTimeoutMs()),
   });
 }

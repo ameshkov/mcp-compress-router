@@ -84,6 +84,21 @@ describe('openBrowser', () => {
     ]);
   });
 
+  it('supports quoted paths with spaces in the MCP_COMPRESS_ROUTER_BROWSER override', async () => {
+    process.env.MCP_COMPRESS_ROUTER_BROWSER = 'node "/path with spaces/mock.js" --headless';
+
+    const promise = openBrowser('https://example.com');
+    mockChild.emit('spawn');
+    await promise;
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledWith('node', [
+      '/path with spaces/mock.js',
+      '--headless',
+      'https://example.com',
+    ]);
+  });
+
   it('MCP_COMPRESS_ROUTER_BROWSER takes precedence over the platform default', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
     process.env.MCP_COMPRESS_ROUTER_BROWSER = 'firefox';

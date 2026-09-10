@@ -504,10 +504,26 @@ some Streamable HTTP servers behind CDNs) surfaces a clear error instead
 of hanging indefinitely. Must be a positive integer; invalid values fall
 back to the default of 10 seconds.
 
+The same budget also bounds the remaining unbounded points of the
+connect phase, so a silent server can never stall startup forever:
+
+- stdio child-process **spawn** (the SDK waits for the `'spawn'` event,
+  which never fires for an executable on a stalled filesystem);
+- the HTTP **SSE session GET** (a TCP-accepting-but-silent server would
+  otherwise hang `client.connect()` forever), bounded at the
+  response-header phase because the SSE body streams for the whole
+  session;
+- the OAuth **metadata GET / token POST** handshakes, bounded through
+  the response body as well, so a server that sends headers and then
+  stalls its body cannot hold up startup either. Long-running message
+  POSTs (`tools/call`) keep their natural duration.
+
 At startup all downstream servers are connected **in parallel**, so a
 single server that times out costs at most this budget — and the default
 keeps worst-case startup well under the 30 seconds most MCP hosts allow
-for initialization.
+for initialization. The router answers the host's own `initialize`
+immediately, so a slow downstream delays only `tools/list`, never the
+session handshake.
 
 ```bash
 MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=60000 \
