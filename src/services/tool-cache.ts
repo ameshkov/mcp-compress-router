@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolDescriptor } from '../utils/index.js';
+import { atomicWriteFile, type ToolDescriptor } from '../utils/index.js';
 
 /**
  * Shape of a single server's cached tool entry in `tools-cache.json`.
@@ -131,28 +131,6 @@ async function readCacheStore(configPath: string): Promise<ToolCacheStore> {
 }
 
 /**
- * Writes `data` to `cachePath` atomically: the content is first written
- * to a unique temporary sibling file and then renamed over the target.
- * Renaming within the same directory is atomic on POSIX, so a reader
- * (or a crash mid-write) can never observe a truncated or half-written
- * cache file — it sees either the previous complete file or the new
- * complete file.
- *
- * @param cachePath - Target cache file path.
- * @param data - Full file content to write.
- */
-async function writeCacheFileAtomic(cachePath: string, data: string): Promise<void> {
-  const tempPath = `${cachePath}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-  try {
-    await fs.writeFile(tempPath, data);
-    await fs.rename(tempPath, cachePath);
-  } catch (err) {
-    await fs.unlink(tempPath).catch(() => {});
-    throw err;
-  }
-}
-
-/**
  * Saves discovered tools to the on-disk tool cache for a single server.
  * Preserves other servers' cached entries. Overwrites the entry for the
  * given server if it already exists. The cache is written immediately
@@ -175,7 +153,7 @@ export async function saveToolCache(
       tools,
       cachedAt: new Date().toISOString(),
     };
-    await writeCacheFileAtomic(cachePath, JSON.stringify(store, null, 2) + '\n');
+    await atomicWriteFile(cachePath, JSON.stringify(store, null, 2) + '\n');
   });
 }
 
@@ -224,7 +202,7 @@ export async function clearToolCache(configPath: string, serverName: string): Pr
     if (Object.keys(store).length === 0) {
       await fs.unlink(cachePath).catch(() => {});
     } else {
-      await writeCacheFileAtomic(cachePath, JSON.stringify(store, null, 2) + '\n');
+      await atomicWriteFile(cachePath, JSON.stringify(store, null, 2) + '\n');
     }
   });
 }

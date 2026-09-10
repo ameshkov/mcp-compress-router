@@ -43,6 +43,23 @@ describe('ensureConfigDir', () => {
     const parsed = JSON.parse(contents);
     expect(parsed.mcpServers).toHaveProperty('existing');
   });
+
+  it('creates the file atomically and leaves no temporary files behind', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+
+    // Concurrent first-time initialization of the same file must still
+    // produce a complete, valid config.
+    await Promise.all([
+      ensureConfigDir(configPath),
+      ensureConfigDir(configPath),
+      ensureConfigDir(configPath),
+    ]);
+
+    const entries = await fs.readdir(tempDir);
+    expect(entries.filter((entry) => entry.includes('.tmp-'))).toEqual([]);
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed).toEqual({ mcpServers: {} });
+  });
 });
 
 describe('readConfigFile', () => {
@@ -157,6 +174,24 @@ describe('writeConfigFile', () => {
     expect(parsed).not.toHaveProperty('credentials');
     expect(parsed.otherKey).toBe('keep-me');
     expect(parsed.mcpServers).toEqual(mcpServers);
+  });
+
+  it('replaces the file atomically and leaves no temporary files behind', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await writeConfigFile(configPath, { foo: { type: 'stdio', command: 'echo' } });
+
+    // Every rewrite goes through a temp file + rename, so the target
+    // always holds complete JSON and no temporary sibling survives.
+    for (let i = 0; i < 25; i += 1) {
+      await writeConfigFile(configPath, {
+        foo: { type: 'stdio', command: 'echo', description: `revision-${i}` },
+      });
+    }
+
+    const entries = await fs.readdir(tempDir);
+    expect(entries.filter((entry) => entry.includes('.tmp-'))).toEqual([]);
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.foo.description).toBe('revision-24');
   });
 });
 

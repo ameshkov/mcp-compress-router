@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The changes below are based on
+[PR #3](https://github.com/ameshkov/mcp-compress-router/pull/3) by
+[@slvvko](https://github.com/slvvko), which proposed atomic writes for
+`credentials.json` and `mcp.json` through a shared `atomicWriteFile`.
+
+### Fixed
+
+- `mcp.json` is now written atomically (temporary sibling file +
+  rename), including the initial config created by `ensureConfigDir`,
+  so a crash or a concurrent CLI invocation can no longer leave a torn
+  or empty config file.
+
+### Changed
+
+- The atomic temp-file + rename write is now centralized in a shared
+  `atomicWriteFile` utility (`src/utils/atomic-write.ts`), used by the
+  config, credentials, and tool cache writers instead of separate
+  private implementations.
+
 ## [v1.6.2] - 2026-09-10
 
 ### Fixed

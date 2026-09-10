@@ -63,7 +63,8 @@ mcp-compress-router/
 │   │                     #   catalog, invoke recovery, OAuth, shutdown
 │   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
 │   └── utils/            # Shared utility module: parsing, validation,
-│                         #   filtering, formatting, timeouts, logging
+│                         #   filtering, formatting, atomic file writes,
+│                         #   timeouts, logging
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router
@@ -254,6 +255,12 @@ All code MUST meet documentation and style requirements before merge:
   enforced. Do not re-enable these without explicit justification.
 - **Error handling strategy**: Prefer throwing errors over returning error
   values. Handle errors at top-level entry points where they can be logged.
+- **Atomic file writes**: Runtime state files (`mcp.json`,
+  `credentials.json`, `tools-cache.json`) MUST be written through the
+  shared `atomicWriteFile` helper (temporary sibling + rename), never
+  with a bare `fs.writeFile`, so a crash or a concurrent writer can
+  never leave a torn or empty file behind. Pass the file's mode
+  explicitly when permissions must survive the rewrite.
 - **Import style**: Use top-level static `import` statements exclusively.
   Do NOT scatter dynamic `await import()` calls inside function bodies
   ("inline imports"). Dynamic imports placed mid-function obscure

@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Logger } from '../utils/logger.js';
 import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
-import { parseJsonc } from '../utils/index.js';
+import { atomicWriteFile, parseJsonc } from '../utils/index.js';
 
 /**
  * Type guard for Node.js system errors that carry a `code` property.
@@ -64,7 +64,7 @@ export async function ensureConfigDir(configPath: string): Promise<void> {
   try {
     await fs.access(configPath);
   } catch {
-    await fs.writeFile(configPath, JSON.stringify({ mcpServers: {} }, null, 2) + '\n');
+    await atomicWriteFile(configPath, JSON.stringify({ mcpServers: {} }, null, 2) + '\n');
   }
 }
 
@@ -122,7 +122,7 @@ export async function writeConfigFile(configPath: string, mcpServers: McpServers
   delete existing.credentials;
 
   existing.mcpServers = mcpServers;
-  await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + '\n');
+  await atomicWriteFile(configPath, JSON.stringify(existing, null, 2) + '\n');
 }
 
 /**
@@ -184,7 +184,7 @@ export async function writeCredentials(
   // Write atomically (unique temporary sibling + rename): a crash or
   // forced exit can never leave credentials.json truncated, and
   // readCredentials treats invalid JSON as a hard startup error.
-  await writeCredentialsFileAtomic(credPath, JSON.stringify(store, null, 2) + '\n', mode);
+  await atomicWriteFile(credPath, JSON.stringify(store, null, 2) + '\n', mode);
 
   // On first creation, set restrictive permissions (owner read/write only)
   if (isNewFile) {
@@ -235,30 +235,6 @@ async function resolveCredentialsMode(
     return { isNewFile: false, mode: stat.mode & 0o777 };
   } catch {
     return { isNewFile: true, mode: 0o600 };
-  }
-}
-
-/**
- * Writes `data` atomically: the content goes to a unique temporary
- * sibling file first, then is renamed over the target, so a crash or a
- * forced exit can never leave a truncated credentials file behind.
- *
- * @param credPath - Target credentials file path.
- * @param data - Full file content to write.
- * @param mode - Permissions to create the replacement file with.
- */
-async function writeCredentialsFileAtomic(
-  credPath: string,
-  data: string,
-  mode: number,
-): Promise<void> {
-  const tempPath = `${credPath}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-  try {
-    await fs.writeFile(tempPath, data, { mode });
-    await fs.rename(tempPath, credPath);
-  } catch (err) {
-    await fs.unlink(tempPath).catch(() => {});
-    throw err;
   }
 }
 
@@ -314,6 +290,6 @@ export async function removeCredentials(configPath: string, name: string): Promi
     await fs.unlink(credPath);
   } else {
     const { mode } = await resolveCredentialsMode(credPath);
-    await writeCredentialsFileAtomic(credPath, JSON.stringify(store, null, 2) + '\n', mode);
+    await atomicWriteFile(credPath, JSON.stringify(store, null, 2) + '\n', mode);
   }
 }
