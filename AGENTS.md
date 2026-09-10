@@ -64,7 +64,7 @@ mcp-compress-router/
 │   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
 │   └── utils/            # Shared utility module: parsing, validation,
 │                         #   filtering, formatting, atomic file writes,
-│                         #   timeouts, logging
+│                         #   timeouts, logging, process-tree termination
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router
@@ -224,7 +224,12 @@ resource (each `ServerConnection`, the MCP server), install
 await `whenShutdown()` so the process stays alive while serving and exits
 the moment cleanup finishes, and force-exit (`process.exit`) afterwards
 so lingering grandchild pipes cannot trap it. Any new long-running entry
-path or spawned resource MUST register a cleanup hook.
+path or spawned resource MUST register a cleanup hook. Because downstream
+stdio servers are often launched through a wrapper (`npx`, `npm exec`), a
+cleanup hook MUST terminate the whole process tree — the SDK signals only
+the direct child — and MUST await the transport close even when the SDK
+starts it fire-and-forget after a failed handshake (see
+`killProcessTree`).
 
 ### Code Quality
 

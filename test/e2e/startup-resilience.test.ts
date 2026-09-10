@@ -4,27 +4,13 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { routerPath, resolveFixtureCommand } from './helpers.js';
+import { routerPath, resolveFixtureCommand, waitForProcessExit } from './helpers.js';
 import { McpTestClient } from './client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Absolute path to the hung-stdio fixture server. */
 const stuckServerPath = path.resolve(__dirname, '..', 'fixture-stuck-server.mjs');
-
-/** Wait for `pid` (a process id) to no longer exist. */
-async function waitForProcessExit(pid: number, timeoutMs = 5000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return false;
-}
 
 describe('MCP Compress Router E2E — startup resilience', () => {
   let client: McpTestClient;

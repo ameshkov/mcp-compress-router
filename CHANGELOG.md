@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Downstream stdio servers are now terminated as complete process trees
+  on shutdown. The MCP SDK only signals the process it spawned directly,
+  so wrapper commands such as `npx`/`npm exec` left the actual MCP server
+  (a grandchild holding the inherited stdio pipes) alive as an orphan
+  when the router exited. The new `killProcessTree` utility resolves the
+  descendants from a `ps` snapshot and sends SIGTERM followed by SIGKILL
+  to survivors (on Windows it uses `taskkill /T /F`).
+- Stdio transport close is now cached and awaited: the fire-and-forget
+  close that the MCP SDK starts after a failed `initialize` can no
+  longer be cut short by `process.exit` before the child is terminated.
+- A failed reconnect now closes the half-initialized client, so a
+  successful connect followed by a `tools/list` failure cannot leave a
+  live child process behind until the next attempt or shutdown.
+
 ## [v1.6.3] - 2026-09-10
 
 The changes below are based on

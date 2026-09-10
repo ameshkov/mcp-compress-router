@@ -16,6 +16,20 @@ export const routerPath = path.resolve(__dirname, '..', '..', 'build', 'index.js
 /** Absolute path to the headless browser mock for OAuth E2E tests. */
 export const browserMockPath = path.resolve(__dirname, '..', 'browser-mock.js');
 
+/** Wait for `pid` (a process id) to no longer exist. */
+export async function waitForProcessExit(pid: number, timeoutMs = 5000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
+
 /** Check whether a file exists at the given path. */
 export async function nodeExists(cmd: string): Promise<boolean> {
   try {

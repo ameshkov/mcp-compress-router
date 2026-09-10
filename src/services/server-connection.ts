@@ -227,6 +227,11 @@ export class ServerConnection {
         status: 'ok',
       };
     } catch (err) {
+      // Tear down any half-initialized client. The connect may have
+      // succeeded while `tools/list` failed, in which case a live
+      // transport (and its spawned child process) would otherwise linger
+      // until the next reconnect attempt or shutdown.
+      await this.closeClient();
       // Record the failure on the connection so the cooldown engages
       // (status != 'ok') and subsequent callers see the real reason
       // rather than re-running the full connect→fail cycle with no

@@ -4,7 +4,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
-import { getDownstreamTimeoutMs } from '../utils/index.js';
+import { getDownstreamTimeoutMs, killProcessTree } from '../utils/index.js';
 import { createDedicatedFetch, createConnectTimeoutFetch } from './dedicated-fetch.js';
 import type {
   DownstreamServerConfig,
@@ -18,15 +18,29 @@ const METHOD_NOT_FOUND = -32601;
 
 /**
  * A {@link StdioClientTransport} whose `start()` (the child-process spawn
- * wait inside `client.connect()`) is bounded by a timeout. The SDK's own
- * transport resolves `start()` only on the process `'spawn'` event, so a
- * spawn that never completes — e.g. an executable on a stalled filesystem —
- * would stall the connect phase forever with no timeout of any kind.
+ * wait inside `client.connect()`) is bounded by a timeout, and whose
+ * `close()` terminates the spawned process tree.
  *
- * On timeout the child is force-closed (graduated kill) and the attempt
- * is rejected, so the router degrades or fails fast instead of hanging.
+ * The SDK's own transport resolves `start()` only on the process `'spawn'`
+ * event, so a spawn that never completes — e.g. an executable on a stalled
+ * filesystem — would stall the connect phase forever with no timeout of
+ * any kind. On timeout the child is force-closed and the attempt is
+ * rejected, so the router degrades or fails fast instead of hanging.
+ *
+ * The SDK also only signals the direct child on close. When the configured
+ * command is a wrapper (`npx`, `npm exec`), the actual MCP server is a
+ * grandchild that the SDK cannot reach — and if the wrapper exits while
+ * that grandchild still holds the inherited stdio pipes, the SDK skips its
+ * own SIGTERM/SIGKILL escalation and the server is orphaned. This
+ * transport therefore kills the whole descendant tree as well, and caches
+ * its close promise: `Client.connect()` may start the close
+ * fire-and-forget when the handshake fails, so a later `client.close()`
+ * must await the same full cleanup instead of returning immediately.
  */
 class TimeoutStdioClientTransport extends StdioClientTransport {
+  private childPid: number | undefined;
+  private closeInFlight: Promise<void> | undefined;
+
   constructor(
     params: StdioServerParameters,
     private readonly spawnTimeoutMs: number,
@@ -47,7 +61,12 @@ class TimeoutStdioClientTransport extends StdioClientTransport {
       timer.unref?.();
     });
     try {
-      await Promise.race([super.start(), spawnTimeout]);
+      const startPromise = super.start();
+      // `StdioClientTransport.start()` assigns the child process
+      // synchronously, so capture the pid before a failed handshake can
+      // clear the reference and leave the tree unkillable.
+      this.childPid = this.pid ?? undefined;
+      await Promise.race([startPromise, spawnTimeout]);
     } catch (err) {
       await this.close().catch(() => {});
       throw err;
@@ -56,6 +75,22 @@ class TimeoutStdioClientTransport extends StdioClientTransport {
         clearTimeout(timer);
       }
     }
+  }
+
+  override close(): Promise<void> {
+    this.closeInFlight ??= this.performClose();
+    return this.closeInFlight;
+  }
+
+  private async performClose(): Promise<void> {
+    this.childPid ??= this.pid ?? undefined;
+    const treeTermination =
+      this.childPid === undefined ? undefined : killProcessTree(this.childPid);
+    // The tree kill runs concurrently with the SDK's graduated close: the
+    // descendant snapshot is only valid while the direct child is alive,
+    // and killing the grandchildren lets the SDK's own close resolve fast.
+    await super.close();
+    await treeTermination;
   }
 }
 
