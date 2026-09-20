@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Internal
+
+- Added a manual QA stack under `qa/`: a Docker Compose workspace with
+  the compiled router, the QA tooling, the stdio mock MCP server, and
+  the opencode, GitHub Copilot CLI, Claude Code, and Codex CLI agents,
+  plus standalone mock LLM and mock MCP servers (streamable-http, with
+  and without OAuth), driven by `pnpm qa:setup`, `pnpm qa:router`,
+  `pnpm qa:probe`, `pnpm qa:llm`, and `pnpm qa:agent`. The stack
+  publishes no host ports, so it can never conflict with services
+  running on the host; host access is opt-in through
+  `qa/docker-compose.host-ports.yml`.
+- Added Gherkin plans (`qa/features/`) and a BDD runner (`pnpm qa:run`)
+  that records one verdict per `@TC-*` case, covering server and tool
+  discovery, the compact catalog, full and deliberately long tool
+  descriptions, guided-error recovery, downstream error passthrough,
+  and process cleanup for opencode (including HTTP and OAuth round
+  trips), GitHub Copilot CLI (offline BYOK), Claude Code (against the
+  mock LLM's Anthropic endpoint, including its truncation of long tool
+  descriptions), and Codex CLI (against the mock LLM's Responses
+  endpoint, with its namespace MCP tools).
+- Added a mock LLM that serves scripted conversations over the OpenAI
+  chat completions API, the OpenAI Responses API used by Codex CLI, and
+  the Anthropic Messages API, validates every agent request (tool
+  surface, catalog contents, tool-call arguments, and returned results,
+  including tools nested in Codex's namespace tools), and keeps the raw
+  request/response log the plans use as their primary evidence; the mock
+  MCP servers expose `documented_tool`, whose long description backs the
+  truncation checks.
+- Added the `manual-test-run` and `qa-test-planning` project skills that
+  document the QA workflows.
+
 ## [v1.6.4] - 2026-09-10
 
 ### Fixed

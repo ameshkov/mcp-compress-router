@@ -1,0 +1,25 @@
+# Opt-in host ports for the QA mock services.
+#
+# The default stack (`qa/docker-compose.yml`) publishes no host ports, so
+# it can never conflict with services already running on the host. Use
+# this override only when you explicitly need to reach the mocks from
+# the host machine, for example to curl the mock LLM admin API:
+#
+#   docker compose -f qa/docker-compose.yml \
+#     -f qa/docker-compose.host-ports.yml up -d --build
+#
+# Host-side QA commands additionally need
+# `QA_LLM_URL=http://127.0.0.1:8080`; the workspace default
+# (`http://mock-llm:8080`) only resolves inside the Compose network.
+services:
+  mock-llm:
+    ports:
+      - '8080:8080'
+
+  mock-mcp-http:
+    ports:
+      - '3100:3100'
+
+  mock-mcp-http-oauth:
+    ports:
+      - '3101:3101'

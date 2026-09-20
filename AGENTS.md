@@ -16,6 +16,7 @@ tool listings with a compact routing layer.
     - [Architecture](#architecture)
     - [Code Quality](#code-quality)
     - [Testing](#testing)
+    - [Manual QA](#manual-qa)
     - [Dependency Management](#dependency-management)
     - [Configuration & Documentation](#configuration--documentation)
     - [Markdown Formatting](#markdown-formatting)
@@ -68,6 +69,13 @@ mcp-compress-router/
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router
+├── qa/                   # Manual QA stack: Gherkin plans, verdict runner,
+│                         #   compose stack + Dockerfiles (plus the opt-in
+│                         #   host-ports override), mock LLM, mock MCP
+│                         #   servers (stdio, streamable-http, OAuth),
+│                         #   router/agent tooling (opencode, Copilot CLI,
+│                         #   Claude Code, Codex CLI), baseline config
+├── .agents/skills/       # Project skills: manual test run, QA planning
 ├── docs/                 # Configuration reference and example payloads
 ├── DEVELOPMENT.md        # Local setup and manual testing guide
 ├── mcp.example.jsonc     # Example JSONC config template (committed)
@@ -89,9 +97,10 @@ barrel, and unit tests are co-located with the modules they cover (see
 - `pnpm build` — compile TypeScript to `build/` and make executable
 - `pnpm typecheck` — check for TypeScript type errors in production
   and test code
-- `pnpm lint` — lint source files with oxlint and check for unused
-  exports with Knip
+- `pnpm lint` — lint source and QA files with oxlint, check for unused
+  exports with Knip, and validate the Gherkin plans (`lint:gherkin`)
 - `pnpm lint:fix` — lint and auto-fix issues
+- `pnpm lint:gherkin` — check the `@TC-*` test IDs and Gherkin style
 - `pnpm knip` — run Knip unused-export analysis separately
 - `pnpm format:check` — check formatting with Prettier and Markdownlint
 - `pnpm format:fix` — fix formatting issues
@@ -128,10 +137,10 @@ You MUST follow the following rules for EVERY task that you perform:
 - After completing the task you MUST verify that the code you've written
   follows the Code Guidelines in this file.
 
-- When the coding task is finished update `CHANGELOG.md` and explain
-  changes in the Unreleased section. Add entries to the appropriate
-  subsection (Added, Changed, or Fixed) if it already exists; do not
-  create duplicate subsections.
+- If `CHANGELOG.md` exists, you MUST add an entry under `[Unreleased]`
+  for every observable change — one a user of the project can notice, not
+  just an edit inside the repository, such as formatting, lint, or tests —
+  as part of the same change.
 
 ## Code Guidelines
 
@@ -358,6 +367,79 @@ making it easier to find, update, and maintain tests. Testing against
 real components catches bugs that mocks hide (transport issues, protocol
 mismatches, serialization errors) and gives higher confidence in the
 system's actual behavior.
+
+### Manual QA
+
+The manual-testing stack lives in `qa/`: Gherkin plans in
+`qa/features/`, the verdict runner and ID check in `qa/scripts/bdd/`,
+the workspace and agent tooling in `qa/scripts/` (router CLI wrapper,
+protocol probe, mock LLM client, coding-agent runners for opencode,
+GitHub Copilot CLI, Claude Code, and Codex CLI), the mock MCP servers in
+`qa/scripts/mock-mcp-stdio/` and `qa/scripts/mock-mcp-http/`
+(stdio plus streamable-http with optional OAuth), the committed baseline
+config and agent templates in `qa/fixtures/`, and the Docker Compose
+stack (`qa/docker-compose.yml` plus one Dockerfile per image).
+
+- **Manual runs execute in the QA Compose workspace**: the plans and
+  the `pnpm qa:*` scripts (`qa:setup`, `qa:router`, `qa:probe`,
+  `qa:llm`, `qa:agent`, `qa:run`) run inside the workspace container,
+  never from a host checkout, next to the standalone `mock-llm`,
+  `mock-mcp-http`, and `mock-mcp-http-oauth` services. The workspace
+  bakes the router build, the QA tooling, the stdio mock, opencode,
+  GitHub Copilot CLI (offline BYOK), Claude Code (against the mock LLM's
+  Anthropic endpoint), and Codex CLI (against the mock LLM's Responses
+  endpoint); rebuild the stack after any source or QA change so it
+  matches the working tree.
+- **No host ports by default**: the stack publishes no host ports, so
+  it can never conflict with services running on the host; every plan
+  talks to the mocks over the Compose network. Host access is opt-in
+  through `qa/docker-compose.host-ports.yml`, and the mock-LLM commands
+  (`pnpm qa:agent`, `pnpm qa:llm`) fail fast when `QA_LLM_URL` is
+  missing so a host-checkout run cannot silently test host artifacts.
+- **Write plans as human instructions**: every scenario is a sequence
+  of steps a tester carries out by hand — name the exact command to run
+  and the exact evidence to look for. Plans never rely on the runner or
+  on hidden automation to perform a step.
+- **The mock LLM log is the primary evidence**: the mock LLM is a
+  first-class part of the stack, not a convenience. It serves scripted
+  conversations, validates every request (tool surface, catalog
+  contents, tool-call arguments, returned results), and keeps the raw
+  request/response log. New or changed agent-observable behavior SHOULD
+  be verified through its log; the agent transcript and the mock MCP
+  container logs are supporting channels.
+- **Keep `qa/README.md` consistent with the stack**: `qa/README.md` is
+  the guide for the manual QA stack — its services, the baseline config,
+  how the router and the mock LLM are driven, and how to run the plans.
+  Any change to the stack (script paths, config, commands, mocks) MUST
+  update `qa/README.md` in the same change.
+- **Keep BDD plans consistent with implemented features**: The Gherkin
+  feature files in `qa/features/` are the manual test plans. Adding,
+  changing, or removing observable behavior MUST update the
+  corresponding `*.feature` plans (including their `@TC-*` IDs) in the
+  same change — the conventions are enforced by `pnpm lint:gherkin`
+  (part of `pnpm lint`). Test IDs follow `@TC-<GROUP>-<case>` with a
+  semantic uppercase GROUP naming the test area (e.g.
+  `@TC-STARTUP-1`); all scenarios in one file share the group and IDs
+  are unique across the suite. Each manual run (interactive or
+  `--auto-pass`) gets a unique run id and writes
+  `qa/output/<run-id>/report.json` + `report.md`; interactive runs also
+  record the tester's free-text description per case.
+- **QA agent workflows live in `.agents/skills/`**: `manual-test-run`
+  drives a QA session and records verdicts; `qa-test-planning` maps a
+  changeset to plan coverage and selects the cases to run.
+- **Adding a coding agent is a full-stack change**: a new agent needs a
+  runner and a transcript renderer in `qa/scripts/agent/`, a hermetic
+  fixture in `qa/fixtures/<agent>/`, a pinned install in `qa/Dockerfile`,
+  a `qa/features/<agent>.feature` plan, and the `qa/README.md` updates.
+  When the agent speaks a different wire protocol, extend the mock LLM
+  with a `ProtocolAdapter` (see `qa/scripts/mock-llm/protocol.ts`)
+  instead of adding a translation proxy, so the log keeps the raw
+  requests the agent actually sent.
+
+**Rationale**: The QA stack is the manual end-to-end validation
+channel: stale docs mislead testers, and drift between features and
+their test plans silently drops coverage of exactly the areas a change
+claims to exercise.
 
 ### Dependency Management
 

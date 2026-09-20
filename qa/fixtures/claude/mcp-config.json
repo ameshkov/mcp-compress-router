@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "qa-router": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["build/index.js"],
+      "env": {
+        "MCP_COMPRESS_ROUTER_HOME": "qa/home"
+      }
+    }
+  }
+}

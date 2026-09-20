@@ -1,0 +1,24 @@
+# Hermetic Codex CLI config for the manual QA stack.
+#
+# `pnpm qa:agent --agent codex` copies this file into a scratch
+# CODEX_HOME with `__LLM_URL__` replaced by the mock LLM's in-network
+# address, so the tester's own Codex account, config, and MCP servers are
+# never used. The custom provider speaks the OpenAI Responses API (the
+# only wire API Codex CLI 0.155.1 supports) and authenticates with the
+# dummy `QA_MOCK_API_KEY`, so no OpenAI account is needed.
+
+model = "qa-mock"
+model_provider = "qa-mock"
+approval_policy = "never"
+check_for_update_on_startup = false
+
+[model_providers.qa-mock]
+name = "QA Mock"
+base_url = "__LLM_URL__/v1"
+env_key = "QA_MOCK_API_KEY"
+wire_api = "responses"
+
+[mcp_servers.qa-router]
+command = "node"
+args = ["build/index.js"]
+env = { MCP_COMPRESS_ROUTER_HOME = "qa/home" }

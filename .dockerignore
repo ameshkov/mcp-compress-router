@@ -1,0 +1,18 @@
+# Docker build context for the QA images (qa/Dockerfile and the
+# per-service mock images).
+.git
+.github
+.husky
+.vscode
+node_modules
+build
+coverage
+test
+qa/home
+qa/output
+dev-home
+.env
+.env.*
+*.log
+.DS_Store
+docs/assets

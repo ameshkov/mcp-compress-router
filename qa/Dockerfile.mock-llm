@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+#
+# Mock LLM image for the manual QA stack.
+#
+# Serves the scripted OpenAI-compatible conversations the coding agents
+# talk to, verifies every request against the script expectations, and
+# keeps the raw request/response log the plans inspect. The server only
+# uses Node.js built-ins, so the image just needs tsx to run the
+# TypeScript source.
+#
+# Build (run from the repository root):
+#   docker build -f qa/Dockerfile.mock-llm -t mcp-compress-router-qa-mock-llm .
+#
+# It is normally started through qa/docker-compose.yml.
+
+FROM node:24-bookworm-slim
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN npm install -g tsx@4.23.1
+
+WORKDIR /app
+
+COPY qa/scripts/mock-long-description.ts ./scripts/mock-long-description.ts
+COPY qa/scripts/mock-llm ./scripts/mock-llm
+
+EXPOSE 8080
+
+CMD ["tsx", "scripts/mock-llm/server.ts"]

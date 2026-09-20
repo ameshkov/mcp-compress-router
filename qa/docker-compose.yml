@@ -1,0 +1,115 @@
+# Manual QA stack for mcp-compress-router.
+#
+# Starts the QA workspace (router build, QA tooling, stdio mock, and
+# the opencode, GitHub Copilot CLI, Claude Code, and Codex CLI agents)
+# plus the standalone mock services the plans talk to:
+#
+#   workspace           long-lived shell container for `docker compose exec`
+#   mock-llm            scripted OpenAI-compatible LLM; the request log is
+#                       the primary verification point of the plans
+#   mock-mcp-http       streamable-http mock MCP server (no auth)
+#   mock-mcp-http-oauth streamable-http mock MCP server with a mock OAuth
+#                       authorization server
+#
+# Usage (from the repository root):
+#   docker compose -f qa/docker-compose.yml up -d --build
+#   docker compose -f qa/docker-compose.yml exec workspace bash
+#
+# No service publishes a host port: every plan talks to the mocks over
+# the Compose network, so the stack can never conflict with services
+# already running on the host. For opt-in host access use the override
+# `qa/docker-compose.host-ports.yml` (see qa/README.md).
+#
+# See qa/README.md for the full workflow.
+
+name: mcp-compress-router-qa
+
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: qa/Dockerfile
+      target: qa
+    image: mcp-compress-router-qa
+    container_name: mcr-qa-workspace
+    init: true
+    depends_on:
+      mock-llm:
+        condition: service_healthy
+      mock-mcp-http:
+        condition: service_healthy
+      mock-mcp-http-oauth:
+        condition: service_healthy
+    environment:
+      # In-network address of the mock LLM; the QA commands require it
+      # and fail fast when it is missing (i.e. outside the workspace).
+      QA_LLM_URL: http://mock-llm:8080
+    volumes:
+      - qa-output:/app/qa/output
+    command: ['tail', '-f', '/dev/null']
+
+  mock-llm:
+    build:
+      context: ..
+      dockerfile: qa/Dockerfile.mock-llm
+    image: mcp-compress-router-qa-mock-llm
+    container_name: mcr-qa-mock-llm
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mock-mcp-http:
+    build:
+      context: ..
+      dockerfile: qa/Dockerfile.mock-mcp-http
+    image: mcp-compress-router-qa-mock-mcp-http
+    container_name: mcr-qa-mock-mcp-http
+    environment:
+      MOCK_MCP_PORT: '3100'
+      MOCK_MCP_AUTH: none
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3100/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mock-mcp-http-oauth:
+    build:
+      context: ..
+      dockerfile: qa/Dockerfile.mock-mcp-http
+    image: mcp-compress-router-qa-mock-mcp-http
+    container_name: mcr-qa-mock-mcp-http-oauth
+    environment:
+      MOCK_MCP_PORT: '3101'
+      MOCK_MCP_AUTH: oauth
+      # The issuer must be the in-network name the router resolves; a
+      # localhost issuer would point the router back at the workspace.
+      MOCK_OAUTH_ISSUER: http://mock-mcp-http-oauth:3101
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3101/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  qa-output:

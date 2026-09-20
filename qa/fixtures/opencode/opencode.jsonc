@@ -1,0 +1,39 @@
+{
+  // QA-only opencode config template for the coding-agent plans.
+  // `pnpm qa:agent` copies it into a scratch XDG_CONFIG_HOME with
+  // __LLM_URL__ replaced by the mock LLM base URL (QA_LLM_URL), so the
+  // tester's global opencode config, plugins, and MCP servers are
+  // ignored (a hermetic run).
+  //
+  // The router reads its server list from the QA router home prepared
+  // by `pnpm qa:setup`. Paths are relative to the repository root;
+  // opencode runs from there.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "qa-mock/qa-mock",
+  "small_model": "qa-mock/qa-mock",
+  "provider": {
+    "qa-mock": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "QA mock LLM",
+      "options": {
+        "baseURL": "__LLM_URL__/v1",
+        "apiKey": "qa-mock-key"
+      },
+      "models": {
+        "qa-mock": {
+          "name": "QA mock"
+        }
+      }
+    }
+  },
+  "mcp": {
+    "qa-router": {
+      "type": "local",
+      "command": ["node", "build/index.js"],
+      "environment": {
+        "MCP_COMPRESS_ROUTER_HOME": "qa/home"
+      },
+      "enabled": true
+    }
+  }
+}

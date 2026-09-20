@@ -25,3 +25,10 @@ mcp.jsonc
 
 # Local development router home (configs, secrets, OAuth tokens)
 /dev-home/
+
+# Manual QA stack: prepared router home and generated run reports
+/qa/home/
+/qa/output/
+
+# The QA baseline config is committed despite the global mcp.jsonc rule
+!qa/fixtures/mcp.jsonc

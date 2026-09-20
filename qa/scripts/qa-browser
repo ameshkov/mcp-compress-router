@@ -1,0 +1,17 @@
+#!/bin/sh
+# Headless "browser" for the OAuth login plans.
+#
+# The QA workspace sets MCP_COMPRESS_ROUTER_BROWSER=qa-browser, so the
+# router calls this script with the authorization URL as its only
+# argument during `login` (including the automatic login `add` performs
+# for OAuth servers). The script fetches the URL and follows the
+# redirect to the router's loopback callback, completing the flow
+# without a real browser.
+set -eu
+
+if [ "$#" -ne 1 ]; then
+  echo "usage: qa-browser <authorization-url>" >&2
+  exit 2
+fi
+
+curl --silent --show-error --location --max-time 20 "$1" >/dev/null

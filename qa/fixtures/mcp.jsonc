@@ -1,0 +1,11 @@
+{
+  // QA baseline router config. `pnpm qa:setup` copies this file to
+  // qa/home/mcp.jsonc and removes any runtime state (tools-cache.json,
+  // credentials.json), so every scenario starts from a clean home.
+  //
+  // The baseline deliberately has no servers: the plans add the mock
+  // server they need with `pnpm qa:router add ...`, which also exercises
+  // the management CLI. The router refuses to start with an empty server
+  // list, so add a server before running the router or a coding agent.
+  "mcpServers": {}
+}
