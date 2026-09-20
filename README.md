@@ -754,7 +754,9 @@ This replaces thousands of tokens of tool listings with a compact ~900
 token catalog, regardless of how many downstream servers you have.
 
 For the full configuration and environment variable reference, see
-[configuration.md](docs/configuration.md).
+[configuration.md](docs/reference/configuration.md). For the design
+rationale behind the router, see
+[architecture.md](docs/explanation/architecture.md).
 
 ## Acknowledgements
 

@@ -6,7 +6,7 @@ name: CI
 #
 # On tag pushes (v*), also publishes the package to npm and creates a
 # GitHub release. Publishing uses npm Trusted Publishers (OIDC) — see
-# docs/configuration.md for setup instructions.
+# docs/guides/releasing.md for setup instructions.
 
 on:
   push:

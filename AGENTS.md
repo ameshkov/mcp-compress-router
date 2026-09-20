@@ -19,7 +19,6 @@ tool listings with a compact routing layer.
     - [Manual QA](#manual-qa)
     - [Dependency Management](#dependency-management)
     - [Configuration & Documentation](#configuration--documentation)
-    - [Markdown Formatting](#markdown-formatting)
 
 ## Project Overview
 
@@ -76,8 +75,12 @@ mcp-compress-router/
 │                         #   router/agent tooling (opencode, Copilot CLI,
 │                         #   Claude Code, Codex CLI), baseline config
 ├── .agents/skills/       # Project skills: manual test run, QA planning
-├── docs/                 # Configuration reference and example payloads
-├── DEVELOPMENT.md        # Local setup and manual testing guide
+├── docs/                 # Documentation
+│   ├── reference/        # Configuration reference
+│   ├── explanation/      # Architecture, process lifecycle, practices
+│   ├── guides/           # Task guides: releasing
+│   └── assets/           # Images and example payloads
+├── DEVELOPMENT.md        # How to run and debug the project locally
 ├── mcp.example.jsonc     # Example JSONC config template (committed)
 ├── .env.example          # Environment variable template (committed)
 ├── .github/workflows/    # CI quality gate and npm publish on version tags
@@ -104,7 +107,8 @@ barrel, and unit tests are co-located with the modules they cover (see
 - `pnpm knip` — run Knip unused-export analysis separately
 - `pnpm format:check` — check formatting with Prettier and Markdownlint
 - `pnpm format:fix` — fix formatting issues
-- `pnpm check` — run `format:check`, `lint`, and `typecheck` (full CI gate)
+- `pnpm check` — run `format:check`, `lint`, `typecheck`, `build`, and
+  `test` (full CI gate)
 - `pnpm clean` — remove `node_modules` and `build/`
 
 ## Contribution Instructions
@@ -143,6 +147,12 @@ You MUST follow the following rules for EVERY task that you perform:
   as part of the same change.
 
 ## Code Guidelines
+
+The rules below are normative. For the reasoning behind them, see
+[About the architecture](./docs/explanation/architecture.md),
+[About the process lifecycle](./docs/explanation/process-lifecycle.md),
+and
+[About development practices](./docs/explanation/development-practices.md).
 
 ### Architecture
 
@@ -186,8 +196,8 @@ Universal design principles this codebase follows:
 - **Keep It Boring** — prefer well-understood patterns over clever or
   novel solutions.
 
-The easiest way to achieve these principles is **layered architecture**.
-This project's layers, from top to bottom:
+The project is organized as a layered architecture. This project's
+layers, from top to bottom:
 
 - **Entry point** (`src/index.ts`) — initializes the MCP server, wires
   dependencies, registers tool handlers, and starts the stdio transport.
@@ -216,29 +226,23 @@ No layer may depend on a layer above it.
 **Tool handlers receive only the catalog**: The entry point creates the
 catalog from discovered servers and injects it into tool handlers. Tool
 handlers MUST NOT receive transport clients, raw server connections, or
-configuration objects. These are implementation details wired inside the
-entry point.
+configuration objects. See
+[About the architecture](./docs/explanation/architecture.md).
 
 **Own your process lifecycle**: The long-running router entry point is
-responsible for shutting itself down, not the host. The host may close
-the router's stdin pipe without sending a signal (the most common case)
-or send `SIGINT`/`SIGTERM`/`SIGHUP`; the MCP SDK's stdio server transport
-does NOT listen for stdin EOF, so the router would otherwise linger as a
-ghost process forever while spawned downstream servers (and their own
-child processes, e.g. browser processes forked by a downstream server)
-keep the event loop alive. Therefore the router entry point MUST wire a
+responsible for shutting itself down, not the host. It MUST wire a
 `ShutdownCoordinator` that registers cleanup hooks for every spawned
 resource (each `ServerConnection`, the MCP server), install
-`installShutdownTriggers` to trip the coordinator on signal or stdin EOF,
-await `whenShutdown()` so the process stays alive while serving and exits
-the moment cleanup finishes, and force-exit (`process.exit`) afterwards
-so lingering grandchild pipes cannot trap it. Any new long-running entry
-path or spawned resource MUST register a cleanup hook. Because downstream
-stdio servers are often launched through a wrapper (`npx`, `npm exec`), a
-cleanup hook MUST terminate the whole process tree — the SDK signals only
-the direct child — and MUST await the transport close even when the SDK
-starts it fire-and-forget after a failed handshake (see
-`killProcessTree`).
+`installShutdownTriggers` to trip the coordinator on signal or stdin
+EOF, await `whenShutdown()` so the process stays alive while serving
+and exits the moment cleanup finishes, and force-exit (`process.exit`)
+afterwards so lingering grandchild pipes cannot trap it. Any new
+long-running entry path or spawned resource MUST register a cleanup
+hook. A stdio cleanup hook MUST terminate the whole process tree
+(`killProcessTree`) — the SDK signals only the direct child — and MUST
+await the transport close even when the SDK starts it fire-and-forget
+after a failed handshake. See
+[About the process lifecycle](./docs/explanation/process-lifecycle.md).
 
 ### Code Quality
 
@@ -336,9 +340,6 @@ All code MUST meet documentation and style requirements before merge:
   brevity.
   Exceptions: auto-generated files and database migration files.
 
-**Rationale**: Consistent documentation and tooling enforcement prevents
-technical debt accumulation and ensures codebase navigability.
-
 ### Testing
 
 Every module MUST have test coverage:
@@ -361,12 +362,6 @@ Every module MUST have test coverage:
   real downstream MCP server over stdio transport. Prefer
   integration-style tests that exercise real components over
   mock-heavy unit tests.
-
-**Rationale**: Co-locating tests with source keeps related files close,
-making it easier to find, update, and maintain tests. Testing against
-real components catches bugs that mocks hide (transport issues, protocol
-mismatches, serialization errors) and gives higher confidence in the
-system's actual behavior.
 
 ### Manual QA
 
@@ -436,11 +431,6 @@ stack (`qa/docker-compose.yml` plus one Dockerfile per image).
   instead of adding a translation proxy, so the log keeps the raw
   requests the agent actually sent.
 
-**Rationale**: The QA stack is the manual end-to-end validation
-channel: stale docs mislead testers, and drift between features and
-their test plans silently drops coverage of exactly the areas a change
-claims to exercise.
-
 ### Dependency Management
 
 - **Pin all dependency versions explicitly**: Do not use `^` or `~` in
@@ -466,9 +456,6 @@ External dependencies MUST be carefully evaluated before adoption:
   use it. Do not copy outdated version numbers from memory, training
   data, or existing lock files of other projects.
 
-**Rationale**: Fewer, well-vetted dependencies reduce security
-vulnerabilities, supply chain risks, and long-term maintenance costs.
-
 ### Configuration & Documentation
 
 Configuration and documentation MUST stay synchronized with code:
@@ -482,44 +469,3 @@ Configuration and documentation MUST stay synchronized with code:
   CLI management commands write plain `.json` (comments cannot
   round-trip). A `.env` file in cwd is auto-loaded at startup — secrets
   should go there, not in the config file.
-
-**Rationale**: Stale documentation causes onboarding friction and
-operational incidents.
-
-### Markdown Formatting
-
-All Markdown files MUST follow these formatting rules:
-
-- **Line length**: Keep lines at most 80 characters. This is not a hard
-  lint gate, but SHOULD be followed for readability. Lines inside fenced
-  code blocks are exempt from this limit.
-- **Unordered lists**: Use dashes (`-`) for bullet points. Indent nested
-  list items by 4 spaces.
-- **Emphasis**: Use asterisks (`*`) for emphasis (`*italic*`,
-  `**bold**`). Do NOT use underscores.
-- **Headings**: Duplicate heading names are allowed only among sibling
-  headings (same parent level). Avoid duplicates across different levels.
-- **Inline HTML**: Avoid raw HTML in Markdown. The only allowed elements
-  are `<a>`, `<p>`, `<details>`, `<summary>`, and `<img>`.
-- **Trailing spaces**: Do NOT leave trailing whitespace on any line. Do
-  NOT use two-space line breaks — use a blank line instead.
-- **Bare URLs**: Bare URLs are permitted and do not need to be wrapped
-  in angle brackets.
-- **Table formatting**: Align table columns with padding when the table
-  fits within 80 characters. If the table exceeds 80 characters or
-  triggers an MD060 linter warning, switch to a compact format using
-  single spaces only. This applies to the separator row as well — it
-  should be written as `| --- |`, not `|--|`.
-
-  Example of correct layout:
-
-  ```markdown
-  | Col1 | Col2 |
-  | --- | --- |
-  | Value1 | Value2 |
-  ```
-
-  Do NOT use extra padding or alignment characters beyond single spaces.
-
-**Rationale**: Uniform Markdown formatting improves readability for both
-humans and AI agents that consume project documentation.

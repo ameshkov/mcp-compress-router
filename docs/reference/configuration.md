@@ -3,7 +3,7 @@
 This document is a complete reference for every configuration option
 and environment variable supported by MCP Compress Router. For a
 quick-start guide, see the
-[README](../README.md).
+[README](../../README.md).
 
 ## Table of Contents
 
@@ -13,6 +13,7 @@ quick-start guide, see the
     - [Server Entry Fields](#server-entry-fields)
     - [Server Types](#server-types)
     - [Tool Selection](#tool-selection)
+    - [Compression Levels](#compression-levels)
     - [Variable Expansion](#variable-expansion)
 - [OAuth Configuration](#oauth-configuration)
 - [Credential Storage](#credential-storage)
@@ -148,13 +149,16 @@ time.
 | `url` | HTTP | http, streamable-http | Endpoint URL of the MCP server |
 | `headers` | No | http, streamable-http | Map of HTTP headers sent with each request |
 | `description` | No | All | Human-readable description shown in the tool catalog |
+| `compressionLevel` | No | All | Tool listing compression level: `max`, `high`, `medium`, or `low`. Defaults to `high` when omitted (see [Compression Levels](#compression-levels)) |
 | `oauth` | No | http, streamable-http | OAuth client overrides (see [OAuth Configuration](#oauth-configuration)) |
 | `enabled` | No | All | Boolean. `false` skips the server entirely at startup (no spawn, no connection, no discovery). Defaults to `true` when omitted, so omitting it keeps `mcp.json` clean and is fully backward compatible |
 | `allowedTools` | No | All | Array of glob patterns matched against the server's bare tool names. When present, only matching tools are exposed; `[]` (empty array) means *no* tools are exposed. Patterns are compiled under picomatch (`*`, `?`, `{a,b}`, `[abc]`) with strict bracket handling |
 | `disabledTools` | No | All | Array of glob patterns removing matching tools from whatever would otherwise be exposed. Takes precedence on conflict: a tool matching both lists is blocked. Same glob semantics as `allowedTools` |
 
-All string values in the fields above support
-[Variable Expansion](#variable-expansion).
+[Variable Expansion](#variable-expansion) applies to `command`, `args`,
+`env`, `url`, `headers`, and the `oauth` string fields. The remaining
+fields (`description`, `compressionLevel`, `allowedTools`,
+`disabledTools`) are used literally.
 
 ### Server Types
 
@@ -212,11 +216,65 @@ Inspect what a server actually exposes — including the
 `[exposed]`/`[filtered]` decision per tool — with the
 [`tools <name>`](#tools-name) command.
 
+### Compression Levels
+
+The optional `compressionLevel` field controls how much of each tool
+appears in the compact catalog embedded in the `get_tool_schema` tool
+description. The level trades catalog compactness for routing detail:
+lower levels give the LLM more information up front (fewer
+`get_tool_schema` round-trips), while higher levels minimize the
+per-request token overhead. The full JSON parameter schema is always
+returned by `get_tool_schema` regardless of the level — only the
+catalog *listing* changes.
+
+Four levels are supported, from most to least compact:
+
+| Level | Tool listing format | Description shown? |
+| --- | --- | --- |
+| `max` | `toolA, toolB, toolC` (comma-separated, single line) | No |
+| `high` (default) | `toolName(arg1, arg2)` (one per line) | No |
+| `medium` | `toolName(arg1, arg2): first sentence...` (one per line) | Snippet |
+| `low` | `<tool>toolName(arg1, arg2): full description</tool>` (one per line) | Full |
+
+Argument names are extracted from each tool's `inputSchema.properties`
+keys in definition order. When a tool has no description, the `medium`
+and `low` listings omit the description portion and show just the
+signature.
+
+Omitting `compressionLevel` is equivalent to `high`. Set it per server
+in `mcp.json`:
+
+```jsonc
+"github": {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"],
+  "compressionLevel": "medium"
+}
+```
+
+Or set it at creation time with the
+[`add`](#add-name-commandorurl-rest) command:
+
+```bash
+mcp-compress-router add github \
+  --compression-level medium \
+  -- npx -y @modelcontextprotocol/server-github
+```
+
+An invalid value is rejected at config load time with an error naming
+the four valid levels. The level affects only the catalog listing: the
+[`tools <name>`](#tools-name) command always prints the full tool
+table, and the JSON returned by `get_tool_schema` is unchanged. For
+guidance on choosing a level — including the Claude Code
+2000-character description limit that favors `max` — see
+[Compression Levels](../../README.md#compression-levels) in the README.
+
 ### Variable Expansion
 
-Every string field in a server entry (including values nested inside
-`env`, `headers`, and `oauth`) is expanded against the process
-environment at load time. Two syntaxes are supported:
+The `command`, `args`, `env`, `url`, and `headers` fields, plus the
+`oauth` string fields, are expanded against the process environment at
+load time. Two syntaxes are supported:
 
 | Syntax | Behavior |
 | --- | --- |
@@ -573,6 +631,7 @@ Registers a downstream MCP server.
 | `--disabled` | Mark the server as disabled. Writes `"enabled": false`. Mutually exclusive with `--enabled` |
 | `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
 | `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
+| `--compression-level <level>` | Tool listing compression level: `max`, `high`, `medium`, or `low`. Defaults to `high` when omitted. Validated at write time (see [Compression Levels](#compression-levels)) |
 | `-p, --port <number>` | Fixed local OAuth callback port (HTTP only). Written to `oauth.callbackPort` so subsequent `login` runs reuse it. Integer 1-65535 |
 
 ```bash
@@ -591,6 +650,10 @@ mcp-compress-router add github --allowed-tools list_issues \
 
 # Add a server with a denylist glob
 mcp-compress-router add fs --disabled-tools "delete_*" -- npx -y fs-server
+
+# Add a server with a medium tool listing (see Compression Levels)
+mcp-compress-router add github --compression-level medium \
+  -- npx -y @modelcontextprotocol/server-github
 ```
 
 ### `disable <name>`
@@ -656,22 +719,24 @@ with a clear error and prints no partial tool list.
 
 ### `get <name>`
 
-Prints the raw configuration for a single server.
+Prints the configuration for a single server, including its resolved
+`compressionLevel` (the explicit value, or `high (default)` when the
+field is omitted).
 
 ### `list`
 
 Prints a table of every configured server with its transport type,
-command or URL, enable state, configured tool-filter summary, and auth
-status. All columns are read entirely from local files (`mcp.json` and
-`credentials.json`) — no network access.
+command or URL, enable state, configured tool-filter summary, resolved
+compression level, and auth status. All columns are read entirely from
+local files (`mcp.json` and `credentials.json`) — no network access.
 
 ```text
 Configuration was loaded from /home/user/.config/mcp-compress-router/mcp.json
 
-Name      Type  CommandOrUrl                                   Enabled Tools                  Auth
-github    http  https://api.github.com/mcp                     yes      all                   requires login
-filtered  stdio npx -y @modelcontextprotocol/server-github     yes      2 allowed (1 blocked) none
-archive   stdio npx -y @modelcontextprotocol/server-archive   no       all                   none
+Name      Type   CommandOrUrl                                 Enabled  Tools                  Compression  Auth
+github    http   https://api.github.com/mcp                   yes      all                    high         requires login
+filtered  stdio  npx -y @modelcontextprotocol/server-github   yes      2 allowed (1 blocked)  medium       none
+archive   stdio  npx -y @modelcontextprotocol/server-archive  no       all                    high         none
 ```
 
 The `Enabled` column shows `yes` unless `enabled` is explicitly `false`
