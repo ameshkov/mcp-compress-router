@@ -6,12 +6,13 @@ Feature: Driving Codex CLI with the router
   "CODEX_HOME", so the plans exercise the real agent without an OpenAI
   account. The mock LLM log is the primary evidence: it shows the router
   tools inside Codex's "mcp__qa_router" namespace tool, the compact
-  catalog, the full tool descriptions, and the round-trip results.
+  catalog, the first-sentence descriptions, and the round-trip results.
 
   Codex advertises MCP tools as namespace children, so the log shows the
   qualified "mcp__qa_router__get_tool_schema" and
-  "mcp__qa_router__invoke_tool" names. It does not truncate tool
-  descriptions, so the long-description plan checks the complete catalog.
+  "mcp__qa_router__invoke_tool" names. The catalog carries only the
+  first sentence of each tool description, so the long-description plan
+  checks that the complete text arrives through the schema result.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -58,12 +59,12 @@ Scenario: Codex passes every downstream tool description to the model
   And the log reports "0 failed" checks
 
 @TC-CODEX-5
-Scenario: A very long tool description is not cut by Codex
+Scenario: A long tool description reaches Codex complete through the schema result
   Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Read the documented tool schema'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
-  And the log shows the catalog ending "LONG-DESCRIPTION-TAIL"
+  And the log shows no "LONG-DESCRIPTION-TAIL" in the catalog
   And the log shows the end of the long description in a "get_tool_schema" result
   And the log reports "0 failed" checks
 

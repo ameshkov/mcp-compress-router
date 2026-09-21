@@ -68,13 +68,17 @@ single router MCP that compresses all the connected MCPs into one with just
 two tools: `get_tool_schema`, `invoke_tool`.
 
 `get_tool_schema` in the description only has a list of MCP servers, optional
-descriptions (you can write them yourself), and a list of tool names for each
-MCP server. [Here is an example](docs/assets/tools-compressed.json) of how the
-compressed version looks like, and it takes about 900 tokens.
+descriptions (you can write them yourself), and a compact listing of each
+server's tools — tool names, argument signatures, or just a tool count,
+depending on the `compressionLevel`. [Here is an example](docs/assets/tools-compressed.json)
+of how the compressed version looks like with `compressionLevel: "max"`, and
+it takes about 600 tokens. Calling `get_tool_schema` with just a server name
+returns that server's tool signatures and arguments, and calling it with a
+tool name returns the full JSON parameter schema and description.
 
 If we repeat our exercise with the compressed version, the total overhead on
-an average coding session will be about **$0.032175** so we saved about
-**96.5%** on costs!
+an average coding session will be about **$0.0215** so we saved about
+**97.7%** on costs!
 
 This is just a basic example with just 3 MCP servers, the more MCP servers you
 have, the more you save.
@@ -184,6 +188,8 @@ Then start a new session in your coding agent. The agent picks up the
 router's two tools — `get_tool_schema` and `invoke_tool` — and uses
 them to discover and call every server you added, without the agent
 ever seeing the raw tool listings of each downstream server.
+`get_tool_schema` accepts a server name alone to list that server's
+tools, or a server and tool names to return their parameter schemas.
 
 Under the hood your agent spawns the router as a child process with:
 
@@ -370,23 +376,28 @@ Each server's tools are listed in the `get_tool_schema` description at a
 configurable `compressionLevel`. The level trades catalog compactness
 for routing detail: lower levels give the LLM more information up front
 (fewer `get_tool_schema` round-trips), while higher levels minimize the
-per-request token overhead. The full JSON parameter schema is always
-available via `get_tool_schema` regardless of the level — only the
-catalog *listing* changes.
+per-request token overhead. The full JSON parameter schema and the
+complete tool description are always available via `get_tool_schema`
+regardless of the level — only the catalog *listing* changes, and full
+descriptions never appear in it.
 
 Four levels are supported, from most to least compact:
 
 | Level | Tool listing format | Description shown? |
 | --- | --- | --- |
-| `max` | `toolA, toolB, toolC` (comma-separated, single line) | No |
-| `high` (default) | `toolName(arg1, arg2)` (one per line) | No |
-| `medium` | `toolName(arg1, arg2): first sentence...` (one per line) | Snippet |
-| `low` | `<tool>toolName(arg1, arg2): full description</tool>` (one per line) | Full |
+| `max` | `Provides N tools. Call get_tool_schema with "server" to list them.` | No |
+| `high` (default) | `toolA, toolB, toolC` (comma-separated, single line) | No |
+| `medium` | `toolName(arg1, arg2)` (one per line) | No |
+| `low` | `toolName(arg1, arg2): first sentence...` (one per line) | First sentence |
 
 Argument names are extracted from each tool's `inputSchema.properties`
-keys in definition order. When a tool has no description, the `medium`
-and `low` listings omit the description portion and show just the
-signature.
+keys in definition order. When a tool has no description, the `low`
+listing shows just the signature. Regardless of the level, calling
+`get_tool_schema` with just a server name returns the full signatures
+for that server's tools, and calling it with tool names returns their
+complete descriptions and JSON schemas — so the tool names a `max`
+catalog omits and the descriptions no catalog shows are always one call
+away.
 
 Omitting `compressionLevel` (the default) is equivalent to `high`. Set
 it per server in `mcp.json`:
@@ -410,24 +421,29 @@ npx mcp-compress-router@latest add github \
 
 A good rule of thumb:
 
-- Use `max` for servers whose tool names are self-describing and you
-  want the smallest possible catalog.
-- Use `high` (the default) for most servers — argument names are
-  usually enough for the LLM to pick the right tool.
-- Use `medium` when tool names alone are ambiguous and a one-line
-  hint helps disambiguate.
-- Use `low` sparingly — only when full descriptions must be visible
-  without a `get_tool_schema` call, since it costs the most tokens.
+- Use `max` for the smallest possible catalog, especially with many
+  servers: the model reads the tool count and discovers the tools with
+  a `get_tool_schema` list call when it needs them.
+- Use `high` (the default) for most servers — tool names are usually
+  enough for the LLM to pick the right tool.
+- Use `medium` when tool names alone are ambiguous and argument names
+  help disambiguate.
+- Use `low` sparingly — only when a one-line description must be
+  visible without a `get_tool_schema` call, since it costs the most
+  tokens. The complete description is still only available from a
+  `get_tool_schema` result.
 
 > **Note for Claude Code:** Claude Code truncates any single tool
-> description at 2000 characters. The router renders the entire
-> compressed catalog into the `get_tool_schema` description that the
-> agent receives on every turn, so with several downstream servers or
-> many tools per server the `high`, `medium`, or `low` listings can
-> exceed that limit and get truncated — breaking routing. When using
-> Claude Code, set `compressionLevel: "max"` on your servers (or pass
-> `--compression-level max` to `add`) so each server's tool listing
-> collapses to a comma-separated single line.
+> description at 2048 characters and appends `… [truncated]`. The
+> router renders the entire compressed catalog into the
+> `get_tool_schema` description that the agent receives on every turn,
+> so with several downstream servers or many tools per server the
+> `medium` or `low` listings can exceed that limit and get truncated —
+> breaking routing. When using Claude Code, prefer
+> `compressionLevel: "max"` on your servers (or pass
+> `--compression-level max` to `add`) so each server's listing
+> collapses to a single count-and-pointer line; `high` is the next best
+> choice.
 
 ### Inspecting Tools
 
@@ -735,19 +751,26 @@ Shell environment variables always take precedence over `.env` values.
 
 Once connected, the agent sees exactly **two tools**:
 
-- **`get_tool_schema(server, tools)`** — Retrieves the JSON parameter
-  schema for one or more tools on a downstream MCP server. The tool's
-  description includes a compact listing of all servers and their
-  available tool names.
+- **`get_tool_schema(server, tools?)`** — Retrieves the JSON parameter
+  schema and the full description for one or more tools on a downstream
+  MCP server. The tool's description includes a compact listing of all
+  servers and their tools. Called with just a server name, it returns a
+  compact list of that server's tools and their argument signatures —
+  at every compression level, including `max`, where the catalog lists
+  no tool names at all.
 - **`invoke_tool(server, tool, arguments)`** — Forwards a tool call to
   the downstream MCP server and returns the result.
 
 The typical workflow:
 
 1. The agent reads the compact catalog from the `get_tool_schema`
-   description and identifies which tools it needs.
-2. It calls `get_tool_schema` to learn the exact parameters.
-3. It calls `invoke_tool` to execute a tool, validated against the
+   description and identifies the server it needs.
+2. If the catalog is not enough, it calls `get_tool_schema` with just
+   the server name to list that server's tools and their argument
+   signatures.
+3. It calls `get_tool_schema` with the chosen tool name to learn the
+   exact parameters.
+4. It calls `invoke_tool` to execute a tool, validated against the
    cached schema.
 
 This replaces thousands of tokens of tool listings with a compact ~900

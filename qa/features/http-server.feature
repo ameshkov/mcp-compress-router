@@ -12,5 +12,5 @@ Scenario: The HTTP server appears in the catalog
   And I added the streamable-http mock server with "pnpm qa:router add http-mock --description 'QA streamable-http mock' http://mock-mcp-http:3100/mcp"
   When I list the router tools with "pnpm qa:probe --list"
   Then the "get_tool_schema" description contains a "## http-mock" section
-  And that section lists "add(a, b)"
-  And that section lists "whoami()"
+  And that section lists "add"
+  And that section lists "whoami"

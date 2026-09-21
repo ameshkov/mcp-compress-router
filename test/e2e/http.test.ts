@@ -109,6 +109,25 @@ describe('MCP Compress Router E2E — HTTP downstream', () => {
     expect(parsed[0].description).toBe('Returns the input message unchanged.');
   });
 
+  it('get_tool_schema lists signatures when tools is omitted on an HTTP server', async () => {
+    const resp = await client.sendRequest('tools/call', {
+      name: 'get_tool_schema',
+      arguments: { server: 'http-fixture' },
+    });
+
+    const result = resp.result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Tools provided by "http-fixture" (5):');
+    expect(result.content[0].text).toContain('echo(message)');
+    expect(result.content[0].text).toContain('add(a, b)');
+    expect(result.content[0].text).toContain(
+      'Call get_tool_schema with a tool name to get its full description and parameter schema.',
+    );
+  });
+
   it('invoke_tool forwards echo to HTTP server and returns result', async () => {
     const resp = await client.sendRequest('tools/call', {
       name: 'invoke_tool',

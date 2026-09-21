@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LONG_DESCRIPTION_HEAD, LONG_DESCRIPTION_TAIL } from '../mock-long-description.js';
-import { getScript, listScripts, scriptNames } from './scripts.js';
+import { CLAUDE_TRUNCATION_MARKER, getScript, listScripts, scriptNames } from './scripts.js';
 
 describe('built-in mock LLM scripts', () => {
   it('exposes every script through the lookup helpers', () => {
@@ -39,6 +39,7 @@ describe('built-in mock LLM scripts', () => {
       expect.arrayContaining([
         'stdio-catalog',
         'stdio-roundtrip',
+        'tool-list',
         'http-catalog',
         'http-roundtrip',
         'oauth-catalog',
@@ -47,27 +48,35 @@ describe('built-in mock LLM scripts', () => {
         'fail',
         'stdio-descriptions',
         'long-description',
+        'long-catalog-truncated',
       ]),
     );
   });
 
-  it('checks both markers of the long description', () => {
-    const script = getScript('long-description');
+  it('checks the list-mode signatures and hint in the tool-list script', () => {
+    const script = getScript('tool-list');
     expect(script).toBeDefined();
-    const expectations = script!.steps.flatMap((step) => [
-      ...(step.expect?.catalogIncludes ?? []),
-      ...(step.expect?.messagesInclude ?? []),
-    ]);
-    expect(expectations).toContain(LONG_DESCRIPTION_HEAD);
-    expect(expectations).toContain(LONG_DESCRIPTION_TAIL);
+    const expectations = script!.steps.flatMap((step) => step.expect?.messagesInclude ?? []);
+    expect(expectations).toContain('echo(message)');
+    expect(expectations).toContain('Call get_tool_schema with a tool name');
   });
 
-  it('checks the truncation boundary of the truncated long description', () => {
-    const script = getScript('long-description-truncated');
+  it('checks the catalog head and the full description in the result', () => {
+    const script = getScript('long-description');
     expect(script).toBeDefined();
     const first = script!.steps[0].expect;
     expect(first?.catalogIncludes).toContain(LONG_DESCRIPTION_HEAD);
     expect(first?.catalogExcludes).toContain(LONG_DESCRIPTION_TAIL);
     expect(script!.steps[1].expect?.messagesInclude).toContain(LONG_DESCRIPTION_TAIL);
+  });
+
+  it('checks the head, the truncation marker, and the absent tail of the long catalog', () => {
+    const script = getScript('long-catalog-truncated');
+    expect(script).toBeDefined();
+    const expect1 = script!.steps[0].expect;
+    expect(expect1?.catalogIncludes).toContain('## stdio-mock-long');
+    expect(expect1?.catalogIncludes).toContain(LONG_DESCRIPTION_HEAD);
+    expect(expect1?.catalogIncludes).toContain(CLAUDE_TRUNCATION_MARKER);
+    expect(expect1?.catalogExcludes).toContain(LONG_DESCRIPTION_TAIL);
   });
 });

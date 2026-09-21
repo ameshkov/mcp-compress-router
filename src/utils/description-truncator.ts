@@ -6,7 +6,7 @@
  * string. No failure modes — malformed input always yields an empty
  * string.
  *
- * Used by the catalog text renderer at the `medium` compression level.
+ * Used by the catalog text renderer at the `low` compression level.
  * This is distinct from the character-based `truncateDescription` in
  * `src/cli/tools-command.ts`, which serves the CLI table layout.
  *

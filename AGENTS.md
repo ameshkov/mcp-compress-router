@@ -27,7 +27,8 @@ of sending all tool names and descriptions from every connected MCP to the
 LLM on every request, this server exposes only two tools:
 
 - **`get_tool_schema`** — returns the JSON parameter schema for one or more
-  tools on a connected MCP server.
+  tools on a connected MCP server, or lists a server's tools and their
+  argument signatures when called without tool names.
 - **`invoke_tool`** — forwards a tool invocation to a connected MCP server
   and returns the result.
 

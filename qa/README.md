@@ -98,8 +98,9 @@ and using it re-introduces the port-conflict risk by choice.
 | Command | Purpose |
 | --- | --- |
 | `pnpm qa:setup` | Reset the QA router home (`qa/home`): empty baseline config, no tool cache, no credentials. Run it at the start of every scenario. |
+| `pnpm qa:long-description` | Print the long mock description used as a server's `--description` in the Claude Code truncation plan. Capture it as `$(pnpm --silent qa:long-description)` so pnpm's banner stays out of the value. |
 | `pnpm qa:router <args>` | Run the management CLI (`add`, `remove`, `list`, `tools`, `enable`, `disable`, `login`, `logout`) against the QA home. |
-| `pnpm qa:probe ...` | Spawn the compiled router over stdio, do the MCP handshake, and run one request (`--list`, `--tool <name> --args '<json>'`). |
+| `pnpm qa:probe ...` | Spawn the compiled router over stdio, do the MCP handshake, and run one request (`--list`, `--tool <name> --args '<json>'`). Omit `tools` in the args to list a server's tools and their arguments. |
 | `pnpm qa:llm ...` | Control and inspect the mock LLM (`list`, `script`, `custom`, `status`, `log`, `reset`). |
 | `pnpm qa:agent ...` | Run a coding agent session (`--prompt '<text>'`, `--agent opencode\|copilot\|claude\|codex`) or `--mcp-list`, then report the mock LLM validation result. |
 | `pnpm qa:run ...` | The BDD runner that walks the plans and records verdicts. |
@@ -189,15 +190,16 @@ the log. The built-ins are:
 | --- | --- |
 | `stdio-catalog` | Verify the two router tools and the stdio catalog, then reply with text |
 | `stdio-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
+| `tool-list` | Call `get_tool_schema` without tool names, expect the signatures and hint back |
 | `http-catalog` | Verify the two router tools and the http catalog, then reply with text |
 | `http-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
 | `oauth-catalog` | Verify the two router tools and the oauth catalog, then reply with text |
 | `oauth-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
 | `retry` | Invoke `add` with a missing argument, recover with the fixed call, expect 42 |
 | `fail` | Invoke `failing_tool` and expect the downstream error to come back |
-| `stdio-descriptions` | Verify every stdio tool description reaches the model (low compression) |
-| `long-description` | Verify the long `documented_tool` description is not truncated (low compression) |
-| `long-description-truncated` | Verify a truncating agent drops the catalog tail but keeps the full `get_tool_schema` result (low compression) |
+| `stdio-descriptions` | Verify every stdio tool description reaches the model as a first sentence (low compression) |
+| `long-description` | Verify the catalog carries the `documented_tool` first sentence and the result the full description |
+| `long-catalog-truncated` | Verify Claude Code truncates the over-long catalog description and drops the tail |
 
 `pnpm qa:llm list` prints the same table. For ad-hoc scenarios,
 `pnpm qa:llm custom <file.json>` installs an inline script with the same
@@ -214,7 +216,7 @@ suffix, so `get_tool_schema` matches `qa-router_get_tool_schema`.
 | `toolsContain` | The request's tool list contains the named tool |
 | `toolsAbsent` | Downstream tools are not advertised directly to the model |
 | `catalogIncludes` | The `get_tool_schema` description contains the substrings (catalog sections, tool lines) |
-| `catalogExcludes` | The `get_tool_schema` description does not contain the substrings (agent-side truncation) |
+| `catalogExcludes` | The `get_tool_schema` description does not contain the substrings (for example the long-description tail, which Claude Code cuts at its 2048-character cap) |
 | `messagesInclude` | The message history contains the substrings (tool results, guided errors) |
 | `toolCallsInclude` | The recorded tool calls exist and their compact JSON arguments contain the substrings |
 
@@ -266,8 +268,12 @@ arguments, `add` returns the sum, `multi_block` returns a text, a
 resource, and a text block, `failing_tool` returns an `isError` result,
 and `documented_tool` carries a deliberately long description (about
 3.4 KB, bounded by the `LONG-DESCRIPTION-HEAD` and
-`LONG-DESCRIPTION-TAIL` markers) that the description plans use to
-detect agent-side truncation.
+`LONG-DESCRIPTION-TAIL` markers). The catalog only ever shows the
+first sentence (the head marker); the description plans verify that the
+complete text arrives through the `get_tool_schema` result.
+`pnpm --silent qa:long-description` prints the same text for use as a
+server's `--description`, which the Claude Code truncation plan uses to
+grow the catalog past Claude Code's 2048-character tool-description cap.
 
 With `MOCK_MCP_AUTH=oauth`, the HTTP mock publishes mock OAuth metadata
 (RFC 9728 + RFC 8414), supports dynamic client registration, and
@@ -286,15 +292,16 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | Feature file | Group | Covers |
 | --- | --- | --- |
 | `router-startup.feature` | `STARTUP` | Two-tool surface, compact catalog, disabled servers |
-| `tool-schema.feature` | `SCHEMA` | `get_tool_schema` results and guided errors |
+| `tool-schema.feature` | `SCHEMA` | `get_tool_schema` results, list mode, and guided errors |
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
 | `oauth-server.feature` | `OAUTH` | Auto-login, logout, and login again |
-| `opencode.feature` | `OPENCODE` | Discovery, catalog, descriptions, stdio/http/oauth round trips, recovery, cleanup |
+| `compression.feature` | `COMPRESS` | The four catalog levels and list mode from a `max` server |
+| `opencode.feature` | `OPENCODE` | Discovery, catalog, first-sentence descriptions, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
-| `claude.feature` | `CLAUDE` | Discovery, catalog, descriptions, the 2000-character truncation boundary, round trips, recovery, cleanup |
-| `codex.feature` | `CODEX` | Discovery, catalog, descriptions, the full long description, round trips, recovery, cleanup |
+| `claude.feature` | `CLAUDE` | Discovery, catalog, first-sentence descriptions, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |
+| `codex.feature` | `CODEX` | Discovery, catalog, first-sentence descriptions, the long-description result path, round trips, recovery, cleanup |
 
 The steps are written as instructions for a human tester: each one
 names the exact command to run or the exact evidence to look for. The
@@ -378,8 +385,9 @@ docker compose -f qa/docker-compose.yml \
   from the runner; inside the workspace container that flag is required
   because Codex's Linux sandbox cannot run under Docker.
 - The mock LLM log reports a failed `catalogExcludes` check in a
-  `long-description` run: the agent did not truncate the catalog. Only
-  the `long-description-truncated` script expects the tail to be absent.
+  `long-description` run: the catalog unexpectedly contains the tail
+  marker. The router renders only the first sentence at `low`, so this
+  usually means the selected script or the router build is stale.
 - The router refuses to start with an empty server list: run
   `pnpm qa:setup` and add a server before `pnpm qa:probe` or an agent.
 - `pnpm qa:llm log` exits 1 and shows FAIL lines: the agent did not

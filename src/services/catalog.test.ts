@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildCatalog, lookupTools } from './catalog.js';
+import { buildCatalog, lookupServer, lookupTools } from './catalog.js';
 import type { DiscoveredServer } from './discovery.js';
 import type { ToolSelection } from '../utils/index.js';
 import type { CompressionLevel } from '../utils/index.js';
@@ -127,6 +127,47 @@ describe('lookupTools', () => {
 
   it('throws when one of multiple tool names is unknown — not partial', () => {
     expect(() => lookupTools(catalog, 'srv', ['a', 'nonexistent'])).toThrow(/nonexistent/);
+  });
+});
+
+describe('lookupServer', () => {
+  const catalog = buildCatalog([
+    {
+      name: 'alpha',
+      tools: [{ name: 'a', inputSchema: { type: 'object', properties: {} } }],
+    },
+    {
+      name: 'beta',
+      tools: [{ name: 'b', inputSchema: { type: 'object', properties: {} } }],
+    },
+  ]);
+
+  it('returns the server entry for a known name', () => {
+    const server = lookupServer(catalog, 'beta');
+    expect(server.name).toBe('beta');
+    expect(server.tools.map((t) => t.name)).toEqual(['b']);
+  });
+
+  it('throws for an unknown server, listing available servers in catalog order', () => {
+    expect(() => lookupServer(catalog, 'gamma')).toThrow(
+      /^Server "gamma" not found\. Available servers: alpha, beta$/,
+    );
+  });
+
+  it('agrees with lookupTools on the unknown-server message', () => {
+    let serverError: string | undefined;
+    let toolsError: string | undefined;
+    try {
+      lookupServer(catalog, 'gamma');
+    } catch (err) {
+      serverError = (err as Error).message;
+    }
+    try {
+      lookupTools(catalog, 'gamma', ['a']);
+    } catch (err) {
+      toolsError = (err as Error).message;
+    }
+    expect(serverError).toBe(toolsError);
   });
 });
 

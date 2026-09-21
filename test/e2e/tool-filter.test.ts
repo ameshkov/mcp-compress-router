@@ -53,6 +53,19 @@ describe('MCP Compress Router E2E — tool filtering', () => {
     expect(gts.description).toContain('echo');
     expect(gts.description).not.toContain('crash');
     expect(gts.description).not.toContain('add');
+
+    const listResp = await client.sendRequest('tools/call', {
+      name: 'get_tool_schema',
+      arguments: { server: 'fixture' },
+    });
+    const listResult = listResp.result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(listResult.isError).toBeUndefined();
+    expect(listResult.content[0].text).toContain('echo(message)');
+    expect(listResult.content[0].text).not.toContain('add');
+    expect(listResult.content[0].text).not.toContain('crash');
   });
 
   it('invoke_tool on a filtered tool errors locally without contacting downstream', async () => {

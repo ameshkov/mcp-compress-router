@@ -1,6 +1,6 @@
 import { filterTools } from '../utils/index.js';
 import type { CompressionLevel, Logger, ServerStatus } from '../utils/index.js';
-import type { ToolCatalog, ToolDescriptor, ToolSelection } from '../utils/index.js';
+import type { CatalogServer, ToolCatalog, ToolDescriptor, ToolSelection } from '../utils/index.js';
 import type { DiscoveredServer } from './discovery.js';
 
 /**
@@ -151,6 +151,26 @@ export function replaceCatalogContents(catalog: ToolCatalog, built: ToolCatalog)
 }
 
 /**
+ * Finds a server entry in the catalog by name.
+ *
+ * Used by both the schema lookup and the `get_tool_schema` list mode so
+ * the "not found" error message has a single source of truth.
+ *
+ * @param catalog - The tool catalog.
+ * @param serverName - The server to look up.
+ * @returns The matching catalog server entry.
+ * @throws If the server is not found, listing the available server names.
+ */
+export function lookupServer(catalog: ToolCatalog, serverName: string): CatalogServer {
+  const server = catalog.servers.find((s) => s.name === serverName);
+  if (!server) {
+    const available = catalog.servers.map((s) => s.name).join(', ');
+    throw new Error(`Server "${serverName}" not found. Available servers: ${available}`);
+  }
+  return server;
+}
+
+/**
  * Looks up tool schemas in the catalog by server and tool names.
  *
  * @param catalog - The tool catalog.
@@ -164,11 +184,7 @@ export function lookupTools(
   serverName: string,
   toolNames: string[],
 ): ToolDescriptor[] {
-  const server = catalog.servers.find((s) => s.name === serverName);
-  if (!server) {
-    const available = catalog.servers.map((s) => s.name).join(', ');
-    throw new Error(`Server "${serverName}" not found. Available servers: ${available}`);
-  }
+  const server = lookupServer(catalog, serverName);
 
   const results: ToolDescriptor[] = [];
   const missing: string[] = [];

@@ -152,7 +152,7 @@ describe('handleTools — stdio fixture', () => {
     expect(out).not.toContain('[filtered]');
   });
 
-  it('shows identical full output regardless of compressionLevel (max vs low)', async () => {
+  it('shows identical full output regardless of compressionLevel (max vs high)', async () => {
     const resolved = await resolveCommand();
 
     await writeConfig({
@@ -167,24 +167,22 @@ describe('handleTools — stdio fixture', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
-      compressionLevel: 'low',
+      compressionLevel: 'high',
     });
-    const outLow = await handleTools(configPath, 'fs');
+    const outHigh = await handleTools(configPath, 'fs');
 
     // Output must be byte-for-byte identical — compressionLevel does
     // not leak into the human-inspection command path.
-    expect(outLow).toBe(outMax);
+    expect(outHigh).toBe(outMax);
 
-    // The full description appears (table-truncated for width, but not
-    // compressed): the echo tool's description is present in both.
+    // The full description appears (table-truncated for width): the
+    // tools table is never compressed, whatever the catalog level.
     expect(outMax).toContain('Returns the input message unchanged.');
 
-    // No low-level <tool> tags leak into the tools table.
-    expect(outMax).not.toContain('<tool>');
-
     // The table layout is used (header columns present), proving the
-    // max-level single comma-separated line never appears here.
+    // max-level count-and-pointer line never appears here.
     expect(outMax).toContain('Exposure');
+    expect(outMax).not.toContain('Call get_tool_schema with');
   });
 });
 

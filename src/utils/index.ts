@@ -5,6 +5,7 @@ export type {
   ServerTransportType,
   ServerStatus,
   ToolDescriptor,
+  CatalogServer,
   ToolCatalog,
   ToolSelection,
   StoredCredentials,
@@ -13,7 +14,7 @@ export type {
 } from './types.js';
 export type { ToolExposureEntry } from './tool-filter.js';
 export { filterTools } from './tool-filter.js';
-export { renderCompactCatalog } from './text-format.js';
+export { renderCompactCatalog, renderToolListResponse } from './text-format.js';
 export { validateArguments } from './validate-arguments.js';
 export { validateGlobPattern } from './validate-glob.js';
 export { expandEnvField } from './expand-env.js';

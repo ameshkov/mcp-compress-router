@@ -8,6 +8,45 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Calling `get_tool_schema` with just a server name now returns a
+  compact text list of that server's tools and their argument
+  signatures, plus a hint to call again with a tool name for the full
+  JSON schema. This works at every compression level, including `max`,
+  where the catalog lists no tool names at all. `tools` is now optional,
+  and an empty array behaves like omitting it — previously `tools: []`
+  was rejected as `InvalidParams`. The explicit `tools: [...]` path and
+  its JSON response are unchanged.
+
+### Changed
+
+- **Breaking:** the `compressionLevel` ladder was remapped, and full tool
+  descriptions were removed from the catalog. The four level names are
+  unchanged, but every level now renders differently:
+
+  | Level | Before | After |
+  | --- | --- | --- |
+  | `max` | Comma-separated tool names | Tool count plus a `get_tool_schema` pointer; no names |
+  | `high` (default) | `toolName(arg1, arg2)` signatures | Comma-separated tool names |
+  | `medium` | Signature plus the first sentence | `toolName(arg1, arg2)` signatures |
+  | `low` | `<tool>signature: full description</tool>` | Signature plus the first sentence |
+
+  Existing configs keep working but render differently. To preserve a
+  server's previous listing, move it one level up: old `max` → new
+  `high`, old `high` → new `medium`, old `medium` → new `low`. The old
+  `low` full-description rendering has no replacement — complete tool
+  descriptions are returned by `get_tool_schema` results. The default
+  stays `high`, so servers without an explicit level now list names
+  only.
+
+### Fixed
+
+- Corrected the documented Claude Code tool-description limit from 2000
+  to 2048 characters: Claude Code cuts the description at 2048
+  characters and appends `… [truncated]` (measured on the pinned
+  `2.1.278` build). The compression guidance is unchanged.
+
 ## [v1.6.4] - 2026-09-10
 
 ### Fixed

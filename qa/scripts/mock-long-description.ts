@@ -1,14 +1,16 @@
 /**
- * Deliberately long tool description shared by the QA mock MCP servers
- * and the mock LLM expectations.
+ * Deliberately long description shared by the QA mock MCP servers, the
+ * mock LLM expectations, and the Claude Code truncation plan.
  *
  * The description starts with `LONG_DESCRIPTION_HEAD` and ends with
- * `LONG_DESCRIPTION_TAIL`. The plans check for both markers in the
- * catalog the coding agent sends to the model, so a truncation cap
- * anywhere in the agent (for example the common 1 KiB or 2 KiB tool
- * description limits) drops the tail marker and fails the check. The
- * `documented_tool` in `mock-mcp-tools.ts` uses this text as its
- * description, and the mock LLM scripts assert on the markers.
+ * `LONG_DESCRIPTION_TAIL`. The compact catalog only carries the first
+ * sentence of a description, so the plans check the head marker in the
+ * catalog and the tail marker in the `get_tool_schema` result the agent
+ * forwards to the model. `pnpm --silent qa:long-description` prints the
+ * same text for use as a server's `--description`, which grows the
+ * catalog past Claude Code's tool-description cap in the truncation
+ * plan. The `documented_tool` in `mock-mcp-tools.ts` uses this text as
+ * its description, and the mock LLM scripts assert on the markers.
  */
 
 /** Marker at the start of the long tool description. */
@@ -29,10 +31,10 @@ const PARAGRAPHS = [
     'description passthrough in the manual QA plans. Real MCP servers ship ' +
     'descriptions that are far longer than a single sentence: they list every ' +
     'argument, explain defaults, warn about side effects, and point at related ' +
-    'tools. The router embeds those descriptions in the compact catalog at the ' +
-    'low compression level and returns them again in the get_tool_schema ' +
-    'result, so both paths have to survive the coding agent request pipeline ' +
-    'unchanged.',
+    'tools. At the low compression level the router embeds only the first ' +
+    'sentence of those descriptions in the compact catalog and returns the ' +
+    'complete text in the get_tool_schema result, so both paths have to ' +
+    'survive the coding agent request pipeline unchanged.',
 
   'Use the documented tool whenever a scenario needs a description that is ' +
     'longer than the truncation cap of the coding agent under test. The tool ' +
@@ -70,12 +72,13 @@ const PARAGRAPHS = [
     'plans do not know about in advance.',
 
   'The catalog path and the schema path are both covered. At the low ' +
-    'compression level the router renders the full description inside the ' +
-    'get_tool_schema tool description, so the catalogIncludes checks verify ' +
-    'the markers there. The get_tool_schema call then returns the same text ' +
-    'inside the JSON result, and the messagesInclude check verifies the tail ' +
-    'marker in the next request the agent sends, proving the tool result was ' +
-    'not cut either.',
+    'compression level the router renders only the first sentence of the ' +
+    'description inside the get_tool_schema tool description, so the ' +
+    'catalogIncludes check verifies the head marker there and the ' +
+    'catalogExcludes check verifies the tail marker is absent. The ' +
+    'get_tool_schema call then returns the complete text inside the JSON ' +
+    'result, and the messagesInclude check verifies the tail marker in the ' +
+    'next request the agent sends, proving the tool result was not cut.',
 
   'When a plan fails on this tool, the mock LLM log shows which side dropped ' +
     'the text: a failed catalogIncludes check names the marker missing from ' +

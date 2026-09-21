@@ -5,11 +5,13 @@ Feature: Driving GitHub Copilot CLI with the router
   exercise the real agent without a GitHub account. The mock LLM log is
   the primary evidence: it shows the router tools under Copilot's
   hyphenated names ("qa-router-get_tool_schema"), the compact catalog,
-  the full tool descriptions, and the round-trip results.
+  the first-sentence descriptions, and the round-trip results.
 
   The stdio mock is added with "--compression-level low" so the compact
-  catalog carries the full downstream tool descriptions, which is what
-  the description plans verify.
+  catalog carries each tool's signature and first-sentence description,
+  which is what the description plans verify. Full descriptions are
+  never in the catalog; the long-description plan reads one through the
+  "get_tool_schema" result.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -55,12 +57,12 @@ Scenario: Copilot passes every downstream tool description to the model
   And the log reports "0 failed" checks
 
 @TC-COPILOT-5
-Scenario: A very long tool description is not cut by Copilot
+Scenario: A long tool description reaches Copilot complete through the schema result
   Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the copilot agent with "pnpm qa:agent --agent copilot --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
-  And the log shows the catalog ending "LONG-DESCRIPTION-TAIL"
+  And the log shows no "LONG-DESCRIPTION-TAIL" in the catalog
   And the log shows the end of the long description in a "get_tool_schema" result
   And the log reports "0 failed" checks
 

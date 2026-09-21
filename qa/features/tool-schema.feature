@@ -35,3 +35,24 @@ Scenario: An unknown tool is reported with the valid tools
 Scenario: Several tool schemas are returned in one call
   When I run "pnpm qa:probe --tool get_tool_schema --args '{"server":"stdio-mock","tools":["echo","add"]}'"
   Then the result JSON contains tools named "echo" and "add"
+
+@TC-SCHEMA-5
+Scenario: Omitting the tool names lists the server's tools
+  When I run "pnpm qa:probe --tool get_tool_schema --args '{"server":"stdio-mock"}'"
+  Then the call is not an error
+  And the result text shows the tool signatures "echo(message)" and "add(a, b)"
+  And the result text tells me to call get_tool_schema with a tool name
+
+@TC-SCHEMA-6
+Scenario: Listing an unknown server reports the available servers
+  When I run "pnpm qa:probe --tool get_tool_schema --args '{"server":"does-not-exist"}'"
+  Then the call reports an error
+  And the error says Server "does-not-exist" not found
+  And the error lists "stdio-mock" among the available servers
+
+@TC-SCHEMA-7
+Scenario: An empty tools array behaves like an omitted one
+  When I run "pnpm qa:probe --tool get_tool_schema --args '{"server":"stdio-mock","tools":[]}'"
+  Then the call is not an error
+  And the result text shows the tool signatures "echo(message)" and "add(a, b)"
+  And the result text tells me to call get_tool_schema with a tool name

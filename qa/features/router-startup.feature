@@ -18,11 +18,11 @@ Scenario: The router exposes exactly two tools
 Scenario: The catalog describes the stdio server and its tools
   When I list the router tools with "pnpm qa:probe --list"
   Then the "get_tool_schema" description contains a "## stdio-mock" section
-  And that section lists "echo(message)"
-  And that section lists "add(a, b)"
-  And that section lists "multi_block(prefix)"
-  And that section lists "failing_tool(message)"
-  And that section lists "documented_tool(input)"
+  And that section lists "echo"
+  And that section lists "add"
+  And that section lists "multi_block"
+  And that section lists "failing_tool"
+  And that section lists "documented_tool"
 
 @TC-STARTUP-3
 Scenario: A disabled downstream server stays out of the catalog

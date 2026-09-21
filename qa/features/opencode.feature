@@ -4,14 +4,17 @@ Feature: Driving opencode with the router
   LLM and verify the agent-observable surface in the mock LLM log: the
   router server and its two tools are discovered, the tools are used end
   to end over stdio, streamable-http, and OAuth-protected servers, every
-  downstream tool description reaches the model (including a
-  deliberately long one), guided errors are recoverable, and closing
-  opencode leaves no router or mock process behind.
+  downstream tool description reaches the model (as a first sentence in
+  the catalog, or complete through the schema result for a deliberately
+  long one), guided errors are recoverable, and closing opencode leaves
+  no router or mock process behind.
 
   The stdio mock is added with "--compression-level low" so the compact
-  catalog carries the full downstream tool descriptions, which is what
-  the description plans verify. The remote-server scenarios add the
-  HTTP or OAuth mock on top of that background.
+  catalog carries each tool's signature and first-sentence description,
+  which is what the description plans verify. Full descriptions are
+  never in the catalog; the long-description plan reads one through the
+  "get_tool_schema" result. The remote-server scenarios add the HTTP or
+  OAuth mock on top of that background.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -57,12 +60,12 @@ Scenario: The model sees every downstream tool description
   And the log reports "0 failed" checks
 
 @TC-OPENCODE-5
-Scenario: A very long tool description is not cut by opencode
+Scenario: A long tool description reaches opencode complete through the schema result
   Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the coding agent with "pnpm qa:agent --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
-  And the log shows the catalog ending "LONG-DESCRIPTION-TAIL"
+  And the log shows no "LONG-DESCRIPTION-TAIL" in the catalog
   And the log shows the end of the long description in a "get_tool_schema" result
   And the log reports "0 failed" checks
 

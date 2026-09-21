@@ -8,6 +8,14 @@ export type ServerTransportType = 'stdio' | 'http' | 'streamable-http';
  * tools are rendered in the `get_tool_schema` description. When the
  * `compressionLevel` config field is absent, the effective value is
  * `high`.
+ *
+ * - `max` — tool count plus a `get_tool_schema` pointer; no tool names.
+ * - `high` (default) — tool names only, comma-separated.
+ * - `medium` — `toolName(arg1, arg2)` signatures, one per line.
+ * - `low` — signature plus the first sentence of the description.
+ *
+ * No level renders full tool descriptions in the catalog; the complete
+ * description is always available from a `get_tool_schema` result.
  */
 export type CompressionLevel = 'max' | 'high' | 'medium' | 'low';
 

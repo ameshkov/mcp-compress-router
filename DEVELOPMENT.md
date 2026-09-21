@@ -147,7 +147,8 @@ npx @modelcontextprotocol/inspector \
 A web UI opens at `http://localhost:6274`. Use **List Tools** to
 confirm the router exposes exactly `get_tool_schema` and `invoke_tool`,
 then call them to inspect schemas and results — for example
-`server = fixture`, `tools = ["echo"]`, or `server = fixture`,
+`server = fixture` (lists the fixture's tools), `server = fixture`,
+`tools = ["echo"]` (returns the `echo` schema), or `server = fixture`,
 `tool = echo`, `arguments = {"message":"hello"}`.
 
 For scriptable checks without a browser, use `--cli`:
@@ -225,6 +226,8 @@ This prints the raw JSON-RPC responses to your terminal.
   `invoke_tool`.
 - The `get_tool_schema` description lists each server, its description,
   and its available tool names.
+- `get_tool_schema` called with only a server name returns that server's
+  tool signatures and a hint to request the full schemas.
 - `get_tool_schema` returns JSON parameter schemas for a valid server
   and tool list.
 - `invoke_tool` runs the downstream tool and returns its result.

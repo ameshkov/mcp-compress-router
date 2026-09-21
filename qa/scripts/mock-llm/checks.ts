@@ -181,9 +181,10 @@ function checkCatalog(request: WireChatRequest, expected: string[] | undefined):
 /**
  * Checks substrings that must be absent from the catalog description.
  *
- * Agents truncate tool descriptions at their own limits (Claude Code at
- * 2000 characters), so a plan can assert that a marker past the limit
- * never reaches the model in the catalog.
+ * Agents truncate tool descriptions at their own limits (Claude Code
+ * cuts at 2048 characters and appends `… [truncated]`), so a plan can
+ * assert that a marker past the limit never reaches the model in the
+ * catalog.
  *
  * @param request - The parsed model request.
  * @param expected - Substrings that must be absent.

@@ -6,15 +6,23 @@ Feature: Driving Claude Code with the router
   plans exercise the real agent without an Anthropic account. The mock
   LLM log is the primary evidence: it shows the router tools under
   Claude's "mcp__qa-router__get_tool_schema" names, the compact catalog,
-  the full tool descriptions, and the round-trip results.
+  the first-sentence descriptions, and the round-trip results.
 
   The stdio mock is added with "--compression-level low" so the compact
-  catalog carries the full downstream tool descriptions, which is what
-  the description plans verify. Claude Code truncates any single tool
-  description at 2000 characters, so the long-description plan checks
-  the truncation boundary instead of the complete catalog: the catalog
-  head reaches the model, the tail does not, and the "get_tool_schema"
-  result still carries the complete description.
+  catalog carries each tool's signature and first-sentence description,
+  which is what the description plans verify. Full descriptions are
+  never in the catalog, so the long-description plan checks that the
+  catalog carries only the first sentence (the head marker) while the
+  complete text still reaches the model through the "get_tool_schema"
+  result.
+
+  Claude Code cuts every tool description at 2048 characters and
+  appends "… [truncated]", so a catalog that grows past that cap reaches
+  the model truncated. The truncation plan adds a second stdio mock
+  whose "--description" carries the long text (the one catalog field the
+  router never compresses) and checks that the model sees the head and
+  the truncation marker but not the tail, while the protocol probe shows
+  the router's own catalog still carries the complete text.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -61,8 +69,8 @@ Scenario: Claude Code passes every downstream tool description to the model
   And the log reports "0 failed" checks
 
 @TC-CLAUDE-5
-Scenario: Claude Code truncates the catalog but keeps the full tool schema result
-  Given I selected the mock LLM script "long-description-truncated" with "pnpm qa:llm script long-description-truncated"
+Scenario: Claude Code receives the long description first sentence and the full schema result
+  Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the claude agent with "pnpm qa:agent --agent claude --prompt 'Read the documented tool schema'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
@@ -95,3 +103,15 @@ Scenario: Closing Claude Code leaves no QA processes behind
   When I run the claude agent with "pnpm qa:agent --agent claude --prompt 'Test the stdio mcp server'"
   Then running "pgrep -fl build/index.js" finds no router process
   And running "pgrep -fl qa/scripts/mock-mcp-stdio" finds no stdio mock process
+
+@TC-CLAUDE-9
+Scenario: Claude Code truncates an over-long catalog description
+  Given I selected the mock LLM script "long-catalog-truncated" with "pnpm qa:llm script long-catalog-truncated"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock-long --description "$(pnpm --silent qa:long-description)" -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  When I run the claude agent with "pnpm qa:agent --agent claude --prompt 'Test the stdio mcp server'"
+  And I show the mock LLM log with "pnpm qa:llm log"
+  Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
+  And the log shows a passed "catalogIncludes" check for "… [truncated]"
+  And the log shows a passed "catalogExcludes" check for "LONG-DESCRIPTION-TAIL"
+  And running "pnpm qa:probe --list" shows "LONG-DESCRIPTION-TAIL" in the "get_tool_schema" description
+  And the log reports "0 failed" checks

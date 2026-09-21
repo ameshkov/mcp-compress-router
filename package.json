@@ -37,6 +37,7 @@
     "lint:gherkin": "tsx qa/scripts/bdd/check-gherkin-ids.ts && gherkin-lint --config qa/.gherkin-lintrc qa/features",
     "knip": "knip --production",
     "qa:setup": "tsx qa/scripts/setup-home.ts",
+    "qa:long-description": "tsx qa/scripts/qa-long-description.ts",
     "qa:router": "tsx qa/scripts/qa-router.ts",
     "qa:probe": "tsx qa/scripts/qa-probe.ts",
     "qa:llm": "tsx qa/scripts/qa-llm.ts",

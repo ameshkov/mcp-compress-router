@@ -8,7 +8,7 @@ describe('renderCompactCatalog', () => {
       {
         name: 'github',
         description: 'GitHub server',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [
           {
@@ -45,18 +45,18 @@ describe('renderCompactCatalog', () => {
     expect(text.trim()).toBe('## staged');
   });
 
-  it('separates servers with blank lines and renders one tool per line', () => {
+  it('separates servers with blank lines and renders one tool per line at medium level', () => {
     const servers: CatalogServer[] = [
       {
         name: 'alpha',
         description: 'Alpha server',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [{ name: 'a1', inputSchema: { type: 'object' } }],
       },
       {
         name: 'beta',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [{ name: 'b1', inputSchema: { type: 'object' } }],
       },
@@ -69,11 +69,11 @@ describe('renderCompactCatalog', () => {
     );
   });
 
-  it('renders tool name with argument names in schema order at high level', () => {
+  it('renders tool name with argument names in schema order at medium level', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [
           {
@@ -90,13 +90,14 @@ describe('renderCompactCatalog', () => {
     const text = renderCompactCatalog(servers);
 
     expect(text).toContain('fetch(url, timeout)');
+    expect(text).not.toContain('fetch(url, timeout):');
   });
 
-  it('renders a zero-parameter tool as name()', () => {
+  it('renders a zero-parameter tool as name() at medium level', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [{ name: 'ping', inputSchema: { type: 'object', properties: {} } }],
       },
@@ -107,11 +108,11 @@ describe('renderCompactCatalog', () => {
     expect(text).toContain('ping()');
   });
 
-  it('renders multiple tools each on a separate line under Available tools', () => {
+  it('renders multiple tools each on a separate line under Available tools at medium level', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'ok',
         tools: [
           {
@@ -137,11 +138,11 @@ describe('renderCompactCatalog', () => {
     expect(text).toBe('## srv\n\nAvailable tools:\nfirst(a)\nsecond(b, c)');
   });
 
-  it('renders max level tools as a single comma-separated line', () => {
+  it('renders high level tools as a single comma-separated line of names', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'max',
+        compressionLevel: 'high',
         status: 'ok',
         tools: [
           { name: 'tool1', inputSchema: { type: 'object' } },
@@ -154,14 +155,15 @@ describe('renderCompactCatalog', () => {
     const text = renderCompactCatalog(servers);
 
     expect(text).toBe('## srv\n\nAvailable tools:\ntool1, tool2, tool3');
+    expect(text).not.toContain('tool1(');
   });
 
-  it('renders max level with description showing header then comma-separated names', () => {
+  it('renders high level with a description showing header then comma-separated names', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
         description: 'A server',
-        compressionLevel: 'max',
+        compressionLevel: 'high',
         status: 'ok',
         tools: [
           { name: 'a', inputSchema: { type: 'object' } },
@@ -175,9 +177,9 @@ describe('renderCompactCatalog', () => {
     expect(text).toBe('## srv\nA server\n\nAvailable tools:\na, b');
   });
 
-  it('renders max level with zero tools as just a header', () => {
+  it('renders high level with zero tools as just a header', () => {
     const servers: CatalogServer[] = [
-      { name: 'empty', compressionLevel: 'max', status: 'ok', tools: [] },
+      { name: 'empty', compressionLevel: 'high', status: 'ok', tools: [] },
     ];
 
     const text = renderCompactCatalog(servers);
@@ -186,11 +188,11 @@ describe('renderCompactCatalog', () => {
     expect(text).not.toContain('Available tools:');
   });
 
-  it('renders medium level with the first sentence under 10 words and no ellipsis', () => {
+  it('renders low level with the first sentence under 10 words and no ellipsis', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'medium',
+        compressionLevel: 'low',
         status: 'ok',
         tools: [
           {
@@ -209,13 +211,14 @@ describe('renderCompactCatalog', () => {
 
     expect(text).toContain('fetch(url, timeout): Fetches a URL and returns the raw content');
     expect(text).not.toContain('...');
+    expect(text).not.toContain('<tool>');
   });
 
-  it('renders medium level with an ellipsis when the first sentence exceeds 10 words', () => {
+  it('renders low level with an ellipsis when the first sentence exceeds 10 words', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'medium',
+        compressionLevel: 'low',
         status: 'ok',
         tools: [
           {
@@ -238,11 +241,11 @@ describe('renderCompactCatalog', () => {
     );
   });
 
-  it('renders medium level with no description as name(args) with no colon', () => {
+  it('renders low level with no description as name(args) with no colon', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'medium',
+        compressionLevel: 'low',
         status: 'ok',
         tools: [
           {
@@ -262,11 +265,11 @@ describe('renderCompactCatalog', () => {
     expect(text).not.toMatch(/fetch\(url, timeout\):/);
   });
 
-  it('renders medium level with a no-period description as the whole string', () => {
+  it('renders low level with a no-period description as the whole string', () => {
     const servers: CatalogServer[] = [
       {
         name: 'srv',
-        compressionLevel: 'medium',
+        compressionLevel: 'low',
         status: 'ok',
         tools: [
           {
@@ -281,103 +284,6 @@ describe('renderCompactCatalog', () => {
     const text = renderCompactCatalog(servers);
 
     expect(text).toContain('ping(url): No period in this description');
-  });
-
-  it('renders low level with full description wrapped in tool tags', () => {
-    const servers: CatalogServer[] = [
-      {
-        name: 'srv',
-        compressionLevel: 'low',
-        status: 'ok',
-        tools: [
-          {
-            name: 'fetch',
-            description: 'Fetch a URL. Returns the raw content.',
-            inputSchema: {
-              type: 'object',
-              properties: { url: { type: 'string' }, timeout: { type: 'number' } },
-            },
-          },
-        ],
-      },
-    ];
-
-    const text = renderCompactCatalog(servers);
-
-    expect(text).toContain(
-      '<tool>fetch(url, timeout): Fetch a URL. Returns the raw content.</tool>',
-    );
-  });
-
-  it('renders low level with no description as tool tags around the signature', () => {
-    const servers: CatalogServer[] = [
-      {
-        name: 'srv',
-        compressionLevel: 'low',
-        status: 'ok',
-        tools: [
-          {
-            name: 'fetch',
-            inputSchema: {
-              type: 'object',
-              properties: { url: { type: 'string' }, timeout: { type: 'number' } },
-            },
-          },
-        ],
-      },
-    ];
-
-    const text = renderCompactCatalog(servers);
-
-    expect(text).toContain('<tool>fetch(url, timeout)</tool>');
-  });
-
-  it('renders low level with a multi-paragraph description verbatim inside tool tags', () => {
-    const servers: CatalogServer[] = [
-      {
-        name: 'srv',
-        compressionLevel: 'low',
-        status: 'ok',
-        tools: [
-          {
-            name: 'fetch',
-            description: 'First paragraph.\n\nSecond paragraph.',
-            inputSchema: { type: 'object', properties: {} },
-          },
-        ],
-      },
-    ];
-
-    const text = renderCompactCatalog(servers);
-
-    expect(text).toContain('<tool>fetch(): First paragraph.\n\nSecond paragraph.</tool>');
-  });
-
-  it('renders low level with each tool on its own tagged line', () => {
-    const servers: CatalogServer[] = [
-      {
-        name: 'srv',
-        compressionLevel: 'low',
-        status: 'ok',
-        tools: [
-          {
-            name: 'a',
-            description: 'Tool A',
-            inputSchema: { type: 'object', properties: {} },
-          },
-          {
-            name: 'b',
-            description: 'Tool B',
-            inputSchema: { type: 'object', properties: {} },
-          },
-        ],
-      },
-    ];
-
-    const text = renderCompactCatalog(servers);
-
-    expect(text).toContain('<tool>a(): Tool A</tool>');
-    expect(text).toContain('<tool>b(): Tool B</tool>');
   });
 
   it('renders a mixed-level multi-server catalog with each server using its own format', () => {
@@ -411,6 +317,17 @@ describe('renderCompactCatalog', () => {
       },
       {
         name: 'server-c',
+        compressionLevel: 'medium',
+        status: 'ok',
+        tools: [
+          {
+            name: 'ping',
+            inputSchema: { type: 'object', properties: {} },
+          },
+        ],
+      },
+      {
+        name: 'server-d',
         compressionLevel: 'low',
         status: 'ok',
         tools: [
@@ -426,9 +343,10 @@ describe('renderCompactCatalog', () => {
     const text = renderCompactCatalog(servers);
 
     expect(text).toBe(
-      '## server-a\n\nAvailable tools:\ntool1, tool2' +
-        '\n\n## server-b\nServer B\n\nAvailable tools:\nfetch(url, timeout)' +
-        '\n\n## server-c\n\nAvailable tools:\n<tool>ping(): Health check.</tool>',
+      '## server-a\n\nProvides 2 tools. Call get_tool_schema with "server-a" to list them.' +
+        '\n\n## server-b\nServer B\n\nAvailable tools:\nfetch' +
+        '\n\n## server-c\n\nAvailable tools:\nping()' +
+        '\n\n## server-d\n\nAvailable tools:\nping(): Health check',
     );
   });
 
@@ -436,7 +354,7 @@ describe('renderCompactCatalog', () => {
     const servers: CatalogServer[] = [
       {
         name: 'figma',
-        compressionLevel: 'high',
+        compressionLevel: 'medium',
         status: 'unauthorized',
         tools: [{ name: 'get_file', inputSchema: { type: 'object', properties: {} } }],
       },

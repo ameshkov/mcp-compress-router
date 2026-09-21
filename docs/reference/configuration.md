@@ -62,7 +62,8 @@ to compress into the router. At startup the router:
    transport.
 
 Configuration never appears in the tool catalog sent to the LLM. Only
-the compressed list of server and tool names is exposed.
+the compressed catalog of server and tool names is exposed; full tool
+schemas are returned on demand by `get_tool_schema`.
 
 ## Configuration File Location
 
@@ -223,23 +224,26 @@ appears in the compact catalog embedded in the `get_tool_schema` tool
 description. The level trades catalog compactness for routing detail:
 lower levels give the LLM more information up front (fewer
 `get_tool_schema` round-trips), while higher levels minimize the
-per-request token overhead. The full JSON parameter schema is always
-returned by `get_tool_schema` regardless of the level — only the
-catalog *listing* changes.
+per-request token overhead. The full JSON parameter schema and the
+complete tool description are always returned by `get_tool_schema`
+regardless of the level — only the catalog *listing* changes, and full
+descriptions never appear in it.
 
 Four levels are supported, from most to least compact:
 
 | Level | Tool listing format | Description shown? |
 | --- | --- | --- |
-| `max` | `toolA, toolB, toolC` (comma-separated, single line) | No |
-| `high` (default) | `toolName(arg1, arg2)` (one per line) | No |
-| `medium` | `toolName(arg1, arg2): first sentence...` (one per line) | Snippet |
-| `low` | `<tool>toolName(arg1, arg2): full description</tool>` (one per line) | Full |
+| `max` | `Provides N tools. Call get_tool_schema with "server" to list them.` | No |
+| `high` (default) | `toolA, toolB, toolC` (comma-separated, single line) | No |
+| `medium` | `toolName(arg1, arg2)` (one per line) | No |
+| `low` | `toolName(arg1, arg2): first sentence...` (one per line) | First sentence |
 
 Argument names are extracted from each tool's `inputSchema.properties`
-keys in definition order. When a tool has no description, the `medium`
-and `low` listings omit the description portion and show just the
-signature.
+keys in definition order. When a tool has no description, the `low`
+listing shows just the signature. The list mode of `get_tool_schema`
+(called with just a server name) always returns the full signatures for
+that server's tools, whatever the level — the tool names a `max`
+catalog omits and the descriptions no catalog shows are one call away.
 
 Omitting `compressionLevel` is equivalent to `high`. Set it per server
 in `mcp.json`:
@@ -267,7 +271,7 @@ the four valid levels. The level affects only the catalog listing: the
 [`tools <name>`](#tools-name) command always prints the full tool
 table, and the JSON returned by `get_tool_schema` is unchanged. For
 guidance on choosing a level — including the Claude Code
-2000-character description limit that favors `max` — see
+2048-character description limit that favors `max` — see
 [Compression Levels](../../README.md#compression-levels) in the README.
 
 ### Variable Expansion
