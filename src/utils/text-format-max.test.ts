@@ -42,7 +42,9 @@ describe('renderCompactCatalog — max level', () => {
 
     expect(text).toBe(
       '## auth\nAuth server\n' +
-        'Requires authentication. Run: npx mcp-compress-router login auth\n\n' +
+        'Requires authentication. Ask the user to run: ' +
+        'npx mcp-compress-router login auth. This opens a browser ' +
+        'for interactive authorization. Do not run it yourself.\n\n' +
         'Provides 2 tools. Call get_tool_schema with "auth" to list them.',
     );
   });

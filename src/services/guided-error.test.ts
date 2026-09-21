@@ -32,9 +32,18 @@ describe('buildGuidedError', () => {
     expect(err.message).toContain('ECONNREFUSED');
   });
 
-  it('includes "npx mcp-compress-router login" for unauthorized HTTP servers', () => {
+  it('hands the login command to the user for unauthorized HTTP servers', () => {
     const err = buildGuidedError(httpServer, new GuidedAuthError('figma'), 'unauthorized', false);
+    expect(err.message).toContain('Ask the user to run');
     expect(err.message).toContain('npx mcp-compress-router login figma');
+    expect(err.message).toContain('Do not run it yourself');
+  });
+
+  it('keeps the login prohibition out of the numbered action list', () => {
+    const err = buildGuidedError(httpServer, new GuidedAuthError('figma'), 'unauthorized', false);
+    expect(err.message).toContain('1. Ask the user to run: npx mcp-compress-router login figma');
+    expect(err.message).toContain('   This opens a browser for interactive authorization.');
+    expect(err.message).toContain('2. After the user authorizes');
   });
 
   it('suggests the login command for an unauthorized server (not network advice)', () => {
@@ -48,7 +57,10 @@ describe('buildGuidedError', () => {
       'unauthorized',
       true,
     );
+    expect(err.message).toContain('Ask the user to run');
     expect(err.message).toContain('npx mcp-compress-router login notion');
+    expect(err.message).toContain('Do not run it yourself');
+    expect(err.message).toContain('interactive authorization');
     expect(err.message).toContain('authentication is required');
     expect(err.message).not.toContain('Verify the server is running');
   });

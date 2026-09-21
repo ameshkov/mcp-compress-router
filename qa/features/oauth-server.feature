@@ -23,7 +23,7 @@ Scenario: After logout the catalog asks for login again
   When I run "pnpm qa:router logout oauth-mock"
   And I list the router tools with "pnpm qa:probe --list"
   Then the output reports "Removed credentials for server "oauth-mock""
-  And the "get_tool_schema" description contains "Requires authentication. Run: npx mcp-compress-router login oauth-mock"
+  And the "get_tool_schema" description contains "Requires authentication. Ask the user to run: npx mcp-compress-router login oauth-mock. This opens a browser for interactive authorization. Do not run it yourself."
 
 @TC-OAUTH-3
 Scenario: A logged-out server can be logged in again

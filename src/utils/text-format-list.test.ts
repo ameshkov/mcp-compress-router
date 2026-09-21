@@ -92,7 +92,9 @@ describe('renderToolListResponse', () => {
     expect(text).toBe(
       [
         'Tools provided by "fixture" (3):',
-        'Requires authentication. Run: npx mcp-compress-router login fixture',
+        'Requires authentication. Ask the user to run: ' +
+          'npx mcp-compress-router login fixture. This opens a browser ' +
+          'for interactive authorization. Do not run it yourself.',
         '',
         'echo(message)',
         'add(a, b)',
@@ -119,7 +121,9 @@ describe('renderToolListResponse', () => {
     );
     expect(text).toBe(
       'Server "empty" advertises no tools.\n' +
-        'Requires authentication. Run: npx mcp-compress-router login empty',
+        'Requires authentication. Ask the user to run: ' +
+        'npx mcp-compress-router login empty. This opens a browser ' +
+        'for interactive authorization. Do not run it yourself.',
     );
   });
 });

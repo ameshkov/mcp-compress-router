@@ -1,4 +1,5 @@
 import type { DownstreamServerConfig, ServerStatus } from '../utils/index.js';
+import { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from '../utils/index.js';
 
 /**
  * Builds a detailed, multi-line error message for an unavailable
@@ -91,10 +92,10 @@ function fixSteps(
 ): string[] {
   if (isAuth) {
     return [
-      `1. Run:  npx mcp-compress-router login ${server.name}`,
-      '2. Complete the browser authorization flow.',
-      '3. Try your request again — the router will automatically pick up the',
-      '   new credentials and reconnect.',
+      `1. Ask the user to run: ${buildLoginCommand(server.name)}`,
+      `   ${LOGIN_INTERACTIVE_NOTE}`,
+      '2. After the user authorizes, try your request again — the router will',
+      '   automatically pick up the new credentials and reconnect.',
     ];
   }
   if (isStdio) {

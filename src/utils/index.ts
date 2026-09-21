@@ -15,6 +15,7 @@ export type {
 export type { ToolExposureEntry } from './tool-filter.js';
 export { filterTools } from './tool-filter.js';
 export { renderCompactCatalog, renderToolListResponse } from './text-format.js';
+export { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
 export { validateArguments } from './validate-arguments.js';
 export { validateGlobPattern } from './validate-glob.js';
 export { expandEnvField } from './expand-env.js';

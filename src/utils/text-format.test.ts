@@ -364,7 +364,10 @@ describe('renderCompactCatalog', () => {
 
     expect(text).toContain('## figma');
     expect(text).toContain('Requires authentication');
+    expect(text).toContain('Ask the user to run');
     expect(text).toContain('npx mcp-compress-router login figma');
+    expect(text).toContain('This opens a browser for interactive authorization');
+    expect(text).toContain('Do not run it yourself');
     expect(text).toContain('get_file()');
   });
 

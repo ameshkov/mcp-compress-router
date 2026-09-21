@@ -42,6 +42,12 @@ and this project adheres to
 
 ### Fixed
 
+- Fixed the authentication guidance for an unauthenticated server: the
+  catalog status line and the `invoke_tool` guided error now ask the
+  agent to have the user run `npx mcp-compress-router login <server>` and
+  complete the browser authorization, and state that the agent must not
+  run the command itself. The login command opens a browser and waits
+  for interactive authorization, which an agent cannot complete.
 - Corrected the documented Claude Code tool-description limit from 2000
   to 2048 characters: Claude Code cuts the description at 2048
   characters and appends `… [truncated]` (measured on the pinned

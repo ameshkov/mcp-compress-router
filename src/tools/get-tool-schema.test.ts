@@ -143,7 +143,11 @@ describe('createGetToolSchemaHandler — list mode', () => {
 
     expect(isError).toBeUndefined();
     expect(text).toContain('Tools provided by "auth" (1):');
-    expect(text).toContain('Requires authentication. Run: npx mcp-compress-router login auth');
+    expect(text).toContain(
+      'Requires authentication. Ask the user to run: ' +
+        'npx mcp-compress-router login auth. This opens a browser ' +
+        'for interactive authorization. Do not run it yourself.',
+    );
     expect(text).toContain('search(query)');
   });
 

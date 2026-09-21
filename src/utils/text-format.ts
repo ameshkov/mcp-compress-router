@@ -1,6 +1,7 @@
 import type { CatalogServer, CompressionLevel, ToolDescriptor } from './types.js';
 import { extractArgumentNames } from './argument-names.js';
 import { truncateToFirstSentence } from './description-truncator.js';
+import { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
 
 /**
  * Renders the compact catalog as Markdown text suitable for inclusion
@@ -116,12 +117,20 @@ function renderToolListing(server: CatalogServer): string[] {
  * Renders a one-line status header for degraded servers. Returns an
  * empty string for healthy ('ok') servers.
  *
+ * The `unauthorized` header hands the login command off to the user
+ * through the shared login guidance: the command opens a browser and
+ * blocks on interactive authorization, so the agent must not run it
+ * itself.
+ *
  * @param server - The catalog server to render a status header for.
  * @returns A status line, or empty string when the server is healthy.
  */
 function renderStatusHeader(server: CatalogServer): string {
   if (server.status === 'unauthorized') {
-    return `Requires authentication. Run: npx mcp-compress-router login ${server.name}`;
+    return (
+      `Requires authentication. Ask the user to run: ${buildLoginCommand(server.name)}. ` +
+      LOGIN_INTERACTIVE_NOTE
+    );
   }
   if (server.status === 'unavailable') {
     return 'Server unavailable. Check connectivity and configuration.';
