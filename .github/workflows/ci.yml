@@ -4,9 +4,11 @@ name: CI
 # push to the main branch and on pull requests, so a broken change can
 # never reach a release tag.
 #
-# On tag pushes (v*), also publishes the package to npm and creates a
-# GitHub release. Publishing uses npm Trusted Publishers (OIDC) — see
-# docs/guides/releasing.md for setup instructions.
+# On pushes to the default branch, publishes a canary build to npm's
+# `canary` dist-tag. On tag pushes (v*), publishes the package to npm's
+# `latest` dist-tag and creates a GitHub release. Both publish paths use
+# npm Trusted Publishers (OIDC) — see docs/guides/releasing.md for setup
+# instructions.
 
 on:
   push:
@@ -52,6 +54,60 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # Publishes an unreleased canary build to npm on every push to the
+  # default branch (never on PRs or tags). The version gets a
+  # `-canary.<sha>` prerelease suffix, so `canary` always resolves to
+  # the newest build while `latest` and the `v*` tag release flow stay
+  # untouched. Tokenless via OIDC Trusted Publishers, exactly like the
+  # release job below (the npmjs trust entry already matches this repo +
+  # workflow filename, so no npmjs-side change is needed).
+  canary:
+    name: Publish canary to npm
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    needs: [check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read # to checkout the repository
+      id-token: write # to enable npm provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # The `<version>-canary.<sha12>` suffix sorts below the release
+      # `<version>` (SemVer prerelease) and above the previous canary.
+      # The npm view guard makes re-runs (e.g. retrying a failed job)
+      # idempotent; concurrent default-branch pushes get distinct SHAs,
+      # hence distinct versions.
+      - name: Publish canary to npm
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version + '-canary.' + process.env.GITHUB_SHA.slice(0, 12)")"
+          if npm view mcp-compress-router@"$VERSION" version >/dev/null 2>&1; then
+            echo "Canary $VERSION already published; skipping"
+            exit 0
+          fi
+          npm pkg set version="$VERSION"
+          npm publish --tag canary --provenance --access public
 
   publish:
     name: Publish to npm

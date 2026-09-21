@@ -46,6 +46,27 @@ workflow already pins it.
    the full quality gate, builds, publishes to npm with provenance, and
    creates a GitHub release with the npm tarball attached.
 
+## Canary releases
+
+Every push to the default branch (`master`) publishes a canary build to
+npm's `canary` dist-tag, so unreleased work can be tried without cutting
+a release:
+
+```sh
+npx mcp-compress-router@canary list
+```
+
+The canary job runs only after the quality gate passes. It publishes
+`package.json`'s current version with a `-canary.<sha>` prerelease
+suffix, so the `canary` tag always resolves to the newest build while
+`latest` and the `v*` tag release flow are untouched. An `npm view`
+guard skips publishing when that exact version already exists, so
+retrying a failed workflow is safe.
+
+Canary publishing uses the same Trusted Publishers entry as releases
+(same repository and workflow file), so the one-time setup above covers
+both.
+
 ## Notes
 
 - The tag version **must** match `package.json` exactly, or the publish

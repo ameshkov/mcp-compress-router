@@ -37,6 +37,7 @@
     - [Custom Headers](#custom-headers)
     - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
 - [How It Works](#how-it-works)
+- [Canary Builds](#canary-builds)
 - [Acknowledgements](#acknowledgements)
 
 ## The Problem
@@ -780,6 +781,19 @@ For the full configuration and environment variable reference, see
 [configuration.md](docs/reference/configuration.md). For the design
 rationale behind the router, see
 [architecture.md](docs/explanation/architecture.md).
+
+## Canary Builds
+
+Every push to `master` publishes a canary build to npm's `canary`
+dist-tag — the release version plus a `-canary.<sha>` suffix. Use it to
+try unreleased work:
+
+```sh
+npx mcp-compress-router@canary list
+```
+
+Canary builds never touch `latest`, and stable `v*` releases are
+published the usual way.
 
 ## Acknowledgements
 

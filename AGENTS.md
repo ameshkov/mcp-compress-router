@@ -84,7 +84,7 @@ mcp-compress-router/
 ├── DEVELOPMENT.md        # How to run and debug the project locally
 ├── mcp.example.jsonc     # Example JSONC config template (committed)
 ├── .env.example          # Environment variable template (committed)
-├── .github/workflows/    # CI quality gate and npm publish on version tags
+├── .github/workflows/    # CI quality gate, canary and release npm publishes
 └── package.json          # Dependencies and scripts
 ```
 

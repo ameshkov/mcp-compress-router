@@ -18,6 +18,10 @@ and this project adheres to
   and an empty array behaves like omitting it — previously `tools: []`
   was rejected as `InvalidParams`. The explicit `tools: [...]` path and
   its JSON response are unchanged.
+- Added a canary release channel: every push to `master` publishes
+  `<version>-canary.<sha>` to the `canary` npm dist-tag
+  (`npx mcp-compress-router@canary`). Canary builds never touch
+  `latest`, and stable `v*` releases are unaffected.
 
 ### Changed
 
