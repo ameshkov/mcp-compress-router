@@ -27,6 +27,8 @@ quick-start guide, see the
     - [MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS](#mcp_compress_router_login_timeout_ms)
     - [MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS](#mcp_compress_router_downstream_timeout_ms)
     - [MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS](#mcp_compress_router_auth_discovery_timeout_ms)
+    - [MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS](#mcp_compress_router_dynamic_limit_clients)
+    - [MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE](#mcp_compress_router_dynamic_limit_max_size)
 - [CLI Flags](#cli-flags)
     - [add](#add-name-commandorurl-rest)
     - [disable](#disable-name)
@@ -245,6 +247,15 @@ listing shows just the signature. The list mode of `get_tool_schema`
 that server's tools, whatever the level — the tool names a `max`
 catalog omits and the descriptions no catalog shows are one call away.
 
+For clients known to truncate long tool descriptions (Claude Code by
+default), the router watches the rendered catalog size and, when it
+would exceed the client's cap, re-renders the whole catalog at `max`
+for that `tools/list` request; other clients keep their configured
+levels. Configure the behavior with
+[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`](#mcp_compress_router_dynamic_limit_clients)
+and
+[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`](#mcp_compress_router_dynamic_limit_max_size).
+
 Omitting `compressionLevel` is equivalent to `high`. Set it per server
 in `mcp.json`:
 
@@ -270,8 +281,8 @@ An invalid value is rejected at config load time with an error naming
 the four valid levels. The level affects only the catalog listing: the
 [`tools <name>`](#tools-name) command always prints the full tool
 table, and the JSON returned by `get_tool_schema` is unchanged. For
-guidance on choosing a level — including the Claude Code
-2048-character description limit that favors `max` — see
+guidance on choosing a level, including the Claude Code
+2048-character description limit that favors `max`, see
 [Compression Levels](../../README.md#compression-levels) in the README.
 
 ### Variable Expansion
@@ -484,6 +495,8 @@ values.
 | `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` | `120000` (120 s) | Time in milliseconds to wait for the OAuth callback during `login` |
 | `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `10000` (10 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s). Stays well below the 30 s host startup budget: connects run in parallel, so one timed-out server costs at most this budget |
 | `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `5000` (5 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
+| `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS` | `claude-code` | Comma-separated, case-insensitive MCP client names whose tool descriptions are length-limited. When the rendered `get_tool_schema` description exceeds `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`, the router re-renders the whole catalog at `max` for that request. Set to an empty value to disable auto-degradation |
+| `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE` | `2048` | Maximum character length of the rendered `get_tool_schema` description before a length-limited client gets the catalog auto-degraded to `max`. Must be a positive integer; unset or invalid values fall back to the default |
 
 ### `.env` Auto-Loading
 
@@ -613,6 +626,55 @@ unrelated requests on the same connection.
 
 ```bash
 MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS=20000 \
+  mcp-compress-router
+```
+
+### `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`
+
+Comma-separated list of MCP client names (matched case-insensitively)
+whose tool descriptions are length-limited. When a `tools/list` request
+from one of these clients would carry a `get_tool_schema` description
+longer than
+[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`](#mcp_compress_router_dynamic_limit_max_size),
+the router re-renders the whole catalog at the `max` compression level
+for that request. The client name comes from the MCP `initialize`
+handshake (`clientInfo.name`); the configured levels of every other
+client are unaffected. List mode (`get_tool_schema` with just a server
+name) still returns every tool, so no information is lost.
+
+The re-render only lowers the compression level: server descriptions
+and status lines are always included. A catalog that still exceeds the
+cap after the re-render — for example, because of a long server
+description set with `--description` — is truncated by the client
+anyway, and the router logs a warning naming the client and the
+description length.
+
+The variable defaults to `claude-code`, the client that truncates tool
+descriptions at 2048 characters and appends `… [truncated]`. Set it to
+an empty value to disable auto-degradation entirely.
+
+```bash
+# Also protect another client
+MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS=claude-code,my-host \
+  mcp-compress-router
+
+# Disable auto-degradation
+MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS= mcp-compress-router
+```
+
+### `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`
+
+Maximum character length of the rendered `get_tool_schema` description
+before the router auto-degrades the catalog for a length-limited client
+(see
+[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`](#mcp_compress_router_dynamic_limit_clients)).
+The check is strict: a description exactly at the limit is not
+degraded, matching Claude Code, which truncates only when the length
+exceeds 2048. Must be a positive integer; unset or invalid values fall
+back to the default of 2048 characters.
+
+```bash
+MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE=4096 \
   mcp-compress-router
 ```
 

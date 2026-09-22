@@ -81,10 +81,22 @@ export function createGetToolSchemaHandler(catalog: ToolCatalog, logger: Logger)
  * Builds the description string for get_tool_schema from the catalog.
  *
  * @param catalog - The tool catalog.
+ * @param options - Optional rendering controls.
+ * @param options.forceMax - When true, renders every server at the `max`
+ *   compression level (tool count + `get_tool_schema` pointer) regardless
+ *   of its configured level, while preserving server descriptions and
+ *   status lines. Used by the router's auto-degradation for length-limited
+ *   clients.
  * @returns A description string containing the compact catalog.
  */
-export function buildGetToolSchemaDescription(catalog: ToolCatalog): string {
-  const compact = renderCompactCatalog(catalog.servers);
+export function buildGetToolSchemaDescription(
+  catalog: ToolCatalog,
+  options: { forceMax?: boolean } = {},
+): string {
+  const servers = options.forceMax
+    ? catalog.servers.map((server) => ({ ...server, compressionLevel: 'max' as const }))
+    : catalog.servers;
+  const compact = renderCompactCatalog(servers);
   return (
     'Get the JSON schema for one or more tools from a connected MCP server, ' +
     "or omit the tool names to list a server's tools and their arguments. " +

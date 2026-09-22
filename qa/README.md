@@ -126,6 +126,11 @@ The add commands the plans use:
 pnpm qa:router add stdio-mock --description 'QA stdio mock' \
   -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts
 
+# stdio mock with 200 extra bulk tools (the dynamic-limit plans)
+pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' \
+  --compression-level low --env MOCK_EXTRA_TOOLS=200 \
+  -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts
+
 # streamable-http mock (runs in its own container)
 pnpm qa:router add http-mock --description 'QA streamable-http mock' \
   http://mock-mcp-http:3100/mcp
@@ -200,6 +205,8 @@ the log. The built-ins are:
 | `stdio-descriptions` | Verify every stdio tool description reaches the model as a first sentence (low compression) |
 | `long-description` | Verify the catalog carries the `documented_tool` first sentence and the result the full description |
 | `long-catalog-truncated` | Verify Claude Code truncates the over-long catalog description and drops the tail |
+| `dynamic-limit-degraded` | Verify a length-limited client gets the catalog degraded to `max` and list mode still returns the bulk tools |
+| `dynamic-limit-kept` | Verify a client outside the dynamic-limit list keeps the full catalog above the cap |
 
 `pnpm qa:llm list` prints the same table. For ad-hoc scenarios,
 `pnpm qa:llm custom <file.json>` installs an inline script with the same
@@ -275,6 +282,13 @@ complete text arrives through the `get_tool_schema` result.
 server's `--description`, which the Claude Code truncation plan uses to
 grow the catalog past Claude Code's 2048-character tool-description cap.
 
+The stdio mock also accepts `MOCK_EXTRA_TOOLS=<n>`, registering that
+many extra `bulk_tool_###` tools after the standard five. The
+dynamic-limit plans add it with `--env MOCK_EXTRA_TOOLS=200` (205 tools
+total) so the catalog exceeds the 2048-character cap: the router
+auto-degrades the catalog to `max` for Claude Code, while opencode and
+Codex keep the configured level.
+
 With `MOCK_MCP_AUTH=oauth`, the HTTP mock publishes mock OAuth metadata
 (RFC 9728 + RFC 8414), supports dynamic client registration, and
 auto-approves the authorization request, so the router's `login`
@@ -298,10 +312,10 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
 | `oauth-server.feature` | `OAUTH` | Auto-login, logout, and login again |
 | `compression.feature` | `COMPRESS` | The four catalog levels and list mode from a `max` server |
-| `opencode.feature` | `OPENCODE` | Discovery, catalog, first-sentence descriptions, stdio/http/oauth round trips, recovery, cleanup |
+| `opencode.feature` | `OPENCODE` | Discovery, catalog, first-sentence descriptions, stdio/http/oauth round trips, recovery, cleanup, dynamic-limit scope |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
-| `claude.feature` | `CLAUDE` | Discovery, catalog, first-sentence descriptions, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |
-| `codex.feature` | `CODEX` | Discovery, catalog, first-sentence descriptions, the long-description result path, round trips, recovery, cleanup |
+| `claude.feature` | `CLAUDE` | Discovery, catalog, first-sentence descriptions, the long-description result path, the 2048-character truncation cap, auto-degradation, round trips, recovery, cleanup |
+| `codex.feature` | `CODEX` | Discovery, catalog, first-sentence descriptions, the long-description result path, dynamic-limit scope, round trips, recovery, cleanup |
 
 The steps are written as instructions for a human tester: each one
 names the exact command to run or the exact evidence to look for. The

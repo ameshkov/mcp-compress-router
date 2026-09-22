@@ -14,6 +14,10 @@ Feature: Driving Codex CLI with the router
   first sentence of each tool description, so the long-description plan
   checks that the complete text arrives through the schema result.
 
+  The dynamic-limit plan proves the auto-degradation is scoped to
+  length-limited clients: with the same 205-tool mock, Codex keeps the
+  configured catalog and sees every bulk tool name.
+
 Background:
   Given the QA stack is running and I am in the workspace shell
   And I prepared the router home with "pnpm qa:setup"
@@ -93,3 +97,13 @@ Scenario: Closing Codex leaves no QA processes behind
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
   Then running "pgrep -fl build/index.js" finds no router process
   And running "pgrep -fl qa/scripts/mock-mcp-stdio" finds no stdio mock process
+
+@TC-CODEX-9
+Scenario: Codex keeps the full catalog above the truncation cap
+  Given I selected the mock LLM script "dynamic-limit-kept" with "pnpm qa:llm script dynamic-limit-kept"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' --compression-level low --env MOCK_EXTRA_TOOLS=200 -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
+  And I show the mock LLM log with "pnpm qa:llm log"
+  Then the log shows a passed "catalogIncludes" check for "bulk_tool_001"
+  And the log shows a passed "catalogExcludes" check for "Provides 205 tools"
+  And the log reports "0 failed" checks

@@ -32,7 +32,23 @@ export class McpTestClient {
   private nextId = 1;
   private stdErr = '';
 
-  async start(command: string, args: string[], env?: Record<string, string>) {
+  /**
+   * Spawns the router subprocess and performs the MCP initialize
+   * handshake.
+   *
+   * @param command - Executable to spawn.
+   * @param args - Arguments for the executable.
+   * @param env - Extra environment variables merged over `process.env`.
+   * @param clientInfo - Client identity sent in `initialize`; defaults to
+   *   the neutral `test-client` so most tests exercise the non-degrading
+   *   path.
+   */
+  async start(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+    clientInfo?: { name: string; version: string },
+  ) {
     this.proc = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
@@ -62,7 +78,7 @@ export class McpTestClient {
     const initResp = await this.sendRequest('initialize', {
       protocolVersion: '2025-03-26',
       capabilities: {},
-      clientInfo: { name: 'test-client', version: '1.0.0' },
+      clientInfo: clientInfo ?? { name: 'test-client', version: '1.0.0' },
     });
 
     if (initResp.error) {

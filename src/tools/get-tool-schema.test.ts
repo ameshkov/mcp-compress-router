@@ -236,4 +236,26 @@ describe('buildGetToolSchemaDescription', () => {
     expect(maxedSection).not.toContain('echo');
     expect(maxedSection).not.toContain('Available tools:');
   });
+
+  it('forceMax renders every server at max while keeping descriptions and statuses', () => {
+    const description = buildGetToolSchemaDescription(makeCatalog(), { forceMax: true });
+
+    expect(description).toContain('## fixture');
+    expect(description).toContain('A test fixture server');
+    expect(description).toContain(
+      'Provides 3 tools. Call get_tool_schema with "fixture" to list them.',
+    );
+    expect(description).toContain('Provides 1 tool. Call get_tool_schema with "auth" to list it.');
+    expect(description).toContain(
+      'Requires authentication. Ask the user to run: npx mcp-compress-router login auth.',
+    );
+    expect(description).not.toContain('Available tools:');
+    expect(description).not.toContain('echo, add, crash');
+  });
+
+  it('forceMax leaves zero-tool servers without a listing', () => {
+    const description = buildGetToolSchemaDescription(makeCatalog(), { forceMax: true });
+
+    expect(description).toContain('## empty\n\n## auth');
+  });
 });

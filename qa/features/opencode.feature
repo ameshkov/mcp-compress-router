@@ -16,6 +16,10 @@ Feature: Driving opencode with the router
   "get_tool_schema" result. The remote-server scenarios add the HTTP or
   OAuth mock on top of that background.
 
+  The dynamic-limit plan proves the auto-degradation is scoped to
+  length-limited clients: with the same 205-tool mock, opencode keeps
+  the configured "low" catalog and sees every bulk tool name.
+
 Background:
   Given the QA stack is running and I am in the workspace shell
   And I prepared the router home with "pnpm qa:setup"
@@ -118,3 +122,13 @@ Scenario: opencode uses an OAuth-protected server end to end
   And the log shows the tool result "42" in the next request
   And the log reports "0 failed" checks
   And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "tools/call add" line
+
+@TC-OPENCODE-11
+Scenario: opencode keeps the full catalog above the truncation cap
+  Given I selected the mock LLM script "dynamic-limit-kept" with "pnpm qa:llm script dynamic-limit-kept"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' --compression-level low --env MOCK_EXTRA_TOOLS=200 -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  When I run the coding agent with "pnpm qa:agent --prompt 'Test the stdio mcp server'"
+  And I show the mock LLM log with "pnpm qa:llm log"
+  Then the log shows a passed "catalogIncludes" check for "bulk_tool_001"
+  And the log shows a passed "catalogExcludes" check for "Provides 205 tools"
+  And the log reports "0 failed" checks

@@ -15,6 +15,8 @@
  */
 
 import { LONG_DESCRIPTION_HEAD, LONG_DESCRIPTION_TAIL } from '../mock-long-description.js';
+import { DOWNSTREAM_TOOLS, ROUTER_GET_SCHEMA, ROUTER_INVOKE } from './script-constants.js';
+import { DYNAMIC_LIMIT_SCRIPTS } from './scripts-dynamic-limit.js';
 
 /** One tool call the scripted model returns to the coding agent. */
 export interface ScriptedToolCall {
@@ -75,13 +77,6 @@ export interface MockLlmScript {
   /** Assistant turns served in order. */
   steps: ScriptStep[];
 }
-
-/** Wire names of the router tools as opencode prefixes them. */
-const ROUTER_GET_SCHEMA = 'qa-router_get_tool_schema';
-const ROUTER_INVOKE = 'qa-router_invoke_tool';
-
-/** Downstream tool names that must never be advertised directly. */
-const DOWNSTREAM_TOOLS = ['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool'];
 
 /**
  * Suffix Claude Code appends to a tool description it truncates.
@@ -415,6 +410,7 @@ const BUILT_IN_SCRIPTS: MockLlmScript[] = [
       'Verify Claude Code truncates the over-long catalog description and drops the tail.',
     steps: truncatedCatalogSteps('stdio-mock-long'),
   },
+  ...DYNAMIC_LIMIT_SCRIPTS,
 ];
 
 /**

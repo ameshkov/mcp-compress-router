@@ -65,7 +65,8 @@ mcp-compress-router/
 │   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
 │   └── utils/            # Shared utility module: parsing, validation,
 │                         #   filtering, formatting, atomic file writes,
-│                         #   timeouts, logging, process-tree termination
+│                         #   timeouts, dynamic-limit degradation, logging,
+│                         #   process-tree termination
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router

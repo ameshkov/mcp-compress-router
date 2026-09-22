@@ -440,11 +440,21 @@ A good rule of thumb:
 > `get_tool_schema` description that the agent receives on every turn,
 > so with several downstream servers or many tools per server the
 > `medium` or `low` listings can exceed that limit and get truncated —
-> breaking routing. When using Claude Code, prefer
+> breaking routing. The router detects Claude Code from the MCP
+> `initialize` handshake and, when the description would exceed the
+> limit, automatically re-renders the whole catalog at the `max` level
+> (tool count plus a `get_tool_schema` pointer), so the compressed
+> listing fits the limit without configuration; list mode still returns
+> every tool. Server descriptions are always included, so a long
+> `--description` can keep the catalog over the limit even at `max` —
+> the router logs a warning when that happens.
+> Other hosts are unaffected. If another host truncates descriptions
+> too, add its client name to
+> `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`, or adjust the cap with
+> `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`. You can still pin
 > `compressionLevel: "max"` on your servers (or pass
-> `--compression-level max` to `add`) so each server's listing
-> collapses to a single count-and-pointer line; `high` is the next best
-> choice.
+> `--compression-level max` to `add`) to keep the catalog small on
+> every host.
 
 ### Inspecting Tools
 

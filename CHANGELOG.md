@@ -22,6 +22,20 @@ and this project adheres to
   `<version>-canary.<sha>` to the `canary` npm dist-tag
   (`npx mcp-compress-router@canary`). Canary builds never touch
   `latest`, and stable `v*` releases are unaffected.
+- Added automatic catalog degradation for length-limited MCP clients.
+  When a `tools/list` request from a configured client (Claude Code by
+  default) would carry a `get_tool_schema` description longer than 2048
+  characters, the router re-renders the whole catalog at the `max`
+  level for that request, so the compressed listing fits the client's
+  cap; other clients keep their configured levels, and list mode still
+  returns every tool. The re-render only lowers the compression level —
+  server descriptions and status lines are always included — so a
+  catalog that still exceeds the cap after it (for example, because of
+  a long server description) is truncated by the client anyway; the
+  router logs a warning in that case. Configure the clients with
+  `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS` and the cap with
+  `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`; an empty client list
+  disables the behavior.
 
 ### Changed
 

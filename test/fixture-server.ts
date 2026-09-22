@@ -29,6 +29,11 @@ async function main() {
  * Registers the fixture's standard tool set on the given server.
  * Centralized so the `FIXTURE_EMPTY_TOOLS` mode can skip registration
  * entirely, producing a server that advertises zero tools.
+ *
+ * `FIXTURE_EXTRA_TOOLS` (a positive integer) additionally registers that
+ * many deterministic `bulk_tool_###` tools, letting E2E tests grow the
+ * catalog past the length-limited client cap without hand-writing tool
+ * definitions.
  */
 function registerTools(server: McpServer): void {
   server.registerTool(
@@ -143,6 +148,38 @@ function registerTools(server: McpServer): void {
       };
     },
   );
+
+  const extraTools = Number(process.env.FIXTURE_EXTRA_TOOLS ?? '');
+  if (Number.isInteger(extraTools) && extraTools > 0) {
+    registerBulkTools(server, extraTools);
+  }
+}
+
+/**
+ * Registers `count` deterministic bulk tools (`bulk_tool_001`, ...) with
+ * a trivial schema, used by E2E tests that need an artificially large
+ * catalog.
+ *
+ * @param server - The fixture server to register the tools on.
+ * @param count - How many bulk tools to register.
+ */
+function registerBulkTools(server: McpServer, count: number): void {
+  for (let index = 1; index <= count; index++) {
+    const name = `bulk_tool_${String(index).padStart(3, '0')}`;
+    server.registerTool(
+      name,
+      {
+        title: `Bulk Tool ${index}`,
+        description: `Bulk fixture tool number ${index}.`,
+        inputSchema: {
+          value: z.number().describe('An arbitrary value.'),
+        },
+      },
+      async (params) => ({
+        content: [{ type: 'text' as const, text: `${name}:${params.value}` }],
+      }),
+    );
+  }
 }
 
 main().catch((err) => {

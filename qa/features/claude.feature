@@ -24,6 +24,13 @@ Feature: Driving Claude Code with the router
   the truncation marker but not the tail, while the protocol probe shows
   the router's own catalog still carries the complete text.
 
+  The auto-degradation plan covers the router's countermeasure: when a
+  length-limited client would receive a description longer than the cap,
+  the router re-renders the whole catalog at the "max" level (tool count
+  plus pointer) so the listing survives intact, and list mode still
+  returns every tool. The scenario adds a second stdio mock with
+  "MOCK_EXTRA_TOOLS=200" (205 tools) to push the catalog past the cap.
+
 Background:
   Given the QA stack is running and I am in the workspace shell
   And I prepared the router home with "pnpm qa:setup"
@@ -114,4 +121,16 @@ Scenario: Claude Code truncates an over-long catalog description
   And the log shows a passed "catalogIncludes" check for "… [truncated]"
   And the log shows a passed "catalogExcludes" check for "LONG-DESCRIPTION-TAIL"
   And running "pnpm qa:probe --list" shows "LONG-DESCRIPTION-TAIL" in the "get_tool_schema" description
+  And the log reports "0 failed" checks
+
+@TC-CLAUDE-10
+Scenario: Claude Code gets the catalog auto-degraded instead of truncated
+  Given I selected the mock LLM script "dynamic-limit-degraded" with "pnpm qa:llm script dynamic-limit-degraded"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' --compression-level low --env MOCK_EXTRA_TOOLS=200 -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  When I run the claude agent with "pnpm qa:agent --agent claude --prompt 'Test the stdio mcp server'"
+  And I show the mock LLM log with "pnpm qa:llm log"
+  Then the log shows a passed "catalogIncludes" check for "Provides 205 tools"
+  And the log shows a passed "catalogExcludes" check for "bulk_tool_001"
+  And the log shows a passed "messagesInclude" check for "Tools provided by"
+  And the log shows a passed "messagesInclude" check for "bulk_tool_001"
   And the log reports "0 failed" checks

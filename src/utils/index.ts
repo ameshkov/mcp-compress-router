@@ -29,3 +29,4 @@ export {
   getAuthDiscoveryTimeoutMs,
   createTimeoutFetch,
 } from './timeout.js';
+export { exceedsDynamicLimit } from './dynamic-limit.js';

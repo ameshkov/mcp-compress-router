@@ -2,7 +2,7 @@
  * Shared tool definitions for the QA mock MCP servers.
  *
  * Both the stdio mock (`mock-mcp-stdio/`) and the streamable-http mock
- * (`mock-mcp-http/`) expose the same four tools so a scenario can run
+ * (`mock-mcp-http/`) expose the same five tools so a scenario can run
  * against either transport and verify the same catalog, round trips,
  * and error passthrough.
  *
@@ -148,17 +148,49 @@ function registerDocumentedTool(server: McpServer): void {
 }
 
 /**
+ * Registers `count` deterministic bulk tools (`bulk_tool_001`, ...) with
+ * a trivial schema, used by scenarios that need a catalog large enough
+ * to trip a length-limited client's tool-description cap.
+ *
+ * @param server - The mock MCP server.
+ * @param count - How many bulk tools to register.
+ */
+function registerBulkTools(server: McpServer, count: number): void {
+  for (let index = 1; index <= count; index++) {
+    const name = `bulk_tool_${String(index).padStart(3, '0')}`;
+    server.registerTool(
+      name,
+      {
+        title: `Bulk Tool ${index}`,
+        description: `Bulk QA tool number ${index}.`,
+        inputSchema: {
+          value: z.number().describe('An arbitrary value.'),
+        },
+      },
+      async (params) => ({
+        content: [{ type: 'text' as const, text: `${name}:${params.value}` }],
+      }),
+    );
+  }
+}
+
+/**
  * Creates a mock MCP server with the shared QA tools.
  *
  * @param name - The server name reported during initialize.
+ * @param extraTools - Optional number of extra `bulk_tool_###` tools to
+ *   register after the standard five.
  * @returns The ready-to-connect MCP server.
  */
-export function createMockMcpServer(name: string): McpServer {
+export function createMockMcpServer(name: string, extraTools = 0): McpServer {
   const server = new McpServer({ name, version: '1.0.0' });
   registerEcho(server);
   registerAdd(server);
   registerMultiBlock(server);
   registerFailingTool(server);
   registerDocumentedTool(server);
+  if (Number.isInteger(extraTools) && extraTools > 0) {
+    registerBulkTools(server, extraTools);
+  }
   return server;
 }

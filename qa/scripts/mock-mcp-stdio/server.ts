@@ -13,6 +13,9 @@
  * Environment:
  * - `MOCK_STARTUP_DELAY_MS` — delay before connecting, for
  *   startup-timeout scenarios.
+ * - `MOCK_EXTRA_TOOLS` — register that many extra `bulk_tool_###` tools
+ *   (205 total with the standard five when set to 200), for the
+ *   length-limited-client auto-degradation scenarios.
  *
  * Usage (from the repository root):
  *   node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts
@@ -31,6 +34,16 @@ function startupDelayMs(): number {
 }
 
 /**
+ * Returns the number of extra bulk tools requested via `MOCK_EXTRA_TOOLS`.
+ *
+ * @returns The count, or 0 when unset or invalid.
+ */
+function extraTools(): number {
+  const raw = Number(process.env.MOCK_EXTRA_TOOLS ?? '');
+  return Number.isInteger(raw) && raw > 0 ? raw : 0;
+}
+
+/**
  * Starts the mock server on stdio.
  */
 async function main(): Promise<void> {
@@ -38,7 +51,7 @@ async function main(): Promise<void> {
   if (delayMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  const server = createMockMcpServer('qa-mock-stdio');
+  const server = createMockMcpServer('qa-mock-stdio', extraTools());
   await server.connect(new StdioServerTransport());
 }
 

@@ -49,8 +49,24 @@ describe('built-in mock LLM scripts', () => {
         'stdio-descriptions',
         'long-description',
         'long-catalog-truncated',
+        'dynamic-limit-degraded',
+        'dynamic-limit-kept',
       ]),
     );
+  });
+
+  it('checks the degraded and kept catalogs in the dynamic-limit scripts', () => {
+    const degraded = getScript('dynamic-limit-degraded');
+    expect(degraded).toBeDefined();
+    const first = degraded!.steps[0].expect;
+    expect(first?.catalogIncludes).toContain('Provides 205 tools');
+    expect(first?.catalogExcludes).toContain('bulk_tool_001');
+    expect(degraded!.steps[1].expect?.messagesInclude).toContain('bulk_tool_001');
+
+    const kept = getScript('dynamic-limit-kept');
+    expect(kept).toBeDefined();
+    expect(kept!.steps[0].expect?.catalogIncludes).toContain('bulk_tool_001');
+    expect(kept!.steps[0].expect?.catalogExcludes).toContain('Provides 205 tools');
   });
 
   it('checks the list-mode signatures and hint in the tool-list script', () => {

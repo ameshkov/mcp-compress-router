@@ -15,6 +15,7 @@ import {
 } from '../tools/index.js';
 import type { AsyncCleanup, ShutdownCoordinator } from '../services/index.js';
 import type { ToolCatalog, Logger } from '../utils/index.js';
+import { exceedsDynamicLimit } from '../utils/index.js';
 
 /**
  * Signature of the downstream invocation function injected by the
@@ -50,17 +51,42 @@ async function waitForCatalog(
  * `tools/list` request so the compact catalog (and the per-server status)
  * always reflects the latest discovery/reconnect state.
  *
+ * When the client is known to truncate long tool descriptions (see
+ * {@link exceedsDynamicLimit}) and the rendered `get_tool_schema`
+ * description exceeds the configured cap, the whole catalog is
+ * re-rendered at the `max` compression level. The forced render only
+ * lowers compression levels, so a catalog that still exceeds the cap
+ * afterwards (e.g. a long server description) is reported as a warning.
+ *
  * @param catalog - The tool catalog (read live).
+ * @param clientName - The MCP client name from `initialize`, if any.
+ * @param logger - Structured logger (records auto-degradation).
  * @returns Tool entries for the MCP tools/list response.
  */
 function buildRouterToolList(
   catalog: ToolCatalog,
+  clientName: string | undefined,
+  logger: Logger,
 ): Array<{ name: string; title: string; description: string; inputSchema: object }> {
+  let getSchemaDescription = buildGetToolSchemaDescription(catalog);
+  if (exceedsDynamicLimit(getSchemaDescription, clientName)) {
+    logger.info('Auto-degrading catalog compression for length-limited client', {
+      client: clientName,
+      length: getSchemaDescription.length,
+    });
+    getSchemaDescription = buildGetToolSchemaDescription(catalog, { forceMax: true });
+    if (exceedsDynamicLimit(getSchemaDescription, clientName)) {
+      logger.warn('Catalog still exceeds the description cap after auto-degradation', {
+        client: clientName,
+        length: getSchemaDescription.length,
+      });
+    }
+  }
   return [
     {
       name: 'get_tool_schema',
       title: 'Get Tool Schema',
-      description: buildGetToolSchemaDescription(catalog),
+      description: getSchemaDescription,
       inputSchema: z.toJSONSchema(getToolSchemaArgs),
     },
     {
@@ -137,7 +163,9 @@ export async function startRouterServer(
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     await waitForCatalog(catalogReady, coordinator);
-    return { tools: buildRouterToolList(catalog) };
+    return {
+      tools: buildRouterToolList(catalog, server.getClientVersion()?.name, logger),
+    };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
