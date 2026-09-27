@@ -30,6 +30,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
           type: 'stdio',
           command: fixture.command,
           args: fixture.args,
+          description: 'A test fixture server',
           allowedTools: ['echo'],
         },
       },
@@ -50,9 +51,13 @@ describe('MCP Compress Router E2E — tool filtering', () => {
     ).tools;
     const gts = tools.find((t) => t.name === 'get_tool_schema')!;
 
-    expect(gts.description).toContain('echo');
-    expect(gts.description).not.toContain('crash');
-    expect(gts.description).not.toContain('add');
+    // Only the allowlisted tool counts toward the catalog, and the tool
+    // names themselves are never rendered there.
+    expect(gts.description).toContain('- fixture (1 tool) - A test fixture server');
+    expect(gts.description).toContain(
+      'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(fixture)',
+    );
+    expect(gts.description).not.toContain('echo');
 
     const listResp = await client.sendRequest('tools/call', {
       name: 'get_tool_schema',
@@ -76,6 +81,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
           type: 'stdio',
           command: fixture.command,
           args: fixture.args,
+          description: 'A test fixture server',
           allowedTools: ['echo'],
         },
       },
@@ -129,6 +135,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
           type: 'stdio',
           command: fixture.command,
           args: fixture.args,
+          description: 'A test fixture server',
           disabledTools: ['crash'],
         },
       },
@@ -147,7 +154,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
         tools: Array<{ name: string; description?: string }>;
       }
     ).tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('echo');
+    expect(gts.description).toContain('- fixture (5 tools) - A test fixture server');
     expect(gts.description).not.toContain('crash');
 
     const blocked = await client.sendRequest('tools/call', {
@@ -166,7 +173,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
     expect(blockedResult.content[0].text).toContain('crash');
   });
 
-  it('empty allowlist makes the server appear with zero tools', async () => {
+  it('empty allowlist keeps the server out of the catalog', async () => {
     const fixture = await resolveFixtureCommand();
     const config = {
       mcpServers: {
@@ -174,6 +181,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
           type: 'stdio',
           command: fixture.command,
           args: fixture.args,
+          description: 'A test fixture server',
           allowedTools: [],
         },
       },
@@ -192,7 +200,8 @@ describe('MCP Compress Router E2E — tool filtering', () => {
         tools: Array<{ name: string; description?: string }>;
       }
     ).tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('## fixture');
+    expect(gts.description).not.toContain('fixture');
+    expect(gts.description).not.toContain('A test fixture server');
     expect(gts.description).not.toContain('echo');
     expect(gts.description).not.toContain('add');
     expect(gts.description).not.toContain('crash');

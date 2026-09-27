@@ -73,6 +73,7 @@ describe('probeAuthRequirement', () => {
   it('returns "oauth" for a server advertising OAuth metadata', async () => {
     const server: DownstreamServerConfig = {
       name: 'auth-fixture',
+      description: 'OAuth auth fixture server',
       type: 'http',
       url: authFixture.url,
     };
@@ -82,6 +83,7 @@ describe('probeAuthRequirement', () => {
   it('returns "none" for a server without OAuth metadata', async () => {
     const server: DownstreamServerConfig = {
       name: 'plain-fixture',
+      description: 'Plain HTTP fixture server',
       type: 'http',
       url: httpUrl,
     };
@@ -91,6 +93,7 @@ describe('probeAuthRequirement', () => {
   it('returns "unknown" when the probe errors (server returns 5xx)', async () => {
     const server: DownstreamServerConfig = {
       name: 'erroring',
+      description: 'Server that always errors',
       type: 'http',
       url: erroring.url,
     };
@@ -102,6 +105,7 @@ describe('probeAuthRequirement', () => {
     // publishes no OAuth metadata — a clean miss, not a probe error.
     const server: DownstreamServerConfig = {
       name: 'html',
+      description: 'Server returning HTML',
       type: 'http',
       url: html.url,
     };
@@ -111,6 +115,7 @@ describe('probeAuthRequirement', () => {
   it('returns "none" for stdio servers without any network access', async () => {
     const server: DownstreamServerConfig = {
       name: 'local',
+      description: 'Local stdio server',
       type: 'stdio',
       command: 'echo',
     };
@@ -121,11 +126,13 @@ describe('probeAuthRequirement', () => {
 describe('computeAuthStatus', () => {
   const httpServer: DownstreamServerConfig = {
     name: 'api',
+    description: 'Example HTTP API server',
     type: 'http',
     url: 'https://example.com/mcp',
   };
   const stdioServer: DownstreamServerConfig = {
     name: 'fs',
+    description: 'Example stdio filesystem server',
     type: 'stdio',
     command: 'npx',
   };

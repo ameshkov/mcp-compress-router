@@ -148,7 +148,13 @@ describe('handleLogin', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { github: { type: 'http', url: 'https://api.github.com/mcp' } },
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: 'https://api.github.com/mcp',
+            description: 'GitHub API tools',
+          },
+        },
       }),
     );
     await expect(handleLogin(configPath, 'unknown')).rejects.toThrow(
@@ -167,7 +173,9 @@ describe('handleLogin', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { local: { type: 'stdio', command: 'node' } },
+        mcpServers: {
+          local: { type: 'stdio', command: 'node', description: 'Local stdio server' },
+        },
       }),
     );
     await expect(handleLogin(configPath, 'local')).rejects.toThrow(
@@ -184,7 +192,7 @@ describe('handleLogin', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          test: { type: 'http', url: url + '/mcp' },
+          test: { type: 'http', url: url + '/mcp', description: 'Discovery test server' },
         },
       }),
     );
@@ -206,7 +214,7 @@ describe('handleLogin', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          nodcr: { type: 'http', url: url + '/mcp' },
+          nodcr: { type: 'http', url: url + '/mcp', description: 'No-DCR test server' },
         },
       }),
     );
@@ -231,6 +239,7 @@ describe('handleLogin', () => {
           nodcr: {
             type: 'http',
             url: url + '/mcp',
+            description: 'No-DCR test server',
             oauth: { clientId: 'pre-registered-client-id' },
           },
         },
@@ -256,6 +265,7 @@ describe('handleLogin', () => {
           nodcr: {
             type: 'http',
             url: 'http://127.0.0.1:1/mcp',
+            description: 'No-DCR test server',
             oauth: { clientId: 'pre-registered-client-id' },
           },
         },

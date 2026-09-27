@@ -44,6 +44,7 @@ describe('ServerConnection — connect (success)', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -66,6 +67,7 @@ describe('ServerConnection — connect (success)', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -90,6 +92,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
   it('returns degraded status with cached tools when connect fails and cache exists', async () => {
     const config: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
     };
@@ -114,6 +117,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
   it('throws when connect fails and no cache exists (cold fail-fast)', async () => {
     const config: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
     };
@@ -127,6 +131,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
   it('cleans up the half-initialized client when connect fails with a warm cache', async () => {
     const config: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
     };
@@ -179,6 +184,7 @@ describe('ServerConnection — connect (auth failure classification)', () => {
 
     const config: DownstreamServerConfig = {
       name: 'notion-like',
+      description: 'Notion-like server rejecting tokens',
       type: 'http',
       url: `http://localhost:${port}/mcp`,
     };
@@ -204,6 +210,7 @@ describe('ServerConnection — reconnect', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -224,6 +231,7 @@ describe('ServerConnection — reconnect', () => {
   it('throws when reconnect target is unreachable', async () => {
     const config: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
     };
@@ -241,6 +249,7 @@ describe('ServerConnection — reconnect', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -264,6 +273,7 @@ describe('ServerConnection — reconnect', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -293,6 +303,7 @@ describe('ServerConnection — reconnect', () => {
     // re-running the connect→fail cycle with no backoff.
     const config: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
     };
@@ -313,6 +324,7 @@ describe('ServerConnection — reconnect', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -354,6 +366,7 @@ describe('ServerConnection — connect (timeout on hung server)', () => {
     process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = '500';
     const config: DownstreamServerConfig = {
       name: 'hanging',
+      description: 'Hanging HTTP server',
       type: 'http',
       url: `http://localhost:${port}/mcp`,
     };
@@ -382,6 +395,7 @@ describe('ServerConnection — invokeTool', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -402,6 +416,7 @@ describe('ServerConnection — invokeTool', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'fixture',
+      description: 'Test fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,

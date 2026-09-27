@@ -23,3 +23,7 @@ services:
   mock-mcp-http-oauth:
     ports:
       - '3101:3101'
+
+  mock-mcp-weather:
+    ports:
+      - '3102:3102'

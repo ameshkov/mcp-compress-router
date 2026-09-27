@@ -17,10 +17,15 @@
  * - `documented_tool(input)` — a deliberately long description.
  * - `whoami()` — reports whether the request was authenticated.
  *
+ * With `MOCK_MCP_TOOLS=weather` it serves the lifelike weather tools
+ * (`mock-mcp-weather.ts`) instead; the compose stack runs that flavor
+ * as the `mock-mcp-weather` service for the real-LLM plans.
+ *
  * Environment:
  * - `MOCK_MCP_PORT` — listen port (default 3100).
  * - `MOCK_MCP_HOST` — listen host (default 0.0.0.0).
  * - `MOCK_MCP_AUTH` — `none` (default) or `oauth`.
+ * - `MOCK_MCP_TOOLS` — `qa` (default) or `weather`.
  * - `MOCK_OAUTH_ISSUER` — advertised issuer; must be reachable by the
  *   router (default `http://localhost:<port>`).
  *
@@ -32,6 +37,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMockMcpServer } from '../mock-mcp-tools.js';
+import { createWeatherMcpServer, WEATHER_TOOL_NAMES } from '../mock-mcp-weather.js';
 import { createOAuthState, handleOAuthRequest, isAuthorized } from './oauth.js';
 
 /**
@@ -51,6 +57,7 @@ function parsePort(): number {
 const PORT = parsePort();
 const HOST = process.env.MOCK_MCP_HOST ?? '0.0.0.0';
 const AUTH_MODE = process.env.MOCK_MCP_AUTH === 'oauth';
+const WEATHER_TOOLS = process.env.MOCK_MCP_TOOLS === 'weather';
 const ISSUER = process.env.MOCK_OAUTH_ISSUER ?? `http://localhost:${PORT}`;
 const OAUTH = createOAuthState(ISSUER);
 
@@ -90,12 +97,16 @@ function sendJson(
 }
 
 /**
- * Creates the HTTP mock MCP server with the shared tools plus `whoami`.
+ * Creates the HTTP mock MCP server for the configured tool set: the
+ * shared QA tools plus `whoami`, or the lifelike weather tools.
  *
  * @param authLabel - What `whoami` reports for this request.
  * @returns The MCP server.
  */
 function createHttpMockServer(authLabel: string): McpServer {
+  if (WEATHER_TOOLS) {
+    return createWeatherMcpServer('qa-mock-weather');
+  }
   const server = createMockMcpServer('qa-mock-http');
   server.registerTool(
     'whoami',
@@ -181,7 +192,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       ok: true,
       auth: AUTH_MODE ? 'oauth' : 'none',
       issuer: ISSUER,
-      tools: ['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool', 'whoami'],
+      tools: WEATHER_TOOLS
+        ? WEATHER_TOOL_NAMES
+        : ['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool', 'whoami'],
     });
     return;
   }

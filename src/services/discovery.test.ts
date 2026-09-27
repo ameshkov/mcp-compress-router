@@ -38,6 +38,7 @@ describe('discoverSingleServer', () => {
     const resolved = await resolveCommand();
     const disabled: DownstreamServerConfig = {
       name: 'off',
+      description: 'Disabled fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -55,6 +56,7 @@ describe('discoverSingleServer', () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
       name: 'on',
+      description: 'Enabled fixture server',
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
@@ -68,6 +70,7 @@ describe('discoverSingleServer', () => {
   it('throws when the server is unreachable', async () => {
     const dead: DownstreamServerConfig = {
       name: 'dead',
+      description: 'Unreachable fixture server',
       type: 'stdio',
       command: '/nonexistent/command',
     };

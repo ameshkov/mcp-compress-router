@@ -20,6 +20,7 @@ describe('updateServerInCatalog', () => {
     return buildCatalog([
       {
         name: 'srv',
+        description: 'Baseline server',
         tools: [{ name: 'old_tool', inputSchema: { type: 'object' } }],
         status: 'unavailable',
       },

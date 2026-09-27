@@ -10,7 +10,7 @@ function makeCatalog(): ToolCatalog {
     servers: [
       {
         name: 'srv',
-        compressionLevel: 'high' as const,
+        description: 'Recovery test server',
         status: 'ok' as const,
         tools: [{ name: 'echo', inputSchema: { type: 'object', properties: {} } }],
       },
@@ -29,11 +29,13 @@ function makeMockConn(overrides?: Partial<ServerConnection>): ServerConnection {
     serverName: 'srv',
     serverConfig: {
       name: 'srv',
+      description: 'Recovery test server',
       type: 'http',
       url: 'https://example.com/mcp',
     },
     reconnect: vi.fn().mockResolvedValue({
       name: 'srv',
+      description: 'Recovery test server',
       tools: [{ name: 'echo', inputSchema: { type: 'object' } }],
       status: 'ok',
     }),

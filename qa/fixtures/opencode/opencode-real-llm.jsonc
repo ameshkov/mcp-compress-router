@@ -1,0 +1,39 @@
+{
+  // QA-only opencode config template for the opt-in real-LLM plans.
+  // `pnpm qa:agent --real-llm` copies it into a scratch
+  // XDG_CONFIG_HOME with __MODEL__ replaced by the full model reference
+  // (QA_REAL_LLM_MODEL, default `openrouter/~deepseek/deepseek-flash-latest`)
+  // and __MODEL_ID__ by the bare model id. The model is declared
+  // explicitly because OpenRouter's `~latest` aliases are not in
+  // models.dev. The OpenRouter key is interpolated by opencode from the
+  // environment, so it never lands in a config file.
+  //
+  // The router reads its server list from the QA router home prepared
+  // by `pnpm qa:setup`. Paths are relative to the repository root;
+  // opencode runs from there.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "__MODEL__",
+  "small_model": "__MODEL__",
+  "provider": {
+    "openrouter": {
+      "options": {
+        "apiKey": "{env:QA_OPENROUTER_API_KEY}"
+      },
+      "models": {
+        "__MODEL_ID__": {
+          "name": "QA real LLM (OpenRouter)"
+        }
+      }
+    }
+  },
+  "mcp": {
+    "qa-router": {
+      "type": "local",
+      "command": ["node", "build/index.js"],
+      "environment": {
+        "MCP_COMPRESS_ROUTER_HOME": "qa/home"
+      },
+      "enabled": true
+    }
+  }
+}

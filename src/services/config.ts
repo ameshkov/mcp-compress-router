@@ -1,18 +1,12 @@
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
-import type {
-  CompressionLevel,
-  DownstreamServerConfig,
-  OAuthConfig,
-  ServerTransportType,
-} from '../utils/index.js';
+import type { DownstreamServerConfig, OAuthConfig, ServerTransportType } from '../utils/index.js';
 import {
   expandEnvField,
-  isCompressionLevel,
+  normalizeDescription,
   parseJsonc,
   validateGlobPattern,
-  VALID_COMPRESSION_LEVELS,
 } from '../utils/index.js';
 
 /** Recognized MCP transport types. */
@@ -307,30 +301,6 @@ function validateEnabled(name: string, server: Record<string, unknown>): boolean
 }
 
 /**
- * Validates the optional `compressionLevel` field on a server entry.
- *
- * Accepts `undefined` (absent — resolves to `high` downstream) and the
- * four valid level strings. Any other value (invalid string, number,
- * boolean, null) is a hard error at config load time, matching the
- * existing fail-fast pattern for `type` and `enabled`.
- *
- * @param name - Server name (for error messages).
- * @param value - The raw `compressionLevel` value from the server entry.
- * @returns The validated level, or undefined when the field is absent.
- * @throws If the value is present but not one of max, high, medium, low.
- */
-function validateCompressionLevel(name: string, value: unknown): CompressionLevel | undefined {
-  if (value === undefined) return undefined;
-  if (!isCompressionLevel(value)) {
-    throw new Error(
-      `Server "${name}" has invalid "compressionLevel" value "${String(value)}". ` +
-        `Must be one of: ${VALID_COMPRESSION_LEVELS.join(', ')}`,
-    );
-  }
-  return value;
-}
-
-/**
  * Validates an optional tool-name glob list (`allowedTools` or
  * `disabledTools`).
  *
@@ -406,12 +376,11 @@ function parseServerEntry(
 
   const entryContext = `server "${name}"`;
   const fields = buildServerFields(entryContext, server);
-  const description = typeof server.description === 'string' ? server.description : undefined;
+  const description = normalizeDescription(server.description);
   const oauth = parseOauthBlock(entryContext, server);
   const enabled = validateEnabled(name, server);
   const allowedTools = validateToolList(name, 'allowedTools', server.allowedTools);
   const disabledTools = validateToolList(name, 'disabledTools', server.disabledTools);
-  const compressionLevel = validateCompressionLevel(name, server.compressionLevel);
 
   return {
     name,
@@ -422,7 +391,6 @@ function parseServerEntry(
     enabled,
     allowedTools,
     disabledTools,
-    compressionLevel,
   };
 }
 

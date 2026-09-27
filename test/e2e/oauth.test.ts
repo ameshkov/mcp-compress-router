@@ -107,7 +107,11 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          github: { type: 'http', url: authFixture.url + '/mcp' },
+          github: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'GitHub API tools',
+          },
         },
       }),
     );
@@ -122,7 +126,7 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          local: { type: 'stdio', command: 'node' },
+          local: { type: 'stdio', command: 'node', description: 'Local stdio server' },
         },
       }),
     );
@@ -143,7 +147,11 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          github: { type: 'http', url: authFixture.url + '/mcp' },
+          github: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'GitHub API tools',
+          },
         },
       }),
     );
@@ -157,7 +165,11 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          github: { type: 'http', url: authFixture.url + '/mcp' },
+          github: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'GitHub API tools',
+          },
         },
       }),
     );
@@ -195,7 +207,11 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          authsrv: { type: 'http', url: authFixture.url + '/mcp' },
+          authsrv: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'OAuth fixture server',
+          },
         },
       }),
     );
@@ -229,7 +245,11 @@ describe('MCP Compress Router E2E — OAuth', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          authsrv: { type: 'http', url: authFixture.url + '/mcp' },
+          authsrv: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'OAuth fixture server',
+          },
         },
       }),
     );
@@ -260,6 +280,7 @@ describe('MCP Compress Router E2E — OAuth', () => {
           authsrv: {
             type: 'http',
             url: authFixture.url + '/mcp',
+            description: 'OAuth fixture server',
             oauth: { callbackPort: port },
           },
         },

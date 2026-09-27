@@ -34,6 +34,11 @@ export interface RawServerEntry {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  /**
+   * Optional short server description shown to the model in the catalog.
+   * The `add` command requires one, but the router accepts entries
+   * without it; this type mirrors the raw, unvalidated file.
+   */
   description?: string;
   /** Whether the server is enabled. Absent means enabled (default). */
   enabled?: boolean;
@@ -41,8 +46,6 @@ export interface RawServerEntry {
   allowedTools?: string[];
   /** Glob patterns denylisting tool names; wins over allowedTools. */
   disabledTools?: string[];
-  /** Tool listing compression level (max, high, medium, low). */
-  compressionLevel?: string;
   /** OAuth client overrides (clientId/clientSecret/scope/callbackPort). */
   oauth?: Record<string, unknown>;
 }

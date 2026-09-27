@@ -17,6 +17,7 @@ tool listings with a compact routing layer.
     - [Code Quality](#code-quality)
     - [Testing](#testing)
     - [Manual QA](#manual-qa)
+    - [Benchmarks](#benchmarks)
     - [Dependency Management](#dependency-management)
     - [Configuration & Documentation](#configuration--documentation)
 
@@ -65,22 +66,31 @@ mcp-compress-router/
 │   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
 │   └── utils/            # Shared utility module: parsing, validation,
 │                         #   filtering, formatting, atomic file writes,
-│                         #   timeouts, dynamic-limit degradation, logging,
-│                         #   process-tree termination
+│                         #   timeouts, logging, process-tree termination
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router
 ├── qa/                   # Manual QA stack: Gherkin plans, verdict runner,
 │                         #   compose stack + Dockerfiles (plus the opt-in
 │                         #   host-ports override), mock LLM, mock MCP
-│                         #   servers (stdio, streamable-http, OAuth),
-│                         #   router/agent tooling (opencode, Copilot CLI,
-│                         #   Claude Code, Codex CLI), baseline config
+│                         #   servers (stdio, streamable-http, OAuth) and
+│                         #   the lifelike weather tool set, router/agent
+│                         #   tooling (opencode, Copilot CLI, Claude Code,
+│                         #   Codex CLI), opt-in real-LLM runs, baseline
+│                         #   config
+├── bench/                # Token-overhead benchmark harness: per-agent
+│                         #   Docker images (Claude Code, Codex CLI,
+│                         #   GitHub Copilot CLI, OpenCode, OpenCode V2)
+│                         #   on a shared router base, mock MCP servers
+│                         #   vendored from Notion/GitHub/Figma/Playwright
+│                         #   tool surfaces, direct-vs-router runs, ccusage
+│                         #   token and cost reports
 ├── .agents/skills/       # Project skills: manual test run, QA planning
 ├── docs/                 # Documentation
-│   ├── reference/        # Configuration reference
-│   ├── explanation/      # Architecture, process lifecycle, practices
-│   ├── guides/           # Task guides: releasing
+│   ├── reference/        # Configuration and CLI reference
+│   ├── explanation/      # Token overhead, architecture, process
+│   │                     #   lifecycle, development practices
+│   ├── guides/           # Task guides: agent setup, OAuth, releasing
 │   └── assets/           # Images and example payloads
 ├── DEVELOPMENT.md        # How to run and debug the project locally
 ├── mcp.example.jsonc     # Example JSONC config template (committed)
@@ -96,6 +106,10 @@ Markdownlint settings) is intentionally left out of the tree.
 Every source directory exposes its public API through an `index.ts`
 barrel, and unit tests are co-located with the modules they cover (see
 [Testing](#testing)).
+
+The manual QA stack and the benchmark harness are documented in
+[qa/README.md](./qa/README.md) and
+[bench/README.md](./bench/README.md).
 
 ## Build and Test Commands
 
@@ -230,6 +244,19 @@ catalog from discovered servers and injects it into tool handlers. Tool
 handlers MUST NOT receive transport clients, raw server connections, or
 configuration objects. See
 [About the architecture](./docs/explanation/architecture.md).
+
+**Keep the static catalog minimal**: The `get_tool_schema` description
+is the only part of the router a host sends on every request, so it MUST
+render every server that advertises tools in its smallest useful form:
+one `- name (N tools) - description` bullet per server, an indented
+status line when the server is degraded, and a closing list-mode hint
+naming the first advertised server. Servers without tools MUST NOT be
+advertised. Tool names, argument signatures, and tool descriptions MUST
+NOT appear in the catalog; they belong to dynamic results (the
+`get_tool_schema` list mode and schema results). The catalog format MUST
+NOT become per-server configurable: one compact format for every server
+is what keeps the token overhead predictable. See
+[About token overhead](./docs/explanation/token-overhead.md).
 
 **Own your process lifecycle**: The long-running router entry point is
 responsible for shutting itself down, not the host. It MUST wire a
@@ -367,71 +394,66 @@ Every module MUST have test coverage:
 
 ### Manual QA
 
-The manual-testing stack lives in `qa/`: Gherkin plans in
-`qa/features/`, the verdict runner and ID check in `qa/scripts/bdd/`,
-the workspace and agent tooling in `qa/scripts/` (router CLI wrapper,
-protocol probe, mock LLM client, coding-agent runners for opencode,
-GitHub Copilot CLI, Claude Code, and Codex CLI), the mock MCP servers in
-`qa/scripts/mock-mcp-stdio/` and `qa/scripts/mock-mcp-http/`
-(stdio plus streamable-http with optional OAuth), the committed baseline
-config and agent templates in `qa/fixtures/`, and the Docker Compose
-stack (`qa/docker-compose.yml` plus one Dockerfile per image).
+Manual testing runs through the QA stack in `qa/`; its services,
+commands, and plans are documented in
+[qa/README.md](./qa/README.md).
 
-- **Manual runs execute in the QA Compose workspace**: the plans and
-  the `pnpm qa:*` scripts (`qa:setup`, `qa:router`, `qa:probe`,
-  `qa:llm`, `qa:agent`, `qa:run`) run inside the workspace container,
-  never from a host checkout, next to the standalone `mock-llm`,
-  `mock-mcp-http`, and `mock-mcp-http-oauth` services. The workspace
-  bakes the router build, the QA tooling, the stdio mock, opencode,
-  GitHub Copilot CLI (offline BYOK), Claude Code (against the mock LLM's
-  Anthropic endpoint), and Codex CLI (against the mock LLM's Responses
-  endpoint); rebuild the stack after any source or QA change so it
-  matches the working tree.
-- **No host ports by default**: the stack publishes no host ports, so
-  it can never conflict with services running on the host; every plan
-  talks to the mocks over the Compose network. Host access is opt-in
-  through `qa/docker-compose.host-ports.yml`, and the mock-LLM commands
-  (`pnpm qa:agent`, `pnpm qa:llm`) fail fast when `QA_LLM_URL` is
-  missing so a host-checkout run cannot silently test host artifacts.
-- **Write plans as human instructions**: every scenario is a sequence
-  of steps a tester carries out by hand — name the exact command to run
-  and the exact evidence to look for. Plans never rely on the runner or
-  on hidden automation to perform a step.
-- **The mock LLM log is the primary evidence**: the mock LLM is a
-  first-class part of the stack, not a convenience. It serves scripted
-  conversations, validates every request (tool surface, catalog
-  contents, tool-call arguments, returned results), and keeps the raw
-  request/response log. New or changed agent-observable behavior SHOULD
-  be verified through its log; the agent transcript and the mock MCP
-  container logs are supporting channels.
-- **Keep `qa/README.md` consistent with the stack**: `qa/README.md` is
-  the guide for the manual QA stack — its services, the baseline config,
-  how the router and the mock LLM are driven, and how to run the plans.
-  Any change to the stack (script paths, config, commands, mocks) MUST
-  update `qa/README.md` in the same change.
-- **Keep BDD plans consistent with implemented features**: The Gherkin
-  feature files in `qa/features/` are the manual test plans. Adding,
-  changing, or removing observable behavior MUST update the
-  corresponding `*.feature` plans (including their `@TC-*` IDs) in the
-  same change — the conventions are enforced by `pnpm lint:gherkin`
-  (part of `pnpm lint`). Test IDs follow `@TC-<GROUP>-<case>` with a
-  semantic uppercase GROUP naming the test area (e.g.
-  `@TC-STARTUP-1`); all scenarios in one file share the group and IDs
-  are unique across the suite. Each manual run (interactive or
-  `--auto-pass`) gets a unique run id and writes
-  `qa/output/<run-id>/report.json` + `report.md`; interactive runs also
-  record the tester's free-text description per case.
-- **QA agent workflows live in `.agents/skills/`**: `manual-test-run`
-  drives a QA session and records verdicts; `qa-test-planning` maps a
-  changeset to plan coverage and selects the cases to run.
-- **Adding a coding agent is a full-stack change**: a new agent needs a
-  runner and a transcript renderer in `qa/scripts/agent/`, a hermetic
-  fixture in `qa/fixtures/<agent>/`, a pinned install in `qa/Dockerfile`,
-  a `qa/features/<agent>.feature` plan, and the `qa/README.md` updates.
-  When the agent speaks a different wire protocol, extend the mock LLM
-  with a `ProtocolAdapter` (see `qa/scripts/mock-llm/protocol.ts`)
-  instead of adding a translation proxy, so the log keeps the raw
-  requests the agent actually sent.
+- **Run manual tests in the QA workspace**: the `pnpm qa:*` scripts and
+  the plans execute inside the Compose workspace, never from a host
+  checkout, and the stack is rebuilt after any source or QA change.
+- **Keep host access opt-in**: the stack publishes no host ports by
+  default; use `qa/docker-compose.host-ports.yml` only when a test needs
+  host access.
+- **Write plans as human instructions**: every scenario names the exact
+  command to run and the exact evidence to look for, and never relies on
+  the runner or hidden automation to perform a step.
+- **Treat the mock LLM log as the primary evidence**: for the scripted
+  plans, verify new or changed agent-observable behavior through its
+  log; agent transcripts and container logs are supporting channels.
+  The opt-in real-LLM plans have no mock LLM log — there the transcript
+  and the mock MCP server logs are the evidence.
+- **Pass real-LLM credentials only through `qa/.env`**: the opt-in
+  `pnpm qa:agent --real-llm` plans read `QA_OPENROUTER_API_KEY` and
+  `QA_REAL_LLM_MODEL` from it; never commit it, and keep
+  `qa/.env.example` current.
+- **Write real-LLM plans as lifelike tasks**: a real-LLM prompt MUST
+  describe an ordinary user task and never name a tool; give the model a
+  mock server whose tools fit the task and verify through the transcript
+  and the downstream call log that the model found and actually used it.
+- **Keep plans and docs in sync**: adding, changing, or removing
+  observable behavior MUST update the corresponding
+  `qa/features/*.feature` plans, and any stack change MUST update
+  `qa/README.md`, in the same change.
+- **Use the QA skills**: `manual-test-run` drives a session and records
+  verdicts; `qa-test-planning` maps a changeset to plan coverage.
+- **Adding a coding agent is a full-stack change**: add a runner and a
+  transcript renderer in `qa/scripts/agent/`, a hermetic fixture, a
+  pinned install, a feature plan, and the README updates; extend the
+  mock LLM with a `ProtocolAdapter` for a new wire protocol instead of
+  adding a translation proxy.
+
+### Benchmarks
+
+The token-overhead benchmark harness lives in `bench/`; its images,
+environment variables, commands, and reports are documented in
+[bench/README.md](./bench/README.md).
+
+- **Run benchmarks in the images**: use `pnpm bench:all` or
+  `pnpm bench:<agent>` (Compose `run`), never a host checkout, and
+  rebuild after any source or bench change.
+- **Keep every run isolated**: each run gets a fresh container and run
+  directory with its own workspace, hermetic home, agent config, and
+  router home; never reuse run state across runs.
+- **Pass credentials only through `bench/.env`**: never commit it, and
+  keep `bench/.env.example` current.
+- **Never implement the mock MCP servers**: they exist to reproduce
+  realistic tool-definition overhead; do not add behavior to them or
+  make the task prompt depend on them.
+- **Keep `bench/README.md` in sync**: any change to the stack updates it
+  in the same change.
+- **Adding a coding agent is a full-stack change**: add a config
+  adapter, a transcript handler, a Dockerfile stage, a Compose service,
+  a `package.json` script, unit tests, and the README updates.
 
 ### Dependency Management
 
@@ -471,3 +493,11 @@ Configuration and documentation MUST stay synchronized with code:
   CLI management commands write plain `.json` (comments cannot
   round-trip). A `.env` file in cwd is auto-loaded at startup — secrets
   should go there, not in the config file.
+- **Every server needs a description**: A downstream server entry
+  SHOULD carry a short (1-2 sentences at most) `description` explaining
+  what the server is and why the model could need it — the compact
+  catalog is the only place the model learns what a server is for. The
+  `add` command MUST require it, but config loading MUST accept entries
+  without one: hand-edited and older configs keep working, and the
+  catalog simply omits the description after the tool count for that
+  server.

@@ -350,7 +350,7 @@ export class ServerConnection {
 export interface DiscoveredServerData {
   /** The server name (from config). */
   name: string;
-  /** The server's optional description. */
+  /** The server's description from config, when configured. */
   description?: string;
   /** Discovered or cached tool descriptors. */
   tools: ToolDescriptor[];

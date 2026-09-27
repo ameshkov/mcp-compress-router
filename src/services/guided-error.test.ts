@@ -4,12 +4,14 @@ import type { DownstreamServerConfig } from '../utils/index.js';
 
 const httpServer: DownstreamServerConfig = {
   name: 'figma',
+  description: 'Figma design tools',
   type: 'http',
   url: 'https://api.figma.com/mcp',
 };
 
 const stdioServer: DownstreamServerConfig = {
   name: 'github',
+  description: 'GitHub API tools',
   type: 'stdio',
   command: 'npx',
   args: ['@some/mcp-server'],
@@ -52,7 +54,12 @@ describe('buildGuidedError', () => {
         '{"error":"invalid_token","error_description":"Missing or invalid access token"}',
     );
     const err = buildGuidedError(
-      { name: 'notion', type: 'http', url: 'https://mcp.notion.com/mcp' },
+      {
+        name: 'notion',
+        description: 'Notion workspace tools',
+        type: 'http',
+        url: 'https://mcp.notion.com/mcp',
+      },
       underlying,
       'unauthorized',
       true,

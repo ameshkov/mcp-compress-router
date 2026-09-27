@@ -4,22 +4,6 @@
 export type ServerTransportType = 'stdio' | 'http' | 'streamable-http';
 
 /**
- * Per-server tool listing compression level controlling how a server's
- * tools are rendered in the `get_tool_schema` description. When the
- * `compressionLevel` config field is absent, the effective value is
- * `high`.
- *
- * - `max` — tool count plus a `get_tool_schema` pointer; no tool names.
- * - `high` (default) — tool names only, comma-separated.
- * - `medium` — `toolName(arg1, arg2)` signatures, one per line.
- * - `low` — signature plus the first sentence of the description.
- *
- * No level renders full tool descriptions in the catalog; the complete
- * description is always available from a `get_tool_schema` result.
- */
-export type CompressionLevel = 'max' | 'high' | 'medium' | 'low';
-
-/**
  * Runtime status of a downstream server connection.
  *
  * - `'ok'` — connected, client is live.
@@ -46,7 +30,12 @@ export interface DownstreamServerConfig {
   url?: string;
   /** Optional static HTTP headers. */
   headers?: Record<string, string>;
-  /** Optional human-authored description for the catalog. */
+  /**
+   * Optional short (1-2 sentences at most) human-authored description
+   * for the catalog, shown to the model so it can tell what the server
+   * is for. The `add` command requires one; hand-edited configs may
+   * omit it.
+   */
   description?: string;
   /** Optional OAuth client configuration overrides, with ${VAR} expansion. */
   oauth?: OAuthConfig;
@@ -56,11 +45,6 @@ export interface DownstreamServerConfig {
   allowedTools?: string[];
   /** Glob patterns denylisting tool names; takes precedence over {@link allowedTools}. */
   disabledTools?: string[];
-  /**
-   * Optional tool listing compression level for this server. Absent
-   * means `high` (the default). See {@link CompressionLevel}.
-   */
-  compressionLevel?: CompressionLevel;
 }
 
 /**
@@ -178,12 +162,10 @@ export interface ToolDescriptor {
 export interface CatalogServer {
   /** Server name. */
   name: string;
-  /** Optional human-authored description. */
+  /** Human-authored description shown to the model in the catalog, when configured. */
   description?: string;
   /** Tools provided by this server. */
   tools: ToolDescriptor[];
-  /** Resolved compression level (always concrete; never undefined). */
-  compressionLevel: CompressionLevel;
   /** Current connection status of this server. */
   status: ServerStatus;
 }

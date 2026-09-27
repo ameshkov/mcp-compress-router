@@ -10,66 +10,82 @@ and this project adheres to
 
 ### Added
 
-- Calling `get_tool_schema` with just a server name now returns a
-  compact text list of that server's tools and their argument
-  signatures, plus a hint to call again with a tool name for the full
-  JSON schema. This works at every compression level, including `max`,
-  where the catalog lists no tool names at all. `tools` is now optional,
-  and an empty array behaves like omitting it — previously `tools: []`
-  was rejected as `InvalidParams`. The explicit `tools: [...]` path and
-  its JSON response are unchanged.
+- Added a list mode to `get_tool_schema`: calling it with just a server
+  name (or with an empty `tools` array) returns the server's tools and
+  their argument signatures as text, plus a hint to request the full
+  JSON schema by tool name. The `tools` parameter is now optional; the
+  explicit `tools: [...]` path and its JSON response are unchanged.
 - Added a canary release channel: every push to `master` publishes
   `<version>-canary.<sha>` to the `canary` npm dist-tag
   (`npx mcp-compress-router@canary`). Canary builds never touch
   `latest`, and stable `v*` releases are unaffected.
-- Added automatic catalog degradation for length-limited MCP clients.
-  When a `tools/list` request from a configured client (Claude Code by
-  default) would carry a `get_tool_schema` description longer than 2048
-  characters, the router re-renders the whole catalog at the `max`
-  level for that request, so the compressed listing fits the client's
-  cap; other clients keep their configured levels, and list mode still
-  returns every tool. The re-render only lowers the compression level —
-  server descriptions and status lines are always included — so a
-  catalog that still exceeds the cap after it (for example, because of
-  a long server description) is truncated by the client anyway; the
-  router logs a warning in that case. Configure the clients with
-  `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS` and the cap with
-  `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`; an empty client list
-  disables the behavior.
 
 ### Changed
 
-- **Breaking:** the `compressionLevel` ladder was remapped, and full tool
-  descriptions were removed from the catalog. The four level names are
-  unchanged, but every level now renders differently:
+- **Breaking:** the `add` command now requires `--description`, a short
+  (1-2 sentences at most) description of the MCP server so the model can
+  tell what the server is and why it could need it. Descriptions are
+  normalized to a single line (trimmed, with interior whitespace
+  collapsed to single spaces) both when `add` writes them and when the
+  config is loaded. Config loading stays backward compatible: a
+  hand-edited or older entry without a `description` still loads, and the
+  compact catalog simply omits the description after the tool count for
+  that server.
+- The `get_tool_schema` catalog is now always compact: every server that
+  advertises tools renders as a single `- name (N tools) - description`
+  bullet, a degraded server adds an indented status line below its
+  bullet, and the catalog closes with a list-mode hint naming the first
+  advertised server. Servers without tools are not advertised at all,
+  and tool names, argument signatures, and tool descriptions never
+  appear in the catalog — the list mode and the schema results return
+  them. Server descriptions render in full, so a long `--description`
+  can still exceed Claude Code's 2048-character tool-description cap and
+  be truncated by the client.
 
-  | Level | Before | After |
-  | --- | --- | --- |
-  | `max` | Comma-separated tool names | Tool count plus a `get_tool_schema` pointer; no names |
-  | `high` (default) | `toolName(arg1, arg2)` signatures | Comma-separated tool names |
-  | `medium` | Signature plus the first sentence | `toolName(arg1, arg2)` signatures |
-  | `low` | `<tool>signature: full description</tool>` | Signature plus the first sentence |
+### Removed
 
-  Existing configs keep working but render differently. To preserve a
-  server's previous listing, move it one level up: old `max` → new
-  `high`, old `high` → new `medium`, old `medium` → new `low`. The old
-  `low` full-description rendering has no replacement — complete tool
-  descriptions are returned by `get_tool_schema` results. The default
-  stays `high`, so servers without an explicit level now list names
-  only.
+- **Breaking:** removed the per-server `compressionLevel` setting and
+  its CLI surface: the `--compression-level` flag of `add`, the
+  `Compression` column of the `list` table, and the `compressionLevel`
+  line of `get` are gone. Existing configs keep working — the field is
+  ignored, including values that previously failed validation — and the
+  catalog is always compact, so nothing needs to be configured to keep
+  it small.
 
 ### Fixed
 
 - Fixed the authentication guidance for an unauthenticated server: the
-  catalog status line and the `invoke_tool` guided error now ask the
-  agent to have the user run `npx mcp-compress-router login <server>` and
-  complete the browser authorization, and state that the agent must not
-  run the command itself. The login command opens a browser and waits
-  for interactive authorization, which an agent cannot complete.
+  catalog status line and the `invoke_tool` guided error now tell the
+  agent to have the user run `npx mcp-compress-router login <server>`
+  and complete the browser authorization, and never to run the command
+  itself (it waits for an interactive authorization an agent cannot
+  complete).
 - Corrected the documented Claude Code tool-description limit from 2000
-  to 2048 characters: Claude Code cuts the description at 2048
-  characters and appends `… [truncated]` (measured on the pinned
-  `2.1.278` build). The compression guidance is unchanged.
+  to 2048 characters (measured on the pinned `2.1.278` build).
+- Corrected the documented variable expansion scope: `${VAR}` and
+  `${VAR:-default}` are expanded in `command`, `args`, `env`, `url`,
+  `headers`, and the `oauth` string fields only — `description`,
+  `allowedTools`, and `disabledTools` are used literally.
+- Corrected the commented timeout values in `.env.example` to the code
+  defaults (`MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=10000` and
+  `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS=5000`); they had been
+  stale since the defaults changed in v1.5.6.
+
+### Internal
+
+- Added a manual QA stack (`qa/`) with a scripted mock LLM, mock MCP
+  servers, and hermetic runners for opencode, GitHub Copilot CLI, Claude
+  Code, and Codex CLI, including opt-in real-LLM plans.
+- Added a Docker-based benchmark harness (`bench/`) that runs the same
+  task through Claude Code (with Tool Search on and off), Codex CLI,
+  GitHub Copilot CLI, and OpenCode (V1 and V2) with and without the
+  router and reports the token and cost deltas.
+- Restructured the documentation into a README landing page plus
+  guides, reference, and explanation pages, and refreshed the README
+  benchmark table with the measured per-agent token and cost savings.
+- Documented in the README that newer coding agents defer MCP tool
+  definitions natively, so a single newer agent may not need the router
+  for token savings, while the multi-agent management benefit remains.
 
 ## [v1.6.4] - 2026-09-10
 

@@ -10,6 +10,8 @@
 #   mock-mcp-http       streamable-http mock MCP server (no auth)
 #   mock-mcp-http-oauth streamable-http mock MCP server with a mock OAuth
 #                       authorization server
+#   mock-mcp-weather    streamable-http mock MCP server with the lifelike
+#                       weather tools (the real-LLM plans)
 #
 # Usage (from the repository root):
 #   docker compose -f qa/docker-compose.yml up -d --build
@@ -40,10 +42,19 @@ services:
         condition: service_healthy
       mock-mcp-http-oauth:
         condition: service_healthy
+      mock-mcp-weather:
+        condition: service_healthy
     environment:
       # In-network address of the mock LLM; the QA commands require it
       # and fail fast when it is missing (i.e. outside the workspace).
       QA_LLM_URL: http://mock-llm:8080
+    # Opt-in real-LLM credentials and model (QA_OPENROUTER_API_KEY,
+    # QA_REAL_LLM_MODEL) come from qa/.env — see qa/.env.example. The
+    # file is optional: the stack starts without it and only the
+    # `--real-llm` plans need the values.
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - qa-output:/app/qa/output
     command: ['tail', '-f', '/dev/null']
@@ -106,6 +117,30 @@ services:
           'node',
           '-e',
           "fetch('http://127.0.0.1:3101/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # Lifelike weather tools over streamable-http for the real-LLM plans:
+  # the same image and transport as `mock-mcp-http`, but with the
+  # `mock-mcp-weather.ts` tool set instead of the generic QA tools.
+  mock-mcp-weather:
+    build:
+      context: ..
+      dockerfile: qa/Dockerfile.mock-mcp-http
+    image: mcp-compress-router-qa-mock-mcp-http
+    container_name: mcr-qa-mock-mcp-weather
+    environment:
+      MOCK_MCP_PORT: '3102'
+      MOCK_MCP_TOOLS: weather
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3102/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 2s
       timeout: 3s

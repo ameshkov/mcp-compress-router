@@ -24,6 +24,7 @@ describe('loadConfig', () => {
           type: 'stdio',
           command: 'node',
           args: ['./server1.js'],
+          description: 'A Node MCP server',
         },
         server2: {
           type: 'stdio',
@@ -46,11 +47,10 @@ describe('loadConfig', () => {
       env: undefined,
       url: undefined,
       headers: undefined,
-      description: undefined,
+      description: 'A Node MCP server',
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
-      compressionLevel: undefined,
     });
     expect(servers[1]).toEqual({
       name: 'server2',
@@ -64,7 +64,6 @@ describe('loadConfig', () => {
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
-      compressionLevel: undefined,
     });
   });
 
@@ -84,6 +83,7 @@ describe('loadConfig', () => {
           "type": "http",
           "url": "https://beta.example.com/mcp",
           "headers": {"Authorization": "Bearer token",},
+          "description": "Beta HTTP server",
         },
       },
     }`;
@@ -248,7 +248,7 @@ describe('loadConfig', () => {
       const configPath = path.join(tempDir, 'mcp.json');
       const config = {
         mcpServers: {
-          srv: { type: 'stdio', command: '${TEST_CMD}' },
+          srv: { type: 'stdio', command: '${TEST_CMD}', description: 'Test server' },
         },
       };
       await fs.writeFile(configPath, JSON.stringify(config));
@@ -261,7 +261,11 @@ describe('loadConfig', () => {
       const configPath = path.join(tempDir, 'mcp.json');
       const config = {
         mcpServers: {
-          srv: { type: 'stdio', command: '${TEST_CMD:-/usr/bin/node}' },
+          srv: {
+            type: 'stdio',
+            command: '${TEST_CMD:-/usr/bin/node}',
+            description: 'Test server',
+          },
         },
       };
       await fs.writeFile(configPath, JSON.stringify(config));
@@ -275,7 +279,11 @@ describe('loadConfig', () => {
       const configPath = path.join(tempDir, 'mcp.json');
       const config = {
         mcpServers: {
-          srv: { type: 'stdio', command: '${TEST_CMD:-/fallback}' },
+          srv: {
+            type: 'stdio',
+            command: '${TEST_CMD:-/fallback}',
+            description: 'Test server',
+          },
         },
       };
       await fs.writeFile(configPath, JSON.stringify(config));
@@ -289,7 +297,12 @@ describe('loadConfig', () => {
       const configPath = path.join(tempDir, 'mcp.json');
       const config = {
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', args: ['${TEST_ARG}', '--port', '${PORT:-3000}'] },
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            args: ['${TEST_ARG}', '--port', '${PORT:-3000}'],
+            description: 'Test server',
+          },
         },
       };
       await fs.writeFile(configPath, JSON.stringify(config));
@@ -307,6 +320,7 @@ describe('loadConfig', () => {
             type: 'stdio',
             command: 'node',
             env: { NODE_ENV: '${TEST_ENV}', LOG_LEVEL: '${LOG_LEVEL:-info}' },
+            description: 'Test server',
           },
         },
       };
@@ -321,7 +335,11 @@ describe('loadConfig', () => {
       const configPath = path.join(tempDir, 'mcp.json');
       const config = {
         mcpServers: {
-          api: { type: 'http', url: '${BASE_URL:-https://default.com}/v1' },
+          api: {
+            type: 'http',
+            url: '${BASE_URL:-https://default.com}/v1',
+            description: 'Test API server',
+          },
         },
       };
       await fs.writeFile(configPath, JSON.stringify(config));
@@ -339,6 +357,7 @@ describe('loadConfig', () => {
             type: 'http',
             url: 'https://example.com',
             headers: { Authorization: 'Bearer ${API_TOKEN}', 'X-Default': '${MISSING:-none}' },
+            description: 'Test API server',
           },
         },
       };
@@ -413,118 +432,6 @@ describe('loadConfig', () => {
       await fs.writeFile(configPath, JSON.stringify(config));
 
       await expect(loadConfig(configPath)).rejects.toThrow(/UNDEFINED_VAR/);
-    });
-  });
-
-  describe('compressionLevel field', () => {
-    it('defaults to undefined when omitted', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: { srv: { type: 'stdio', command: 'node' } },
-        }),
-      );
-      const servers = await loadConfig(configPath);
-      expect(servers[0].compressionLevel).toBeUndefined();
-    });
-
-    it('passes through a present string value', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: 'high' },
-          },
-        }),
-      );
-      const servers = await loadConfig(configPath);
-      expect(servers[0].compressionLevel).toBe('high');
-    });
-
-    it('passes through max, medium, and low values', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            maxSrv: { type: 'stdio', command: 'node', compressionLevel: 'max' },
-            mediumSrv: { type: 'stdio', command: 'node', compressionLevel: 'medium' },
-            lowSrv: { type: 'stdio', command: 'node', compressionLevel: 'low' },
-          },
-        }),
-      );
-      const servers = await loadConfig(configPath);
-      const byName = new Map(servers.map((s) => [s.name, s.compressionLevel]));
-      expect(byName.get('maxSrv')).toBe('max');
-      expect(byName.get('mediumSrv')).toBe('medium');
-      expect(byName.get('lowSrv')).toBe('low');
-    });
-
-    it('rejects an invalid string compressionLevel', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: 'ultra' },
-          },
-        }),
-      );
-      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel".*ultra/);
-    });
-
-    it('rejects a numeric compressionLevel', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: 42 },
-          },
-        }),
-      );
-      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel".*42/);
-    });
-
-    it('rejects a null compressionLevel', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: null },
-          },
-        }),
-      );
-      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel"/);
-    });
-
-    it('rejects a boolean compressionLevel', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: true },
-          },
-        }),
-      );
-      await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"compressionLevel"/);
-    });
-
-    it('error message lists the valid options', async () => {
-      const configPath = path.join(tempDir, 'mcp.json');
-      await fs.writeFile(
-        configPath,
-        JSON.stringify({
-          mcpServers: {
-            srv: { type: 'stdio', command: 'node', compressionLevel: 'ultra' },
-          },
-        }),
-      );
-      await expect(loadConfig(configPath)).rejects.toThrow(/max, high, medium, low/);
     });
   });
 });

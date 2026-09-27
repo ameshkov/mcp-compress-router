@@ -29,11 +29,6 @@ export async function handleGet(configPath: string, name: string): Promise<strin
   if (entry.description) {
     lines.push(`Description: ${entry.description}`);
   }
-  if (entry.compressionLevel) {
-    lines.push(`compressionLevel: ${entry.compressionLevel}`);
-  } else {
-    lines.push('compressionLevel: high (default)');
-  }
   if (entry.command) {
     lines.push(`Command: ${entry.command}`);
   }

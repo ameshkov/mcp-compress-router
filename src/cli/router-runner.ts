@@ -11,12 +11,7 @@ import {
   installShutdownTriggers,
 } from '../services/index.js';
 import type { DiscoveredServerData } from '../services/index.js';
-import type {
-  CompressionLevel,
-  DownstreamServerConfig,
-  ToolCatalog,
-  ToolSelection,
-} from '../utils/index.js';
+import type { DownstreamServerConfig, ToolCatalog, ToolSelection } from '../utils/index.js';
 import { Logger } from '../utils/index.js';
 import { startRouterServer } from './router-server.js';
 import type { InvokeDownstreamFn } from './router-server.js';
@@ -105,8 +100,8 @@ async function closeAllConnections(
 }
 
 /**
- * Loads the config file and derives the per-server tool-selection and
- * compression-level maps used for filtering/rendering.
+ * Loads the config file and derives the per-server tool-selection map
+ * used for filtering.
  */
 async function loadConfigForRun(
   configPath: string | undefined,
@@ -116,7 +111,6 @@ async function loadConfigForRun(
   resolved: string;
   servers: DownstreamServerConfig[];
   selectionByServer: Map<string, ToolSelection>;
-  compressionLevelByServer: Map<string, CompressionLevel | undefined>;
 }> {
   logger.info('Starting mcp-compress-router', {
     verbose,
@@ -130,15 +124,13 @@ async function loadConfigForRun(
   logger.info('Configuration loaded', { serverCount: servers.length });
 
   const selectionByServer = new Map<string, ToolSelection>();
-  const compressionLevelByServer = new Map<string, CompressionLevel | undefined>();
   for (const server of servers) {
     selectionByServer.set(server.name, {
       allowedTools: server.allowedTools,
       disabledTools: server.disabledTools,
     });
-    compressionLevelByServer.set(server.name, server.compressionLevel);
   }
-  return { resolved, servers, selectionByServer, compressionLevelByServer };
+  return { resolved, servers, selectionByServer };
 }
 
 /**
@@ -244,13 +236,9 @@ function publishCatalog(
   markCatalogReady: () => void,
   discovered: DiscoveredServerData[],
   selectionByServer: Map<string, ToolSelection>,
-  compressionLevelByServer: Map<string, CompressionLevel | undefined>,
   logger: Logger,
 ): void {
-  replaceCatalogContents(
-    catalog,
-    buildCatalog(discovered, selectionByServer, logger, compressionLevelByServer),
-  );
+  replaceCatalogContents(catalog, buildCatalog(discovered, selectionByServer, logger));
   markCatalogReady();
 
   logger.info('Tools discovered', {
@@ -278,7 +266,7 @@ function publishCatalog(
  */
 export async function runRouter(configPath: string | undefined, verbose: boolean): Promise<void> {
   const logger = new Logger(verbose ? 'debug' : 'info');
-  const { resolved, servers, selectionByServer, compressionLevelByServer } = await loadConfigForRun(
+  const { resolved, servers, selectionByServer } = await loadConfigForRun(
     configPath,
     verbose,
     logger,
@@ -302,14 +290,7 @@ export async function runRouter(configPath: string | undefined, verbose: boolean
     process.exit(0);
   }
 
-  publishCatalog(
-    catalog,
-    markCatalogReady,
-    outcome.discovered,
-    selectionByServer,
-    compressionLevelByServer,
-    logger,
-  );
+  publishCatalog(catalog, markCatalogReady, outcome.discovered, selectionByServer, logger);
 
   // Block here until a shutdown trigger fires (signal or stdin EOF), then
   // force-exit so lingering grandchild pipes (e.g. browser processes

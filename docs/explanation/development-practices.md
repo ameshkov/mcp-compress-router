@@ -35,6 +35,19 @@ right arguments. Plans and `qa/README.md` drift silently if they are
 not updated with the features they describe, so both are treated as
 part of the change.
 
+## Benchmarks
+
+The `bench/` harness exists because the router's core claim — less
+context for the same work — is measurable, and an unmeasured claim
+drifts. It runs the same coding task under several agents against the
+same mock tool surfaces, once with the servers connected directly and
+once through the router, and reads token usage from each agent's own
+local logs through `ccusage` instead of trusting an estimate. Every run
+lives in its own container with its own hermetic home so one measurement
+cannot be polluted by earlier state, and the mock servers are
+deliberately unimplemented so the benchmark isolates tool-definition
+overhead from tool results.
+
 ## Dependencies
 
 Dependencies are pinned exactly, vetted for maintenance and adoption,

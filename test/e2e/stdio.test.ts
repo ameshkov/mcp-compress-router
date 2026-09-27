@@ -52,7 +52,7 @@ describe('MCP Compress Router E2E — stdio', () => {
     expect(toolNames).toEqual(['get_tool_schema', 'invoke_tool']);
   });
 
-  it('get_tool_schema description contains server name and tool names', async () => {
+  it('get_tool_schema description contains the server and its tool count', async () => {
     const resp = await client.sendRequest('tools/list');
     const tools = (
       resp.result as {
@@ -60,10 +60,11 @@ describe('MCP Compress Router E2E — stdio', () => {
       }
     ).tools;
     const gts = tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('fixture');
-    expect(gts.description).toContain('echo');
-    expect(gts.description).toContain('add');
-    expect(gts.description).toContain('A test fixture server');
+    expect(gts.description).toContain('- fixture (6 tools) - A test fixture server');
+    expect(gts.description).toContain(
+      'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(fixture)',
+    );
+    expect(gts.description).not.toContain('echo');
   });
 
   it('get_tool_schema returns schema for a known tool', async () => {
@@ -533,7 +534,8 @@ describe('MCP Compress Router E2E — stdio', () => {
       });
 
       // The compact catalog inside get_tool_schema's description must
-      // list the enabled server and its tools, but NOT the disabled one.
+      // show the enabled server and its tool count, but NOT the disabled
+      // one.
       const listResp = await disabledClient.sendRequest('tools/list');
       const tools = (
         listResp.result as {
@@ -541,9 +543,11 @@ describe('MCP Compress Router E2E — stdio', () => {
         }
       ).tools;
       const gts = tools.find((t) => t.name === 'get_tool_schema')!;
-      expect(gts.description).toContain('on');
-      expect(gts.description).toContain('echo');
-      expect(gts.description).not.toContain('off');
+      expect(gts.description).toContain('- on (6 tools) - Enabled fixture');
+      expect(gts.description).toContain(
+        'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(on)',
+      );
+      expect(gts.description).not.toContain('- off');
       expect(gts.description).not.toContain('Disabled fixture');
 
       // get_tool_schema on the disabled server fails and names it.
@@ -644,6 +648,7 @@ describe('MCP Compress Router E2E — stdio', () => {
             type: 'stdio',
             command: fixture.command,
             args: fixture.args,
+            description: 'A test fixture server',
           },
         },
       };

@@ -48,27 +48,20 @@ function makeCatalog(): ToolCatalog {
       {
         name: 'fixture',
         description: 'A test fixture server',
-        compressionLevel: 'high',
         status: 'ok',
         tools: [echo, add, crash],
       },
       {
         name: 'empty',
-        compressionLevel: 'high',
+        description: 'An empty server',
         status: 'ok',
         tools: [],
       },
       {
         name: 'auth',
-        compressionLevel: 'high',
+        description: 'An authenticated server',
         status: 'unauthorized',
         tools: [search],
-      },
-      {
-        name: 'maxed',
-        compressionLevel: 'max',
-        status: 'ok',
-        tools: [echo, add],
       },
     ],
     toolMap: new Map([
@@ -76,8 +69,6 @@ function makeCatalog(): ToolCatalog {
       ['fixture::add', add],
       ['fixture::crash', crash],
       ['auth::search', search],
-      ['maxed::echo', echo],
-      ['maxed::add', add],
     ]),
     filteredToolNames: new Set(),
   };
@@ -126,9 +117,7 @@ describe('createGetToolSchemaHandler — list mode', () => {
     const { text, isError } = await callHandler(makeCatalog(), { server: 'nope' });
 
     expect(isError).toBe(true);
-    expect(text).toBe(
-      'Error: Server "nope" not found. Available servers: fixture, empty, auth, maxed',
-    );
+    expect(text).toBe('Error: Server "nope" not found. Available servers: fixture, empty, auth');
   });
 
   it('renders the dedicated message for a zero-tool server', async () => {
@@ -149,13 +138,6 @@ describe('createGetToolSchemaHandler — list mode', () => {
         'for interactive authorization. Do not run it yourself.',
     );
     expect(text).toContain('search(query)');
-  });
-
-  it('ignores the compression level and always renders signatures', async () => {
-    const { text } = await callHandler(makeCatalog(), { server: 'maxed' });
-
-    expect(text).toContain('echo(message)');
-    expect(text).toContain('add(a, b)');
   });
 });
 
@@ -212,50 +194,52 @@ describe('GetToolSchemaInputSchema', () => {
   });
 });
 
+/** The fixed intro paragraph of the get_tool_schema description. */
+const INTRO =
+  'Get the JSON schema for one or more tools from a connected MCP server, ' +
+  "or omit the tool names to list a server's tools and their arguments. " +
+  'You MUST call this for a tool before you can invoke it with invoke_tool.';
+
+/** The footer of a catalog whose first advertised server is `fixture`. */
+const CATALOG_FOOTER =
+  'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(fixture)';
+
 describe('buildGetToolSchemaDescription', () => {
-  it('explains the list mode and embeds the compact catalog', () => {
+  it('joins the intro, the server bullets, and the footer with blank lines', () => {
     const description = buildGetToolSchemaDescription(makeCatalog());
 
-    expect(description).toContain(
-      "or omit the tool names to list a server's tools and their arguments",
+    expect(description).toBe(
+      `${INTRO}\n\n` +
+        '- fixture (3 tools) - A test fixture server\n' +
+        '- auth (1 tool) - An authenticated server\n' +
+        '  Requires authentication. Ask the user to run: npx mcp-compress-router login auth. ' +
+        'This opens a browser for interactive authorization. Do not run it yourself.\n\n' +
+        CATALOG_FOOTER,
     );
-    expect(description).toContain('You MUST call this for a tool before you can invoke it');
-    expect(description).toContain('## fixture');
-    expect(description).toContain('echo, add, crash');
+  });
+
+  it('never leaks tool names or signatures into the description', () => {
+    const description = buildGetToolSchemaDescription(makeCatalog());
+
+    expect(description).not.toContain('echo');
     expect(description).not.toContain('echo(message)');
+    expect(description).not.toContain('Available tools:');
   });
 
-  it('renders a max-level server as a tool count and a get_tool_schema pointer', () => {
+  it('omits zero-tool servers from the catalog', () => {
     const description = buildGetToolSchemaDescription(makeCatalog());
 
-    expect(description).toContain(
-      '## maxed\n\nProvides 2 tools. Call get_tool_schema with "maxed" to list them.',
-    );
-
-    const maxedSection = description.slice(description.indexOf('## maxed'));
-    expect(maxedSection).not.toContain('echo');
-    expect(maxedSection).not.toContain('Available tools:');
+    expect(description).not.toContain('empty');
+    expect(description).not.toContain('An empty server');
   });
 
-  it('forceMax renders every server at max while keeping descriptions and statuses', () => {
-    const description = buildGetToolSchemaDescription(makeCatalog(), { forceMax: true });
+  it('returns the intro alone when no server advertises tools', () => {
+    const catalog: ToolCatalog = {
+      servers: [{ name: 'empty', description: 'An empty server', status: 'ok', tools: [] }],
+      toolMap: new Map(),
+      filteredToolNames: new Set(),
+    };
 
-    expect(description).toContain('## fixture');
-    expect(description).toContain('A test fixture server');
-    expect(description).toContain(
-      'Provides 3 tools. Call get_tool_schema with "fixture" to list them.',
-    );
-    expect(description).toContain('Provides 1 tool. Call get_tool_schema with "auth" to list it.');
-    expect(description).toContain(
-      'Requires authentication. Ask the user to run: npx mcp-compress-router login auth.',
-    );
-    expect(description).not.toContain('Available tools:');
-    expect(description).not.toContain('echo, add, crash');
-  });
-
-  it('forceMax leaves zero-tool servers without a listing', () => {
-    const description = buildGetToolSchemaDescription(makeCatalog(), { forceMax: true });
-
-    expect(description).toContain('## empty\n\n## auth');
+    expect(buildGetToolSchemaDescription(catalog)).toBe(INTRO);
   });
 });

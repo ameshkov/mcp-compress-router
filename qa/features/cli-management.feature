@@ -26,3 +26,11 @@ Scenario: A disabled server can be enabled
   When I run "pnpm qa:router enable archive"
   And I run "pnpm qa:router list"
   Then the output shows an "archive" row marked enabled with "yes"
+
+@TC-CLI-4
+Scenario: Adding a server without a description is rejected
+  When I run "pnpm qa:router add no-desc -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  Then the command reports an error
+  And the error says Missing the required --description option
+  And the error explains that a short description helps the model understand the server
+  And the output of "pnpm qa:router list" does not contain "no-desc"

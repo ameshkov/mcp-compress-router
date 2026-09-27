@@ -14,6 +14,7 @@ describe('MCP Compress Router — fail-fast startup', () => {
         dead: {
           type: 'stdio',
           command: '/nonexistent/command',
+          description: 'Unreachable server',
         },
       },
     };
@@ -50,10 +51,12 @@ describe('MCP Compress Router — fail-fast startup', () => {
           type: 'stdio',
           command: fixture.command,
           args: fixture.args,
+          description: 'Live fixture server',
         },
         dead: {
           type: 'stdio',
           command: '/nonexistent/command',
+          description: 'Unreachable server',
         },
       },
     };

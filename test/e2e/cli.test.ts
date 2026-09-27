@@ -71,7 +71,18 @@ describe('CLI management commands', () => {
 
   it('add then get then list then remove lifecycle', async () => {
     // Add an HTTP server (local fixture — no OAuth metadata advertised)
-    const addResult = await runCli(['add', '--transport', 'http', 'sentry', httpUrl], homeDir);
+    const addResult = await runCli(
+      [
+        'add',
+        '--transport',
+        'http',
+        '--description',
+        'Sentry error tracking tools',
+        'sentry',
+        httpUrl,
+      ],
+      homeDir,
+    );
     expect(addResult.exitCode).toBe(0);
     expect(addResult.stdout).toContain('Added server "sentry"');
 
@@ -134,9 +145,28 @@ describe('CLI management commands', () => {
   });
 
   it('add duplicate server exits with error', async () => {
-    await runCli(['add', '--transport', 'http', 'dup', 'https://example.com/mcp'], homeDir);
+    await runCli(
+      [
+        'add',
+        '--transport',
+        'http',
+        '--description',
+        'First server',
+        'dup',
+        'https://example.com/mcp',
+      ],
+      homeDir,
+    );
     const { exitCode, stderr } = await runCli(
-      ['add', '--transport', 'http', 'dup', 'https://other.com/mcp'],
+      [
+        'add',
+        '--transport',
+        'http',
+        '--description',
+        'Second server',
+        'dup',
+        'https://other.com/mcp',
+      ],
       homeDir,
     );
     expect(exitCode).toBe(1);
@@ -145,7 +175,10 @@ describe('CLI management commands', () => {
 
   it('disable then enable round-trips the enabled field', async () => {
     // Seed a server in this test's own home (suite homeDir is shared)
-    const seed = await runCli(['add', 'gh', 'node', '-e', 'TOKEN=abc'], homeDir);
+    const seed = await runCli(
+      ['add', '--description', 'GitHub tools', 'gh', 'node', '-e', 'TOKEN=abc'],
+      homeDir,
+    );
     expect(seed.exitCode).toBe(0);
 
     const configPath = path.join(homeDir, 'mcp.json');
@@ -201,7 +234,17 @@ describe('CLI management commands', () => {
   it('add --disabled --allowed-tools writes enabled:false and allowedTools', async () => {
     const { command } = await resolveFixtureCommand();
     const result = await runCli(
-      ['add', '--disabled', '--allowed-tools', 'list_issues', 'gh', command, fixturePath],
+      [
+        'add',
+        '--disabled',
+        '--description',
+        'GitHub tools',
+        '--allowed-tools',
+        'list_issues',
+        'gh',
+        command,
+        fixturePath,
+      ],
       homeDir,
     );
     expect(result.exitCode).toBe(0);
@@ -216,7 +259,16 @@ describe('CLI management commands', () => {
   it('add --disabled-tools writes disabledTools and no enabled field', async () => {
     const { command } = await resolveFixtureCommand();
     const result = await runCli(
-      ['add', '--disabled-tools', 'delete_*', 'fs', command, fixturePath],
+      [
+        'add',
+        '--description',
+        'Filesystem tools',
+        '--disabled-tools',
+        'delete_*',
+        'fs',
+        command,
+        fixturePath,
+      ],
       homeDir,
     );
     expect(result.exitCode).toBe(0);
@@ -230,7 +282,10 @@ describe('CLI management commands', () => {
 
   it('add with no selection flags writes a clean entry', async () => {
     const { command } = await resolveFixtureCommand();
-    const result = await runCli(['add', 'plain', command, fixturePath], homeDir);
+    const result = await runCli(
+      ['add', '--description', 'Plain fixture server', 'plain', command, fixturePath],
+      homeDir,
+    );
     expect(result.exitCode).toBe(0);
 
     const config = await readE2eConfig();
@@ -252,6 +307,17 @@ describe('CLI management commands', () => {
 
     const { stdout } = await runCli(['list'], homeDir);
     expect(stdout).not.toContain('bad');
+  });
+
+  it('add without --description exits with an explanatory error and no write', async () => {
+    const { command } = await resolveFixtureCommand();
+    const result = await runCli(['add', 'nodesc', command, fixturePath], homeDir);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Missing the required --description option');
+    expect(result.stderr).toContain('1-2 sentences at most');
+
+    const { stdout } = await runCli(['list'], homeDir);
+    expect(stdout).not.toContain('nodesc');
   });
 
   it('add rejects --enabled and --disabled together', async () => {

@@ -86,6 +86,7 @@ describe('MCP Compress Router E2E — process tree cleanup', () => {
           command: 'node',
           args: [wrapperPath, fixture.command, ...fixture.args],
           env: { MCP_TEST_TREE_PID_FILE: pidFile },
+          description: 'Wrapped fixture server',
         },
       },
     };
@@ -120,6 +121,7 @@ describe('MCP Compress Router E2E — process tree cleanup', () => {
           command: 'node',
           args: [wrapperPath, 'node', stuckServerPath],
           env: { MCP_TEST_TREE_PID_FILE: pidFile },
+          description: 'Stuck wrapped server',
         },
       },
     };

@@ -11,7 +11,13 @@
  *   3. streams the transcript (`[tool]` calls and `[assistant]` text),
  *   4. optionally saves the raw event stream for debugging.
  *
- * The mock LLM is a separate compose service; this module only needs
+ * With `--real-llm` the same flow uses
+ * `qa/fixtures/opencode/opencode-real-llm.jsonc` instead: the model
+ * reference comes from `QA_REAL_LLM_MODEL` and the OpenRouter key is
+ * interpolated by opencode from `QA_OPENROUTER_API_KEY`, so the session
+ * talks to a real model instead of the mock LLM.
+ *
+ * The mock LLM is a separate compose service; the mock path only needs
  * its URL (`QA_LLM_URL`, set by the compose workspace; a missing value
  * is an error).
  */
@@ -26,11 +32,19 @@ import {
   spawnAgent,
   waitForExit,
 } from './process.js';
+import { splitRealModelRef } from './real-llm.js';
 import { handleEventLine, type TranscriptState } from './transcript.js';
 import type { AgentListOptions, AgentRunOptions, AgentRunResult } from './types.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const CONFIG_TEMPLATE = resolve(REPO_ROOT, 'qa', 'fixtures', 'opencode', 'opencode.jsonc');
+const REAL_CONFIG_TEMPLATE = resolve(
+  REPO_ROOT,
+  'qa',
+  'fixtures',
+  'opencode',
+  'opencode-real-llm.jsonc',
+);
 const MODEL_REF = 'qa-mock/qa-mock';
 const SCRATCH_PREFIX = 'mcp-compress-router-qa-';
 
@@ -49,6 +63,52 @@ async function writeScratchConfig(scratch: string, llmUrl: string): Promise<void
     template.replaceAll('__LLM_URL__', llmUrl),
     'utf8',
   );
+}
+
+/**
+ * Writes the real-LLM opencode config into a scratch XDG_CONFIG_HOME.
+ *
+ * @param scratch - The scratch directory.
+ * @param modelRef - The `<provider>/<model>` reference to run.
+ * @throws When the reference is not an OpenRouter reference.
+ */
+async function writeRealScratchConfig(scratch: string, modelRef: string): Promise<void> {
+  const { model } = splitRealModelRef(modelRef);
+  const template = await readFile(REAL_CONFIG_TEMPLATE, 'utf8');
+  const configDir = join(scratch, 'opencode');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(
+    join(configDir, 'opencode.jsonc'),
+    template.replaceAll('__MODEL__', modelRef).replaceAll('__MODEL_ID__', model),
+    'utf8',
+  );
+}
+
+/**
+ * Writes the scratch config for the selected LLM mode.
+ *
+ * @param scratch - The scratch directory.
+ * @param options - The session or listing options.
+ */
+async function writeSelectedConfig(
+  scratch: string,
+  options: { llmUrl: string; realLlm?: { model: string } },
+): Promise<void> {
+  if (options.realLlm) {
+    await writeRealScratchConfig(scratch, options.realLlm.model);
+    return;
+  }
+  await writeScratchConfig(scratch, options.llmUrl);
+}
+
+/**
+ * Returns the model reference for the selected LLM mode.
+ *
+ * @param options - The session or listing options.
+ * @returns The model reference opencode runs with.
+ */
+function selectedModelRef(options: { realLlm?: { model: string } }): string {
+  return options.realLlm?.model ?? MODEL_REF;
 }
 
 /**
@@ -72,11 +132,15 @@ function opencodeEnv(scratch: string): NodeJS.ProcessEnv {
 export async function runOpencodeSession(options: AgentRunOptions): Promise<AgentRunResult> {
   const scratch = await createScratchDir(SCRATCH_PREFIX);
   try {
-    await writeScratchConfig(scratch, options.llmUrl);
+    await writeSelectedConfig(scratch, options);
+    const modelRef = selectedModelRef(options);
     console.log(`Prompt: ${options.prompt}\n`);
+    if (options.realLlm) {
+      console.log(`Model: ${modelRef} (real LLM via OpenRouter)\n`);
+    }
     const child = spawnAgent(
       'opencode',
-      ['run', '--format', 'json', '--model', MODEL_REF, options.prompt],
+      ['run', '--format', 'json', '--model', modelRef, options.prompt],
       opencodeEnv(scratch),
       REPO_ROOT,
     );
@@ -105,8 +169,11 @@ export async function runOpencodeSession(options: AgentRunOptions): Promise<Agen
 export async function listOpencodeMcp(options: AgentListOptions): Promise<number> {
   const scratch = await createScratchDir(SCRATCH_PREFIX);
   try {
-    await writeScratchConfig(scratch, options.llmUrl);
-    console.log('opencode mcp list (hermetic config from qa/fixtures/opencode/opencode.jsonc)\n');
+    await writeSelectedConfig(scratch, options);
+    const template = options.realLlm
+      ? 'qa/fixtures/opencode/opencode-real-llm.jsonc'
+      : 'qa/fixtures/opencode/opencode.jsonc';
+    console.log(`opencode mcp list (hermetic config from ${template})\n`);
     const child = spawnAgent(
       'opencode',
       ['mcp', 'list'],

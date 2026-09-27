@@ -4,8 +4,10 @@ How to set up, run, and debug MCP Compress Router from a repository
 clone. For end-user installation, see the [README](./README.md). For
 the configuration and environment reference, see
 [docs/reference/configuration.md](./docs/reference/configuration.md).
-For the manual QA stack, see [qa/README.md](./qa/README.md), and for
-publishing, see [docs/guides/releasing.md](./docs/guides/releasing.md).
+For the manual QA stack, see [qa/README.md](./qa/README.md), for the
+token-overhead benchmark harness, see
+[bench/README.md](./bench/README.md), and for publishing, see
+[docs/guides/releasing.md](./docs/guides/releasing.md).
 
 ## Table of Contents
 
@@ -103,8 +105,8 @@ only `get_tool_schema` and `invoke_tool` over stdio.
 If a downstream server fails to start and no tool cache exists for it,
 the router exits with a non-zero code and prints the reason to stderr.
 If a cache exists from a prior successful run, it starts in degraded
-mode: the server's tools appear with a status header, and `invoke_tool`
-attempts self-recovery on first use.
+mode: the server's catalog bullet gains an indented status line, and
+`invoke_tool` attempts self-recovery on first use.
 
 ### Management commands
 
@@ -115,8 +117,11 @@ export MCP_COMPRESS_ROUTER_HOME="$PWD/dev-home"
 
 node build/index.js list
 node build/index.js get fixture
-node build/index.js add fixture -- npx tsx test/fixture-server.ts
+node build/index.js add fixture \
+  --description "Local fixture tools (echo, add, multi_block)" \
+  -- npx tsx test/fixture-server.ts
 node build/index.js add my-http http://localhost:3100/mcp \
+  --description "My custom HTTP MCP server" \
   --header "Authorization: Bearer ${MY_SERVER_TOKEN}"
 node build/index.js remove fixture
 node build/index.js login my-http
@@ -171,7 +176,7 @@ To debug the full experience — the LLM reading the compressed catalog
 and deciding when to call the router tools — point your agent's MCP
 configuration at `node` plus the absolute path to `build/index.js`,
 and set `MCP_COMPRESS_ROUTER_HOME` to the dev home. See
-[Connect your coding agent](./README.md#1-connect-your-coding-agent)
+[Connect your coding agent](./docs/guides/connect-coding-agent.md)
 for the per-agent configuration format. Rebuild and restart the agent
 after every source change.
 
@@ -224,8 +229,9 @@ This prints the raw JSON-RPC responses to your terminal.
 
 - `tools/list` returns exactly two tools: `get_tool_schema` and
   `invoke_tool`.
-- The `get_tool_schema` description lists each server, its description,
-  and its available tool names.
+- The `get_tool_schema` description lists each server with tools as a
+  bullet with its tool count and description, and closes with a
+  list-mode hint.
 - `get_tool_schema` called with only a server name returns that server's
   tool signatures and a hint to request the full schemas.
 - `get_tool_schema` returns JSON parameter schemas for a valid server

@@ -27,7 +27,7 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { srv: { type: 'stdio', command: 'node' } },
+        mcpServers: { srv: { type: 'stdio', command: 'node', description: 'Test server' } },
       }),
     );
     const servers = await loadConfig(configPath);
@@ -45,6 +45,7 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
           srv: {
             type: 'stdio',
             command: 'node',
+            description: 'Test server',
             enabled: false,
             allowedTools: ['list_issues', 'get_pull_request'],
             disabledTools: ['delete_repo'],
@@ -63,7 +64,9 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { srv: { type: 'stdio', command: 'node', allowedTools: [] } },
+        mcpServers: {
+          srv: { type: 'stdio', command: 'node', description: 'Test server', allowedTools: [] },
+        },
       }),
     );
     const servers = await loadConfig(configPath);
@@ -79,6 +82,7 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
           srv: {
             type: 'stdio',
             command: 'node',
+            description: 'Test server',
             allowedTools: ['a', 'b'],
             disabledTools: ['b'],
           },
@@ -95,7 +99,9 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { srv: { type: 'stdio', command: 'node', enabled: 'yes' } },
+        mcpServers: {
+          srv: { type: 'stdio', command: 'node', description: 'Test server', enabled: 'yes' },
+        },
       }),
     );
     await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"enabled"/);
@@ -106,7 +112,9 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { srv: { type: 'stdio', command: 'node', enabled: 1 } },
+        mcpServers: {
+          srv: { type: 'stdio', command: 'node', description: 'Test server', enabled: 1 },
+        },
       }),
     );
     await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"enabled"/);
@@ -118,7 +126,12 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', allowedTools: 'list_issues' },
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            description: 'Test server',
+            allowedTools: 'list_issues',
+          },
         },
       }),
     );
@@ -131,7 +144,12 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', allowedTools: ['ok', 5] },
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            description: 'Test server',
+            allowedTools: ['ok', 5],
+          },
         },
       }),
     );
@@ -144,7 +162,7 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', allowedTools: [''] },
+          srv: { type: 'stdio', command: 'node', description: 'Test server', allowedTools: [''] },
         },
       }),
     );
@@ -156,7 +174,9 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { srv: { type: 'stdio', command: 'node', disabledTools: null } },
+        mcpServers: {
+          srv: { type: 'stdio', command: 'node', description: 'Test server', disabledTools: null },
+        },
       }),
     );
     await expect(loadConfig(configPath)).rejects.toThrow(/"srv".*"disabledTools"/);
@@ -168,7 +188,12 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', allowedTools: ['[unclosed'] },
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            description: 'Test server',
+            allowedTools: ['[unclosed'],
+          },
         },
       }),
     );
@@ -181,7 +206,12 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          srv: { type: 'stdio', command: 'node', disabledTools: ['{a,b'] },
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            description: 'Test server',
+            disabledTools: ['{a,b'],
+          },
         },
       }),
     );
@@ -197,6 +227,7 @@ describe('loadConfig — enabled / allowedTools / disabledTools', () => {
           srv: {
             type: 'stdio',
             command: 'node',
+            description: 'Test server',
             allowedTools: ['file_*', '*_read', '{create,update}_thing'],
           },
         },

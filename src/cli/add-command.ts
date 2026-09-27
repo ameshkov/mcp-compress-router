@@ -7,9 +7,9 @@ import {
   type RawServerEntry,
 } from './config-io.js';
 import {
-  isCompressionLevel,
+  normalizeDescription,
+  SERVER_DESCRIPTION_GUIDANCE,
   validateGlobPattern,
-  VALID_COMPRESSION_LEVELS,
   type AuthRequirement,
 } from '../utils/index.js';
 
@@ -26,8 +26,9 @@ export interface AddOptions {
   env?: Record<string, string>;
   /** HTTP headers from repeated --header flags. */
   headers?: Record<string, string>;
-  /** Optional server description exposed to the LLM via get_tool_schema
-   *  to help it decide which server to route a request to. */
+  /** Server description exposed to the LLM via get_tool_schema to help
+   *  it decide which server to route a request to. Required — checked by
+   *  the handler before anything is written. */
   description?: string;
   /** Set true by --disabled (writes "enabled": false). */
   disabled?: boolean;
@@ -43,8 +44,6 @@ export interface AddOptions {
    * runs reuse it.
    */
   port?: number;
-  /** Compression level from `--compression-level`; undefined writes no field. */
-  compressionLevel?: string;
 }
 
 /**
@@ -71,14 +70,37 @@ function validateToolListPatterns(
 }
 
 /**
+ * Validates and normalizes the required server description option.
+ *
+ * The description is collapsed to a single line (interior whitespace
+ * becomes single spaces) so a multi-line `--description` cannot render
+ * as an extra catalog section.
+ *
+ * @param description - The raw `--description` value, if any.
+ * @returns The normalized description.
+ * @throws If the option is missing, empty, or whitespace-only.
+ */
+function resolveDescription(description: string | undefined): string {
+  const normalized = normalizeDescription(description);
+  if (!normalized) {
+    throw new Error(`Missing the required --description option. ${SERVER_DESCRIPTION_GUIDANCE}`);
+  }
+  return normalized;
+}
+
+/**
  * Builds the raw server entry from parsed CLI options, including
  * transport auto-detection, env/headers, description, and the optional
  * enable/filter fields.
  *
  * @param opts - Parsed CLI options.
+ * @param description - The validated server description.
  * @returns The constructed raw server entry and its resolved transport type.
  */
-function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: string } {
+function buildServerEntry(
+  opts: AddOptions,
+  description: string,
+): { entry: RawServerEntry; type: string } {
   // Auto-detect HTTP from URL pattern
   const isUrl = opts.commandOrUrl.startsWith('http://') || opts.commandOrUrl.startsWith('https://');
   const type = isUrl ? 'http' : opts.transport;
@@ -100,9 +122,7 @@ function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: stri
     }
   }
 
-  if (opts.description) {
-    entry.description = opts.description;
-  }
+  entry.description = description;
 
   if (opts.disabled) {
     entry.enabled = false;
@@ -112,10 +132,6 @@ function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: stri
   }
   if (opts.disabledTools && opts.disabledTools.length > 0) {
     entry.disabledTools = opts.disabledTools;
-  }
-
-  if (opts.compressionLevel) {
-    entry.compressionLevel = opts.compressionLevel;
   }
 
   // A fixed callback port only applies to HTTP servers (OAuth). Persist
@@ -143,7 +159,8 @@ function buildServerEntry(opts: AddOptions): { entry: RawServerEntry; type: stri
  * @param configPath - Absolute path to the mcp.json file.
  * @param opts - Parsed CLI options.
  * @returns Human-readable confirmation message.
- * @throws If the server name already exists.
+ * @throws If the description is missing, the server name already exists,
+ *   or an option is invalid.
  */
 export async function handleAdd(configPath: string, opts: AddOptions): Promise<string> {
   if (opts.enabled && opts.disabled) {
@@ -152,13 +169,7 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
 
   validateToolListPatterns('allowedTools', opts.allowedTools);
   validateToolListPatterns('disabledTools', opts.disabledTools);
-
-  if (opts.compressionLevel !== undefined && !isCompressionLevel(opts.compressionLevel)) {
-    throw new Error(
-      `Invalid "--compression-level" value "${opts.compressionLevel}": ` +
-        `must be one of ${VALID_COMPRESSION_LEVELS.join(', ')}.`,
-    );
-  }
+  const description = resolveDescription(opts.description);
 
   await ensureConfigDir(configPath);
   const servers = await readConfigFile(configPath);
@@ -169,7 +180,7 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
     );
   }
 
-  const { entry, type } = buildServerEntry(opts);
+  const { entry, type } = buildServerEntry(opts, description);
 
   servers[opts.name] = entry;
   await writeConfigFile(configPath, servers);

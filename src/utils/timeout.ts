@@ -35,14 +35,13 @@ export const DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS = 5_000;
  * when unset or invalid (non-integer or non-positive). Invalid values
  * silently fall back to the default rather than aborting startup.
  *
- * Shared by the timeout getters below and the dynamic-limit helpers in
- * `dynamic-limit.ts`, which apply the same "positive integer or default"
- * convention to `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`.
+ * Shared by the timeout getters below, which apply the same "positive
+ * integer or default" convention.
  *
  * @param name - The environment variable name.
  * @returns The parsed positive integer, or `undefined` when unset/invalid.
  */
-export function readPositiveIntEnv(name: string): number | undefined {
+function readPositiveIntEnv(name: string): number | undefined {
   const raw = process.env[name];
   if (raw === undefined) {
     return undefined;

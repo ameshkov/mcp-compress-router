@@ -25,6 +25,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: {
             clientId: '${TEST_CLIENT_ID}',
             clientSecret: '${TEST_CLIENT_SECRET}',
@@ -51,6 +52,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { clientId: '${MISSING_VAR}' },
         },
       },
@@ -67,6 +69,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { clientId: '${CLIENT_ID}' },
         },
       },
@@ -84,6 +87,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { clientId: 'cid', callbackPort: 8765 },
         },
       },
@@ -100,6 +104,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { callbackPort: '8765' },
         },
       },
@@ -116,6 +121,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { callbackPort: 70000 },
         },
       },
@@ -131,6 +137,7 @@ describe('loadConfig — oauth block', () => {
         github: {
           type: 'http',
           url: 'https://api.github.com/mcp',
+          description: 'GitHub API tools',
           oauth: { callbackPort: 'not-a-port' },
         },
       },

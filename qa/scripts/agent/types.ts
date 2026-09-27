@@ -10,11 +10,24 @@
 /** Coding agents the QA driver can run. */
 export type AgentName = 'opencode' | 'copilot' | 'claude' | 'codex';
 
+/** Options for a session driven by a real model instead of the mock LLM. */
+export interface RealLlmOptions {
+  /**
+   * Model reference in `<provider>/<model>` form, e.g.
+   * `openrouter/~deepseek/deepseek-flash-latest`. Only the OpenRouter
+   * provider is supported by the real-LLM plans.
+   */
+  model: string;
+}
+
 /** Options for one scripted agent session. */
 export interface AgentRunOptions {
   /** Prompt to pass to the agent. */
   prompt: string;
-  /** Mock LLM base URL (without `/v1`). */
+  /**
+   * Mock LLM base URL (without `/v1`). Unused when {@link realLlm} is
+   * set — the runner then talks to the real provider instead.
+   */
   llmUrl: string;
   /** How long to wait before killing the agent. */
   timeoutMs: number;
@@ -22,6 +35,8 @@ export interface AgentRunOptions {
   eventsPath?: string;
   /** Keep the scratch config home for debugging. */
   keep: boolean;
+  /** When set, run against the real provider instead of the mock LLM. */
+  realLlm?: RealLlmOptions;
 }
 
 /** Minimal transcript state every agent runner reports. */
@@ -52,6 +67,8 @@ export interface AgentListOptions {
   timeoutMs: number;
   /** Keep the scratch config home for debugging. */
   keep: boolean;
+  /** When set, use the real-provider config instead of the mock LLM config. */
+  realLlm?: RealLlmOptions;
 }
 
 /** The default agent timeout in milliseconds. */

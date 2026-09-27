@@ -1,0 +1,108 @@
+# Benchmark stack for mcp-compress-router.
+#
+# One service per coding agent plus a report service. Every `run` gets
+# a fresh container and a fresh run directory under the `bench-runs`
+# volume, so runs never pollute each other. Credentials come from
+# bench/.env (copy bench/.env.example first).
+#
+# Usage (from the repository root):
+#   docker compose -f bench/docker-compose.yml build
+#   docker compose -f bench/docker-compose.yml run --rm claude --mode router
+#   docker compose -f bench/docker-compose.yml run --rm report
+#
+# Or use `pnpm bench:all`, which loops over every agent and both modes.
+# The stack publishes no host ports and uses named volumes only, so it
+# works unchanged when the Docker engine runs outside this checkout.
+
+name: mcp-compress-router-bench
+
+services:
+  claude:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: claude
+    image: mcp-compress-router-bench-claude
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - bench-runs:/bench
+
+  # Same Claude Code image, but the run forces ENABLE_TOOL_SEARCH=false
+  # so every MCP definition loads upfront on every request.
+  claude-no-tool-search:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: claude
+    image: mcp-compress-router-bench-claude-no-tool-search
+    init: true
+    env_file:
+      - .env
+    entrypoint: ['tsx', 'bench/scripts/run.ts', '--agent', 'claude-no-tool-search']
+    volumes:
+      - bench-runs:/bench
+
+  codex:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: codex
+    image: mcp-compress-router-bench-codex
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - bench-runs:/bench
+
+  copilot:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: copilot
+    image: mcp-compress-router-bench-copilot
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - bench-runs:/bench
+
+  opencode:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: opencode
+    image: mcp-compress-router-bench-opencode
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - bench-runs:/bench
+
+  opencode-v2:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: opencode-v2
+    image: mcp-compress-router-bench-opencode-v2
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - bench-runs:/bench
+
+  # Aggregates every run summary into report.md / report.json.
+  report:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+      target: router
+    image: mcp-compress-router-bench-router
+    init: true
+    entrypoint: ['tsx', 'bench/scripts/report.ts']
+    volumes:
+      - bench-runs:/bench
+
+volumes:
+  bench-runs:

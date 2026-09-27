@@ -76,13 +76,12 @@ describe('MCP Compress Router E2E — mixed transports', () => {
     ).tools;
     const gts = tools.find((t) => t.name === 'get_tool_schema')!;
 
-    // Both servers appear in the catalog description
-    expect(gts.description).toContain('stdio-fixture');
-    expect(gts.description).toContain('http-fixture');
-    // Tools from both servers are listed
-    expect(gts.description).toContain('echo');
-    expect(gts.description).toContain('add');
-    expect(gts.description).toContain('check_auth');
+    // Both servers appear in the catalog description, each with its own
+    // tool count; the tool names are not rendered in the catalog.
+    expect(gts.description).toContain('- stdio-fixture (6 tools)');
+    expect(gts.description).toContain('- http-fixture (5 tools)');
+    expect(gts.description).not.toContain('echo');
+    expect(gts.description).not.toContain('check_auth');
   });
 
   it('invokes a tool on the stdio server', async () => {

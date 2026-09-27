@@ -67,10 +67,12 @@ describe('MCP Compress Router E2E — startup with a hanging downstream server',
             type: 'stdio',
             command: fixture.command,
             args: fixture.args,
+            description: 'Quick fixture server',
           },
           'hanging-http': {
             type: 'streamable-http',
             url: hangingFixture.url,
+            description: 'Hanging HTTP server',
           },
         },
       };

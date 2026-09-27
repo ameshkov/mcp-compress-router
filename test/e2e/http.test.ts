@@ -74,7 +74,7 @@ describe('MCP Compress Router E2E — HTTP downstream', () => {
     expect(toolNames).toEqual(['get_tool_schema', 'invoke_tool']);
   });
 
-  it('get_tool_schema description contains HTTP server and its tool names', async () => {
+  it('get_tool_schema description contains the HTTP server and its tool count', async () => {
     const resp = await client.sendRequest('tools/list');
     const tools = (
       resp.result as {
@@ -82,10 +82,11 @@ describe('MCP Compress Router E2E — HTTP downstream', () => {
       }
     ).tools;
     const gts = tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('http-fixture');
-    expect(gts.description).toContain('echo');
-    expect(gts.description).toContain('add');
-    expect(gts.description).toContain('An HTTP test fixture server');
+    expect(gts.description).toContain('- http-fixture (5 tools) - An HTTP test fixture server');
+    expect(gts.description).toContain(
+      'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(http-fixture)',
+    );
+    expect(gts.description).not.toContain('echo');
   });
 
   it('get_tool_schema returns schema for a tool on an HTTP server', async () => {

@@ -5,18 +5,19 @@ Feature: Driving GitHub Copilot CLI with the router
   exercise the real agent without a GitHub account. The mock LLM log is
   the primary evidence: it shows the router tools under Copilot's
   hyphenated names ("qa-router-get_tool_schema"), the compact catalog,
-  the first-sentence descriptions, and the round-trip results.
+  and the round-trip results.
 
-  The stdio mock is added with "--compression-level low" so the compact
-  catalog carries each tool's signature and first-sentence description,
-  which is what the description plans verify. Full descriptions are
-  never in the catalog; the long-description plan reads one through the
-  "get_tool_schema" result.
+  The catalog in the "get_tool_schema" description is always compact:
+  each server with tools appears as a single bullet with its tool count
+  and description, and the description ends with a list-mode hint. Tool
+  names, argument signatures, and tool descriptions are never in the
+  catalog; the model reads them with a "get_tool_schema" list or schema
+  call, which the description plans verify.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
   And I prepared the router home with "pnpm qa:setup"
-  And I added the stdio mock server with "pnpm qa:router add stdio-mock --description 'QA stdio mock' --compression-level low -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock --description 'QA stdio mock' -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
 
 @TC-COPILOT-1
 Scenario: Copilot CLI is configured with the router server
@@ -24,14 +25,16 @@ Scenario: Copilot CLI is configured with the router server
   Then the output shows "qa-router (local)"
 
 @TC-COPILOT-2
-Scenario: Copilot discovers the router tools and the stdio catalog
+Scenario: Copilot discovers the router tools and the compact stdio catalog
   Given I selected the mock LLM script "stdio-catalog" with "pnpm qa:llm script stdio-catalog"
   When I run the copilot agent with "pnpm qa:agent --agent copilot --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the mock LLM log shows the request tools "qa-router-get_tool_schema" and "qa-router-invoke_tool"
-  And the mock LLM log shows the catalog section "## stdio-mock"
-  And the mock LLM log shows the catalog tool line "add(a, b)"
+  And the mock LLM log shows the catalog bullet "- stdio-mock (5 tools)"
+  And the mock LLM log shows the catalog hint "Call get_tool_schema with the server name to list all tools"
   And the mock LLM log shows no downstream tool "echo" in the request tools
+  And the mock LLM log shows a passed "catalogExcludes" check for "echo"
+  And the mock LLM log shows the list-mode signature "echo(message)"
   And the mock LLM log shows no validation failures
 
 @TC-COPILOT-3
@@ -50,10 +53,10 @@ Scenario: Copilot passes every downstream tool description to the model
   Given I selected the mock LLM script "stdio-descriptions" with "pnpm qa:llm script stdio-descriptions"
   When I run the copilot agent with "pnpm qa:agent --agent copilot --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
-  Then the log shows the complete "echo" tool description
-  And the log shows the complete "add" tool description
-  And the log shows the complete "multi_block" tool description
-  And the log shows the complete "failing_tool" tool description
+  Then the log shows the complete "echo" tool description in the schema result
+  And the log shows the complete "add" tool description in the schema result
+  And the log shows the complete "multi_block" tool description in the schema result
+  And the log shows the complete "failing_tool" tool description in the schema result
   And the log reports "0 failed" checks
 
 @TC-COPILOT-5
@@ -61,9 +64,9 @@ Scenario: A long tool description reaches Copilot complete through the schema re
   Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the copilot agent with "pnpm qa:agent --agent copilot --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
-  Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
+  Then the log shows no "LONG-DESCRIPTION-HEAD" in the catalog
   And the log shows no "LONG-DESCRIPTION-TAIL" in the catalog
-  And the log shows the end of the long description in a "get_tool_schema" result
+  And the log shows the complete long description in a "get_tool_schema" result
   And the log reports "0 failed" checks
 
 @TC-COPILOT-6

@@ -13,7 +13,7 @@ quick-start guide, see the
     - [Server Entry Fields](#server-entry-fields)
     - [Server Types](#server-types)
     - [Tool Selection](#tool-selection)
-    - [Compression Levels](#compression-levels)
+    - [Compact Catalog](#compact-catalog)
     - [Variable Expansion](#variable-expansion)
 - [OAuth Configuration](#oauth-configuration)
 - [Credential Storage](#credential-storage)
@@ -27,8 +27,6 @@ quick-start guide, see the
     - [MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS](#mcp_compress_router_login_timeout_ms)
     - [MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS](#mcp_compress_router_downstream_timeout_ms)
     - [MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS](#mcp_compress_router_auth_discovery_timeout_ms)
-    - [MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS](#mcp_compress_router_dynamic_limit_clients)
-    - [MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE](#mcp_compress_router_dynamic_limit_max_size)
 - [CLI Flags](#cli-flags)
     - [add](#add-name-commandorurl-rest)
     - [disable](#disable-name)
@@ -63,9 +61,10 @@ to compress into the router. At startup the router:
 5. Exposes two tools (`get_tool_schema` and `invoke_tool`) on a stdio
    transport.
 
-Configuration never appears in the tool catalog sent to the LLM. Only
-the compressed catalog of server and tool names is exposed; full tool
-schemas are returned on demand by `get_tool_schema`.
+The raw configuration (commands, URLs, headers, environment variables)
+never appears in the tool catalog sent to the LLM. Only the compact
+catalog of server names, descriptions, and tool counts is exposed; full
+tool schemas are returned on demand by `get_tool_schema`.
 
 ## Configuration File Location
 
@@ -139,7 +138,11 @@ server, mapped to its configuration:
 > write (JSON serialisation).
 
 Server names must be unique. A duplicate name causes an error at load
-time.
+time. Every server should have a `description`: it is the only context
+the model gets about the server in the compact catalog. The `add`
+command requires one; config loading accepts an entry without it, and
+the catalog simply omits the description after the tool count for that
+server.
 
 ### Server Entry Fields
 
@@ -151,8 +154,7 @@ time.
 | `env` | No | stdio | Map of environment variables for the child process |
 | `url` | HTTP | http, streamable-http | Endpoint URL of the MCP server |
 | `headers` | No | http, streamable-http | Map of HTTP headers sent with each request |
-| `description` | No | All | Human-readable description shown in the tool catalog |
-| `compressionLevel` | No | All | Tool listing compression level: `max`, `high`, `medium`, or `low`. Defaults to `high` when omitted (see [Compression Levels](#compression-levels)) |
+| `description` | No | All | Short (1-2 sentences at most) description of the MCP server shown to the model in the tool catalog, so it can tell what the server is and why it could need it. The `add` command requires it; hand-edited configs may omit it |
 | `oauth` | No | http, streamable-http | OAuth client overrides (see [OAuth Configuration](#oauth-configuration)) |
 | `enabled` | No | All | Boolean. `false` skips the server entirely at startup (no spawn, no connection, no discovery). Defaults to `true` when omitted, so omitting it keeps `mcp.json` clean and is fully backward compatible |
 | `allowedTools` | No | All | Array of glob patterns matched against the server's bare tool names. When present, only matching tools are exposed; `[]` (empty array) means *no* tools are exposed. Patterns are compiled under picomatch (`*`, `?`, `{a,b}`, `[abc]`) with strict bracket handling |
@@ -160,8 +162,8 @@ time.
 
 [Variable Expansion](#variable-expansion) applies to `command`, `args`,
 `env`, `url`, `headers`, and the `oauth` string fields. The remaining
-fields (`description`, `compressionLevel`, `allowedTools`,
-`disabledTools`) are used literally.
+fields (`description`, `allowedTools`, `disabledTools`) are used
+literally.
 
 ### Server Types
 
@@ -202,6 +204,7 @@ still cannot reach the downstream server.
   "type": "stdio",
   "command": "npx",
   "args": ["-y", "@some/mcp-server"],
+  "description": "Administrative repository tools (restricted)",
   // Expose only these two...
   "allowedTools": ["list_issues", "get_pull_request"],
   // ...and additionally block anything ending in _delete.
@@ -219,71 +222,44 @@ Inspect what a server actually exposes — including the
 `[exposed]`/`[filtered]` decision per tool — with the
 [`tools <name>`](#tools-name) command.
 
-### Compression Levels
+### Compact Catalog
 
-The optional `compressionLevel` field controls how much of each tool
-appears in the compact catalog embedded in the `get_tool_schema` tool
-description. The level trades catalog compactness for routing detail:
-lower levels give the LLM more information up front (fewer
-`get_tool_schema` round-trips), while higher levels minimize the
-per-request token overhead. The full JSON parameter schema and the
-complete tool description are always returned by `get_tool_schema`
-regardless of the level — only the catalog *listing* changes, and full
-descriptions never appear in it.
+The `get_tool_schema` tool description embeds a compact catalog of every
+enabled server that advertises at least one tool. Each server is
+rendered as a single bullet:
 
-Four levels are supported, from most to least compact:
+- `- name (N tools) - description`, where the ` - description` suffix is
+  omitted when the server has no configured `description`,
+- followed by an indented status line when the server is degraded
+  (requires login or is unavailable).
 
-| Level | Tool listing format | Description shown? |
-| --- | --- | --- |
-| `max` | `Provides N tools. Call get_tool_schema with "server" to list them.` | No |
-| `high` (default) | `toolA, toolB, toolC` (comma-separated, single line) | No |
-| `medium` | `toolName(arg1, arg2)` (one per line) | No |
-| `low` | `toolName(arg1, arg2): first sentence...` (one per line) | First sentence |
+Servers without tools — for example, when a tool filter hides every
+tool — do not appear in the catalog at all.
 
-Argument names are extracted from each tool's `inputSchema.properties`
-keys in definition order. When a tool has no description, the `low`
-listing shows just the signature. The list mode of `get_tool_schema`
-(called with just a server name) always returns the full signatures for
-that server's tools, whatever the level — the tool names a `max`
-catalog omits and the descriptions no catalog shows are one call away.
+The catalog closes with a list-mode hint that names the first advertised
+server as the example, such as
+`Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(notion)`.
 
-For clients known to truncate long tool descriptions (Claude Code by
-default), the router watches the rendered catalog size and, when it
-would exceed the client's cap, re-renders the whole catalog at `max`
-for that `tools/list` request; other clients keep their configured
-levels. Configure the behavior with
-[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`](#mcp_compress_router_dynamic_limit_clients)
-and
-[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`](#mcp_compress_router_dynamic_limit_max_size).
+Tool names, argument signatures, and tool descriptions never appear in
+the catalog. They are one `get_tool_schema` call away:
 
-Omitting `compressionLevel` is equivalent to `high`. Set it per server
-in `mcp.json`:
+- calling `get_tool_schema` with just a server name lists that server's
+  tools as `toolName(arg1, arg2)` signatures (argument names come from
+  each tool's `inputSchema.properties` keys in definition order), plus a
+  hint to request the full schema;
+- calling it with tool names returns the complete JSON schema and the
+  full description of each tool.
 
-```jsonc
-"github": {
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-github"],
-  "compressionLevel": "medium"
-}
-```
+Every server renders the same way — there is no per-server catalog
+configuration. The [`tools <name>`](#tools-name) command always prints
+the full tool table regardless.
 
-Or set it at creation time with the
-[`add`](#add-name-commandorurl-rest) command:
-
-```bash
-mcp-compress-router add github \
-  --compression-level medium \
-  -- npx -y @modelcontextprotocol/server-github
-```
-
-An invalid value is rejected at config load time with an error naming
-the four valid levels. The level affects only the catalog listing: the
-[`tools <name>`](#tools-name) command always prints the full tool
-table, and the JSON returned by `get_tool_schema` is unchanged. For
-guidance on choosing a level, including the Claude Code
-2048-character description limit that favors `max`, see
-[Compression Levels](../../README.md#compression-levels) in the README.
+Server descriptions are included when configured, so a long
+`--description` can push the `get_tool_schema` description past a host's
+tool-description cap. Claude Code truncates any tool description at 2048
+characters and appends `… [truncated]`; the router does not truncate or
+re-render its own catalog, so keep server descriptions short when using
+Claude Code.
 
 ### Variable Expansion
 
@@ -304,6 +280,7 @@ environment instead:
   "type": "stdio",
   "command": "npx",
   "args": ["-y", "@some/mcp-server"],
+  "description": "Example server with environment-driven secrets",
   "env": {
     "API_KEY": "${MY_API_KEY}",
     "NODE_ENV": "${NODE_ENV:-production}"
@@ -451,7 +428,7 @@ file, stored in the same directory as `mcp.json` (alongside
 - Written after every successful tool discovery (startup, after
   `login`, after self-recovery).
 - Read when a server fails to connect at startup. If a cache exists,
-  the server enters degraded mode (cached tools + status header). If
+  the server enters degraded mode (cached tools + status line). If
   no cache exists, the router fails fast.
 - No TTL or expiry in v1. The cache is purely informational; an
   `invoke_tool` on a degraded server attempts self-recovery
@@ -495,8 +472,6 @@ values.
 | `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` | `120000` (120 s) | Time in milliseconds to wait for the OAuth callback during `login` |
 | `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `10000` (10 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s). Stays well below the 30 s host startup budget: connects run in parallel, so one timed-out server costs at most this budget |
 | `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `5000` (5 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
-| `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS` | `claude-code` | Comma-separated, case-insensitive MCP client names whose tool descriptions are length-limited. When the rendered `get_tool_schema` description exceeds `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`, the router re-renders the whole catalog at `max` for that request. Set to an empty value to disable auto-degradation |
-| `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE` | `2048` | Maximum character length of the rendered `get_tool_schema` description before a length-limited client gets the catalog auto-degraded to `max`. Must be a positive integer; unset or invalid values fall back to the default |
 
 ### `.env` Auto-Loading
 
@@ -629,55 +604,6 @@ MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS=20000 \
   mcp-compress-router
 ```
 
-### `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`
-
-Comma-separated list of MCP client names (matched case-insensitively)
-whose tool descriptions are length-limited. When a `tools/list` request
-from one of these clients would carry a `get_tool_schema` description
-longer than
-[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`](#mcp_compress_router_dynamic_limit_max_size),
-the router re-renders the whole catalog at the `max` compression level
-for that request. The client name comes from the MCP `initialize`
-handshake (`clientInfo.name`); the configured levels of every other
-client are unaffected. List mode (`get_tool_schema` with just a server
-name) still returns every tool, so no information is lost.
-
-The re-render only lowers the compression level: server descriptions
-and status lines are always included. A catalog that still exceeds the
-cap after the re-render — for example, because of a long server
-description set with `--description` — is truncated by the client
-anyway, and the router logs a warning naming the client and the
-description length.
-
-The variable defaults to `claude-code`, the client that truncates tool
-descriptions at 2048 characters and appends `… [truncated]`. Set it to
-an empty value to disable auto-degradation entirely.
-
-```bash
-# Also protect another client
-MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS=claude-code,my-host \
-  mcp-compress-router
-
-# Disable auto-degradation
-MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS= mcp-compress-router
-```
-
-### `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`
-
-Maximum character length of the rendered `get_tool_schema` description
-before the router auto-degrades the catalog for a length-limited client
-(see
-[`MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`](#mcp_compress_router_dynamic_limit_clients)).
-The check is strict: a description exactly at the limit is not
-degraded, matching Claude Code, which truncates only when the length
-exceeds 2048. Must be a positive integer; unset or invalid values fall
-back to the default of 2048 characters.
-
-```bash
-MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE=4096 \
-  mcp-compress-router
-```
-
 ## CLI Flags
 
 The router exposes a management CLI. Every subcommand accepts the
@@ -687,39 +613,45 @@ global `-c, --config <path>` option to override the config file path.
 
 Registers a downstream MCP server.
 
+For HTTP servers, `add` probes the URL for OAuth metadata and starts
+the login flow automatically when the server advertises OAuth. The
+probe is best-effort and never blocks the command; see
+[Authenticate with OAuth](../guides/oauth-login.md).
+
 | Flag | Description |
 | --- | --- |
 | `--transport <type>` | Transport type: `stdio` (default) or `http`. Ignored when `commandOrUrl` starts with `http://` or `https://`, which forces HTTP |
 | `--header <header>` | HTTP header as `Key: Value`. Repeatable |
 | `-e, --env <env>` | Environment variable as `KEY=value`. Repeatable (stdio only) |
-| `--description <text>` | Optional server description exposed to the LLM via `get_tool_schema`, helping it pick the right server. Optional |
+| `--description <text>` | **Required.** Short (1-2 sentences at most) server description exposed to the LLM via `get_tool_schema`, helping it pick the right server. The command fails without it |
 | `--enabled` | Mark the server as enabled. Writes no `enabled` field (the default). Mutually exclusive with `--disabled` |
 | `--disabled` | Mark the server as disabled. Writes `"enabled": false`. Mutually exclusive with `--enabled` |
 | `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
 | `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
-| `--compression-level <level>` | Tool listing compression level: `max`, `high`, `medium`, or `low`. Defaults to `high` when omitted. Validated at write time (see [Compression Levels](#compression-levels)) |
 | `-p, --port <number>` | Fixed local OAuth callback port (HTTP only). Written to `oauth.callbackPort` so subsequent `login` runs reuse it. Integer 1-65535 |
 
 ```bash
-mcp-compress-router add my-tool -- npx -y @some/mcp-server
+mcp-compress-router add my-tool \
+  --description "Custom tools for my workflow" -- npx -y @some/mcp-server
 mcp-compress-router add my-http \
+  --description "Internal API tools" \
   --header "Authorization: Bearer mytoken" \
   http://localhost:3100/mcp
-mcp-compress-router add my-tool --description "Custom tools for my workflow" \
-  -- npx -y @some/mcp-server
 # Add a server that starts disabled (turn it on later with enable)
-mcp-compress-router add archive --disabled -- npx -y server-archive
+mcp-compress-router add archive \
+  --description "Archived tools (currently disabled)" \
+  --disabled -- npx -y server-archive
 
 # Add a server restricted to an allowlist at creation time
-mcp-compress-router add github --allowed-tools list_issues \
+mcp-compress-router add github \
+  --description "GitHub API tools for issues and pull requests" \
+  --allowed-tools list_issues \
   --allowed-tools get_pull_request -- npx -y server-github
 
 # Add a server with a denylist glob
-mcp-compress-router add fs --disabled-tools "delete_*" -- npx -y fs-server
-
-# Add a server with a medium tool listing (see Compression Levels)
-mcp-compress-router add github --compression-level medium \
-  -- npx -y @modelcontextprotocol/server-github
+mcp-compress-router add fs \
+  --description "Filesystem tools with destructive operations blocked" \
+  --disabled-tools "delete_*" -- npx -y fs-server
 ```
 
 ### `disable <name>`
@@ -785,24 +717,23 @@ with a clear error and prints no partial tool list.
 
 ### `get <name>`
 
-Prints the configuration for a single server, including its resolved
-`compressionLevel` (the explicit value, or `high (default)` when the
-field is omitted).
+Prints the configuration for a single server: its type, description,
+command or URL, args, environment, and headers.
 
 ### `list`
 
 Prints a table of every configured server with its transport type,
-command or URL, enable state, configured tool-filter summary, resolved
-compression level, and auth status. All columns are read entirely from
-local files (`mcp.json` and `credentials.json`) — no network access.
+command or URL, enable state, configured tool-filter summary, and auth
+status. All columns are read entirely from local files (`mcp.json` and
+`credentials.json`) — no network access.
 
 ```text
 Configuration was loaded from /home/user/.config/mcp-compress-router/mcp.json
 
-Name      Type   CommandOrUrl                                 Enabled  Tools                  Compression  Auth
-github    http   https://api.github.com/mcp                   yes      all                    high         requires login
-filtered  stdio  npx -y @modelcontextprotocol/server-github   yes      2 allowed (1 blocked)  medium       none
-archive   stdio  npx -y @modelcontextprotocol/server-archive  no       all                    high         none
+Name      Type   CommandOrUrl                                 Enabled  Tools                  Auth
+github    http   https://api.github.com/mcp                   yes      all                    requires login
+filtered  stdio  npx -y @modelcontextprotocol/server-github   yes      2 allowed (1 blocked)  none
+archive   stdio  npx -y @modelcontextprotocol/server-archive  no       all                    none
 ```
 
 The `Enabled` column shows `yes` unless `enabled` is explicitly `false`

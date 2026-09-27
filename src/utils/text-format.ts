@@ -1,31 +1,34 @@
-import type { CatalogServer, CompressionLevel, ToolDescriptor } from './types.js';
+import type { CatalogServer, ToolDescriptor } from './types.js';
 import { extractArgumentNames } from './argument-names.js';
-import { truncateToFirstSentence } from './description-truncator.js';
 import { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
 
 /**
  * Renders the compact catalog as Markdown text suitable for inclusion
  * in the `get_tool_schema` tool description.
  *
- * Each server's tools are rendered according to that server's
- * `compressionLevel`:
- *
- * - `max` — tool count plus a `get_tool_schema` pointer; no tool names.
- * - `high` (default) — tool names only, comma-separated on a single line.
- * - `medium` — `toolName(arg1, arg2)`, one tool per line.
- * - `low` — `toolName(arg1, arg2): first sentence...`, one tool per
- *   line (the snippet is omitted when the description is absent).
- *
- * No level renders full tool descriptions; they are always available
- * from a `get_tool_schema` result. Argument names are extracted from
- * each tool's `inputSchema.properties` keys in definition order. When a
- * server has no tools, no listing is rendered at all.
+ * The catalog is deliberately minimal: every server that advertises at
+ * least one tool appears as a single `- name (N tools) - description`
+ * bullet, and a degraded server adds an indented status line below its
+ * bullet. Servers without tools are not advertised at all. The catalog
+ * closes with a list-mode hint that names the first advertised server
+ * as the example. Tool names, argument signatures, and tool
+ * descriptions are never rendered here; they are one `get_tool_schema`
+ * call away (list mode returns the signatures, the schema result
+ * returns the complete descriptions).
  *
  * @param servers - The catalog server entries.
- * @returns Compact catalog text.
+ * @returns Compact catalog text, or an empty string when no server
+ *   advertises tools.
  */
 export function renderCompactCatalog(servers: CatalogServer[]): string {
-  return servers.map((server) => renderServerBlock(server)).join('\n\n');
+  const advertised = servers.filter((server) => server.tools.length > 0);
+  const firstServer = advertised[0];
+  if (!firstServer) {
+    return '';
+  }
+  const blocks = advertised.map((server) => renderServerBlock(server));
+  blocks.push('', renderCatalogFooter(firstServer.name));
+  return blocks.join('\n');
 }
 
 /**
@@ -33,12 +36,11 @@ export function renderCompactCatalog(servers: CatalogServer[]): string {
  * tool signatures plus a hint to request the full parameter schema.
  *
  * Unlike {@link renderCompactCatalog}, this always renders full
- * signatures (`toolName(arg1, arg2)`) regardless of the server's
- * compression level: the list is a dynamic tool result, not the static
- * catalog. The status header is included when the server is degraded so
- * the caller knows a cached listing may need authentication or
- * reconnection. A zero-tool server gets a dedicated message instead of
- * the pointless "call again" hint.
+ * signatures (`toolName(arg1, arg2)`): the list is a dynamic tool
+ * result, not the static catalog. The status header is included when
+ * the server is degraded so the caller knows a cached listing may need
+ * authentication or reconnection. A zero-tool server gets a dedicated
+ * message instead of the pointless "call again" hint.
  *
  * @param server - The catalog server to render.
  * @returns The list response text.
@@ -65,52 +67,49 @@ export function renderToolListResponse(server: CatalogServer): string {
 }
 
 /**
- * Renders a single server section: header, optional description, and
- * the tool listing formatted for that server's compression level.
+ * Renders one server's catalog entry: the bullet plus an indented
+ * status line when the server is degraded. Callers pass only servers
+ * that advertise at least one tool.
  *
  * @param server - The catalog server to render.
- * @returns The server block text.
+ * @returns The server entry text.
  */
 function renderServerBlock(server: CatalogServer): string {
-  const lines: string[] = [`## ${server.name}`];
-  if (server.description) {
-    lines.push(server.description);
-  }
+  const lines = [renderServerBullet(server)];
   const statusHeader = renderStatusHeader(server);
   if (statusHeader) {
-    lines.push(statusHeader);
-  }
-  if (server.tools.length > 0) {
-    lines.push('', ...renderToolListing(server));
+    lines.push(`  ${statusHeader}`);
   }
   return lines.join('\n');
 }
 
 /**
- * Renders the tool listing lines for one server according to its
- * compression level.
+ * Renders the single-line bullet for one server:
+ * `- name (N tools) - description`. The description is omitted when
+ * the server has none.
  *
- * @param server - The catalog server to render the tools of.
- * @returns The listing lines (callers guard against zero tools).
+ * @param server - The catalog server to render.
+ * @returns The bullet line.
  */
-function renderToolListing(server: CatalogServer): string[] {
-  if (server.compressionLevel === 'max') {
-    const count = server.tools.length;
-    const noun = count === 1 ? 'tool' : 'tools';
-    const pronoun = count === 1 ? 'it' : 'them';
-    return [
-      `Provides ${count} ${noun}. Call get_tool_schema with "${server.name}" to list ${pronoun}.`,
-    ];
-  }
-  const lines = ['Available tools:'];
-  if (server.compressionLevel === 'high') {
-    lines.push(server.tools.map((tool) => tool.name).join(', '));
-  } else {
-    for (const tool of server.tools) {
-      lines.push(renderToolLine(tool, server.compressionLevel));
-    }
-  }
-  return lines;
+function renderServerBullet(server: CatalogServer): string {
+  const count = server.tools.length;
+  const noun = count === 1 ? 'tool' : 'tools';
+  const bullet = `- ${server.name} (${count} ${noun})`;
+  return server.description ? `${bullet} - ${server.description}` : bullet;
+}
+
+/**
+ * Renders the trailing list-mode hint, using the first advertised
+ * server as the example call.
+ *
+ * @param firstServer - Name of the first advertised server.
+ * @returns The footer line.
+ */
+function renderCatalogFooter(firstServer: string): string {
+  return (
+    'Call get_tool_schema with the server name to list all tools, ' +
+    `i.e. get_tool_schema(${firstServer})`
+  );
 }
 
 /**
@@ -146,7 +145,7 @@ function renderStatusHeader(server: CatalogServer): string {
  *
  * @internal Exported for tests only; not part of the public module API.
  *   Not re-exported from the barrel — production code calls it through
- *   {@link renderToolLine} and {@link renderToolListResponse}.
+ *   {@link renderToolListResponse}.
  *
  * @param tool - The tool descriptor.
  * @returns The tool signature.
@@ -154,23 +153,4 @@ function renderStatusHeader(server: CatalogServer): string {
 export function renderToolSignature(tool: ToolDescriptor): string {
   const args = extractArgumentNames(tool.inputSchema);
   return `${tool.name}(${args.join(', ')})`;
-}
-
-/**
- * Renders a single tool line at the `medium` or `low` level.
- *
- * `medium` renders the bare signature; `low` appends the first sentence
- * of the tool description when one is present.
- *
- * @param tool - The tool descriptor.
- * @param level - The compression level (never `max` or `high`).
- * @returns The formatted tool line.
- */
-function renderToolLine(tool: ToolDescriptor, level: CompressionLevel): string {
-  const signature = renderToolSignature(tool);
-  if (level === 'low') {
-    const snippet = truncateToFirstSentence(tool.description);
-    return snippet ? `${signature}: ${snippet}` : signature;
-  }
-  return signature;
 }

@@ -14,85 +14,37 @@
          alt="MCP Compress Router" width="600"/>
 </p>
 
-## Table of Contents
+## Description
 
-- [The Problem](#the-problem)
-- [The Solution](#the-solution)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-    - [1. Connect your coding agent](#1-connect-your-coding-agent)
-    - [2. Add downstream MCP servers](#2-add-downstream-mcp-servers)
-    - [3. Verify and use](#3-verify-and-use)
-- [Configuration](#configuration)
-    - [Config File Location](#config-file-location)
-    - [Adding Downstream Servers](#adding-downstream-servers)
-    - [Per-Server Enable/Disable](#per-server-enabledisable)
-    - [Per-Server Tool Selection](#per-server-tool-selection)
-    - [Compression Levels](#compression-levels)
-    - [Inspecting Tools](#inspecting-tools)
-    - [OAuth](#oauth)
-        - [Redirect URL](#redirect-url)
-        - [GitHub MCP with OAuth (special case)](#github-mcp-with-oauth-special-case)
-        - [Figma MCP with OAuth (special case)](#figma-mcp-with-oauth-special-case)
-    - [Custom Headers](#custom-headers)
-    - [Secrets and Variable Expansion](#secrets-and-variable-expansion)
-- [How It Works](#how-it-works)
-- [Canary Builds](#canary-builds)
-- [Acknowledgements](#acknowledgements)
+MCP Compress Router is a single MCP server for developers who connect
+several MCP servers to a coding agent. Connected directly, each request
+carries all of their tool definitions — about 26K tokens for three
+popular servers, roughly $0.93 over a 50-turn session. The router
+replaces those listings with two tools, `get_tool_schema` and
+`invoke_tool`, and returns a tool's full schema only when the agent asks
+for it. The same three servers compress to a catalog of about 600
+tokens, cutting the overhead by roughly 97.7%. See
+[About token overhead](docs/explanation/token-overhead.md) for the cost
+model.
 
-## The Problem
+The router helps most in two cases:
 
-When you have multiple MCPs every request to the LLM will include ALL their
-tools and descriptions, which can quickly eat up your token limit and increase
-costs.
+- **You use more than one coding agent.** Connect each agent to the
+  router once and manage every downstream MCP server in one place.
+- **Your agent loads full tool definitions on every request.** The
+  router saves the most where the agent sends every definition on every
+  turn.
 
-Check out this [example](docs/assets/tools.json) to understand how
-quickly and how large it can get. This example represents just 3 popular MCP
-servers: Notion MCP, Github MCP and Pylance MCP.
-
-The overhead that is created is about **26K tokens**, but let's check how much
-it actually costs you in USD. I will use Opus API pricing for calculation and
-I'll assume that on average you have a 50-turn coding session (pretty
-reasonable these days).
-
-- Input: `26K tokens * $5 / 1M = $0.13`
-- Cache write (caching is not free): `26K tokens * $6.25 / 1M = $0.1625`
-- Cache read (49 turns): `26K tokens * 49 * $0.50 / 1M = $0.637`
-
-So the total overhead on an average coding session is about **$0.9275**.
-And that's just for 3 MCPs, imagine if you had more!
-
-## The Solution
-
-Instead of sending all the tools and descriptions every time, you can use a
-single router MCP that compresses all the connected MCPs into one with just
-two tools: `get_tool_schema`, `invoke_tool`.
-
-`get_tool_schema` in the description only has a list of MCP servers, optional
-descriptions (you can write them yourself), and a compact listing of each
-server's tools — tool names, argument signatures, or just a tool count,
-depending on the `compressionLevel`. [Here is an example](docs/assets/tools-compressed.json)
-of how the compressed version looks like with `compressionLevel: "max"`, and
-it takes about 600 tokens. Calling `get_tool_schema` with just a server name
-returns that server's tool signatures and arguments, and calling it with a
-tool name returns the full JSON parameter schema and description.
-
-If we repeat our exercise with the compressed version, the total overhead on
-an average coding session will be about **$0.0215** so we saved about
-**97.7%** on costs!
-
-This is just a basic example with just 3 MCP servers, the more MCP servers you
-have, the more you save.
+The actual savings depend on the coding agent: some agents already keep
+tool definitions out of their requests with their own algorithms (see
+[Measured savings](#measured-savings) below).
 
 ## Prerequisites
 
 - **Node.js 24 or later** — the router runs on Node.js and is launched
   via `npx`, so no separate install step is needed.
-- **A coding agent that supports stdio MCP servers** — this covers
-  virtually every modern coding agent (opencode, Claude Code, Codex,
-  GitHub Copilot, Cursor, etc.). The router exposes itself as a single
-  stdio MCP server, so any agent that can spawn a local MCP process
-  works.
+- **A coding agent that supports stdio MCP servers** — opencode, Claude
+  Code, Codex, GitHub Copilot, Cursor, and most other modern agents.
 
 ## Quick Start
 
@@ -100,82 +52,49 @@ The router is published on npm as
 [`mcp-compress-router`](https://www.npmjs.com/package/mcp-compress-router).
 You do not need to install it — just run it with `npx`.
 
-Setup is two steps: first connect your coding agent to the router, then
-add the MCP servers you want to compress behind it.
+Setup is two steps: connect your coding agent to the router, then add
+the MCP servers you want to compress.
 
 ### 1. Connect your coding agent
 
-Point your agent at the router the same way you would point it at any
-other MCP server. The router reads its server list from a
-[user-wide config file](#config-file-location) by default, so register
-it at the **user** scope (or your agent's equivalent) — every project
-then gets the same compressed catalog with no per-project setup.
+Register the router the same way you register any other stdio MCP
+server, at the **user** scope (or your agent's equivalent). It reads
+its server list from a
+[user-wide config file](docs/reference/configuration.md#configuration-file-location),
+so every project shares one compressed catalog:
 
-- **Claude Code** — see the
-  [Claude Code MCP docs](https://code.claude.com/docs/en/mcp).
-  Add it at `user` scope so it applies everywhere (Claude Code also
-  supports `local` for a single private project and `project` for a
-  shareable `.mcp.json`):
+```sh
+opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
+```
 
-  ```sh
-  claude mcp add mcp-compress-router --scope user -- npx -y mcp-compress-router@latest
-  ```
-
-- **Opencode** — see the
-  [opencode MCP servers docs](https://opencode.ai/docs/mcp-servers/).
-
-  ```sh
-  opencode mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
-  ```
-
-- **Codex** — see the
-  [Codex MCP docs](https://developers.openai.com/codex/mcp).
-
-  ```sh
-  codex mcp add mcp-compress-router -- npx -y mcp-compress-router@latest
-  ```
-
-- **GitHub Copilot (VS Code)** — see the
-  [VS Code MCP docs](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
-  Open the Command Palette (`Cmd+Shift+P`) →
-  `MCP: Open User Configuration` and add the server block under
-  `mcp.servers` (project-level `.vscode/mcp.json` is also supported
-  and merged with the user-level settings, project taking precedence):
-
-  ```json
-  {
-    "servers": {
-      "mcp-compress-router": {
-        "command": "npx",
-        "args": ["-y", "mcp-compress-router@latest"]
-      }
-    }
-  }
-  ```
+See [Connect your coding agent](docs/guides/connect-coding-agent.md)
+for Claude Code, Codex, GitHub Copilot (VS Code), and other agents.
 
 ### 2. Add downstream MCP servers
 
-Use the `add` command to register each MCP server you want to compress.
-The router writes them to its [config file](#config-file-location) and
-they appear in the catalog the next time the router starts.
+Use the `add` command to register each MCP server you want to compress:
 
 ```bash
-npx mcp-compress-router@latest add playwright -- npx -y @playwright/mcp
+npx mcp-compress-router@latest add playwright \
+  --description "Browser automation for testing and inspecting web pages." \
+  -- npx -y @playwright/mcp
 ```
 
-Add a description so the LLM can pick the right server, and use
-environment variables to keep secrets out of the config:
+The `add` command requires a short description so the LLM can tell what
+the server is and when to use it; a hand-edited config may omit it, and
+the catalog then skips that description. Use environment variables to
+keep secrets out of the config:
 
 ```bash
 npx mcp-compress-router@latest add github \
-  --description "GitHub API tools" \
+  --description "GitHub API tools for browsing repositories, issues, and pull requests." \
   -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
   -- npx -y @modelcontextprotocol/server-github
 ```
 
-Repeat for every MCP server you want to compress. See
-[Adding Downstream Servers](#adding-downstream-servers) for HTTP
-servers, custom headers, OAuth, and other options.
+HTTP servers, custom headers, OAuth, per-server tool filters, and
+enable/disable are covered in the
+[configuration reference](docs/reference/configuration.md).
 
 ### 3. Verify and use
 
@@ -187,623 +106,10 @@ npx mcp-compress-router@latest list
 
 Then start a new session in your coding agent. The agent picks up the
 router's two tools — `get_tool_schema` and `invoke_tool` — and uses
-them to discover and call every server you added, without the agent
-ever seeing the raw tool listings of each downstream server.
-`get_tool_schema` accepts a server name alone to list that server's
-tools, or a server and tool names to return their parameter schemas.
-
-Under the hood your agent spawns the router as a child process with:
-
-```bash
-npx mcp-compress-router@latest
-```
-
-When started without a subcommand, the router runs the MCP server over
-stdio and exposes exactly two tools (`get_tool_schema`,
-`invoke_tool`) to the agent. You normally do not run this yourself —
-your agent spawns the router automatically.
-
-## Configuration
-
-The router reads its configuration from a single JSON(C) file that lists
-every downstream MCP server to compress. You can edit this file by hand
-or use the `add` / `remove` / `get` / `list` CLI commands.
-
-### Config File Location
-
-By default, the config file lives in a platform-specific directory
-(`mcp.jsonc` is preferred over `mcp.json` when both exist):
-
-- **Windows:** `%APPDATA%\mcp-compress-router\`
-- **macOS:** `~/Library/Application Support/mcp-compress-router/`
-- **Linux:** `~/.local/share/mcp-compress-router/`
-
-You can override this with:
-
-- The `-c, --config <path>` flag on any command, or
-- The `MCP_COMPRESS_ROUTER_HOME` environment variable (points to a
-  directory containing the config file).
-
-If the file does not exist when a management command runs, it is created
-automatically with an empty `{ "mcpServers": {} }` body.
-
-A `.env` file in the **same directory** is loaded automatically at
-startup, so you can keep secrets out of the config (see
-[Secrets and Variable Expansion](#secrets-and-variable-expansion)).
-
-> **Note on `-c` and credential storage:** when you override the config
-> path with `-c /some/dir/mcp.json`, both `credentials.json` (OAuth
-> tokens) and `tools-cache.json` (cached tool schemas) will be stored
-> in that directory — i.e. next to the config file you specified. The
-> `.env` file, however, is loaded from the
-> [configuration directory](#config-file-location) resolved by
-> `MCP_COMPRESS_ROUTER_HOME` or the platform default, *not* from beside
-> the explicit `-c` path. To co-locate `.env` with a custom config, set
-> `MCP_COMPRESS_ROUTER_HOME` to the same directory.
-
-### Adding Downstream Servers
-
-Use the `add` command to register a downstream MCP server.
-
-A good description helps the LLM route requests to the correct server.
-When several servers are compressed behind the router, the model sees
-each server's name, its description, and a list of tool names in the
-`get_tool_schema` catalog. A clear description (e.g. *"GitHub API tools
-for issues, PRs, and repos"*) steers the model toward the right server
-far better than a bare name.
-
-**stdio server** (a local process):
-
-```bash
-npx mcp-compress-router@latest add github --description "GitHub API tools" \
-  -- npx -y @modelcontextprotocol/server-github
-
-# With environment variables
-npx mcp-compress-router@latest add github -e GITHUB_PERSONAL_TOKEN=ghp_xxx \
-  --description "GitHub API tools" \
-  -- npx -y @modelcontextprotocol/server-github
-```
-
-**HTTP server** (a remote endpoint; transport auto-detected from the
-URL):
-
-```bash
-npx mcp-compress-router@latest add my-http https://localhost:3100/mcp
-
-# With a custom header
-npx mcp-compress-router@latest add my-http \
-  --header "Authorization: Bearer mytoken" \
-  https://localhost:3100/mcp
-```
-
-This produces a config file that looks like:
-
-```jsonc
-{
-  "mcpServers": {
-    "github": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_PERSONAL_TOKEN": "ghp_xxx" },
-      "description": "GitHub API tools"
-    },
-    "my-http": {
-      "type": "http",
-      "url": "https://localhost:3100/mcp",
-      "headers": { "Authorization": "Bearer mytoken" }
-    }
-  }
-}
-```
-
-Both `.json` and `.jsonc` (JSON with comments and trailing commas) are
-supported. CLI commands write plain `.json`; hand-edited files may use
-`.jsonc`.
-
-Other management commands:
-
-```bash
-npx mcp-compress-router@latest list            # list all servers + auth status
-npx mcp-compress-router@latest get my-http     # show one server's config
-npx mcp-compress-router@latest remove my-http  # remove a server
-```
-
-### Per-Server Enable/Disable
-
-Every server entry accepts an optional `enabled` boolean. When set to
-`false`, the router skips that server entirely at startup — no process
-spawn, no network connection, no discovery — and it is absent from the
-`get_tool_schema` catalog. All configuration is preserved so the server
-can be turned back on instantly. Omitting `enabled` (the default) means
-enabled, keeping `mcp.json` clean and fully backward compatible.
-
-Toggle it from the CLI without touching the rest of the config:
-
-```bash
-npx mcp-compress-router@latest disable github   # writes "enabled": false
-npx mcp-compress-router@latest enable github    # removes the field
-```
-
-You can also set it at creation time:
-
-```bash
-npx mcp-compress-router@latest add archive --disabled -- npx -y server-archive
-```
-
-### Per-Server Tool Selection
-
-Two optional fields control which of a server's advertised tools are
-exposed to the LLM. Both are arrays of glob patterns
-([picomatch](https://github.com/micromatch/picomatch) syntax: `*`, `?`,
-`{a,b}`, `[abc]`) matched against bare tool names:
-
-- **`allowedTools`** — when present, only matching tools are exposed.
-  An empty array (`[]`) exposes *no* tools (handy for staging a server
-  while you build the list).
-- **`disabledTools`** — removes matching tools from whatever would
-  otherwise be exposed. The denylist wins: a tool matching both lists
-  is blocked.
-
-Filtered tools are hidden from the catalog *and* hard-rejected by
-`invoke_tool`, so even an LLM that guesses a filtered name cannot
-reach the downstream server.
-
-```jsonc
-"dangerous": {
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@some/mcp-server"],
-  "allowedTools": ["list_issues", "get_pull_request"],
-  "disabledTools": ["*_delete"]
-}
-```
-
-A pattern that matches no real tool is not an error — the router logs a
-warning (visible with `-v`) and continues. A malformed pattern is a
-hard error at startup. Set filters at creation time with repeatable
-flags:
-
-```bash
-npx mcp-compress-router@latest add github \
-  --allowed-tools list_issues \
-  --allowed-tools get_pull_request \
-  -- npx -y server-github
-```
-
-### Compression Levels
-
-Each server's tools are listed in the `get_tool_schema` description at a
-configurable `compressionLevel`. The level trades catalog compactness
-for routing detail: lower levels give the LLM more information up front
-(fewer `get_tool_schema` round-trips), while higher levels minimize the
-per-request token overhead. The full JSON parameter schema and the
-complete tool description are always available via `get_tool_schema`
-regardless of the level — only the catalog *listing* changes, and full
-descriptions never appear in it.
-
-Four levels are supported, from most to least compact:
-
-| Level | Tool listing format | Description shown? |
-| --- | --- | --- |
-| `max` | `Provides N tools. Call get_tool_schema with "server" to list them.` | No |
-| `high` (default) | `toolA, toolB, toolC` (comma-separated, single line) | No |
-| `medium` | `toolName(arg1, arg2)` (one per line) | No |
-| `low` | `toolName(arg1, arg2): first sentence...` (one per line) | First sentence |
-
-Argument names are extracted from each tool's `inputSchema.properties`
-keys in definition order. When a tool has no description, the `low`
-listing shows just the signature. Regardless of the level, calling
-`get_tool_schema` with just a server name returns the full signatures
-for that server's tools, and calling it with tool names returns their
-complete descriptions and JSON schemas — so the tool names a `max`
-catalog omits and the descriptions no catalog shows are always one call
-away.
-
-Omitting `compressionLevel` (the default) is equivalent to `high`. Set
-it per server in `mcp.json`:
-
-```jsonc
-"github": {
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-github"],
-  "compressionLevel": "medium"
-}
-```
-
-Or set it at creation time with the `--compression-level` flag:
-
-```bash
-npx mcp-compress-router@latest add github \
-  --compression-level medium \
-  -- npx -y @modelcontextprotocol/server-github
-```
-
-A good rule of thumb:
-
-- Use `max` for the smallest possible catalog, especially with many
-  servers: the model reads the tool count and discovers the tools with
-  a `get_tool_schema` list call when it needs them.
-- Use `high` (the default) for most servers — tool names are usually
-  enough for the LLM to pick the right tool.
-- Use `medium` when tool names alone are ambiguous and argument names
-  help disambiguate.
-- Use `low` sparingly — only when a one-line description must be
-  visible without a `get_tool_schema` call, since it costs the most
-  tokens. The complete description is still only available from a
-  `get_tool_schema` result.
-
-> **Note for Claude Code:** Claude Code truncates any single tool
-> description at 2048 characters and appends `… [truncated]`. The
-> router renders the entire compressed catalog into the
-> `get_tool_schema` description that the agent receives on every turn,
-> so with several downstream servers or many tools per server the
-> `medium` or `low` listings can exceed that limit and get truncated —
-> breaking routing. The router detects Claude Code from the MCP
-> `initialize` handshake and, when the description would exceed the
-> limit, automatically re-renders the whole catalog at the `max` level
-> (tool count plus a `get_tool_schema` pointer), so the compressed
-> listing fits the limit without configuration; list mode still returns
-> every tool. Server descriptions are always included, so a long
-> `--description` can keep the catalog over the limit even at `max` —
-> the router logs a warning when that happens.
-> Other hosts are unaffected. If another host truncates descriptions
-> too, add its client name to
-> `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_CLIENTS`, or adjust the cap with
-> `MCP_COMPRESS_ROUTER_DYNAMIC_LIMIT_MAX_SIZE`. You can still pin
-> `compressionLevel: "max"` on your servers (or pass
-> `--compression-level max` to `add`) to keep the catalog small on
-> every host.
-
-### Inspecting Tools
-
-To see exactly which tools a server advertises — and which are
-`[exposed]` or `[filtered]` under your current selection — connect to
-it live without starting the full router:
-
-```bash
-npx mcp-compress-router@latest tools github
-```
-
-This works regardless of the server's `enabled` state (inspecting a
-disabled server is the primary way to build its allowlist). For HTTP
-servers, stored OAuth credentials and `oauth` overrides are reused. If
-the server cannot be reached or is missing required auth, the command
-exits non-zero with a clear error and prints no partial list.
-
-### OAuth
-
-HTTP servers that require OAuth are supported. When you `add` an HTTP
-server, the router probes it for OAuth metadata and starts the login
-flow automatically if OAuth is advertised. You can also trigger it
-manually:
-
-```bash
-npx mcp-compress-router@latest login my-http
-```
-
-This opens your browser to complete the authorization-code flow. Tokens
-are stored in a separate `credentials.json` in the same directory as
-`mcp.json` (with `0600` permissions on Unix), so you can safely
-share or version-control `mcp.json` without exposing tokens. Cached
-tool schemas are stored in `tools-cache.json` in the same directory.
-Add both `credentials.json` and `tools-cache.json` to your
-`.gitignore`.
-
-By default the router uses
-[Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591).
-If your server requires a pre-registered client, add an `oauth` block to
-the server entry (in `mcp.json`):
-
-```jsonc
-"my-http": {
-  "type": "http",
-  "url": "https://example.com/mcp",
-  "oauth": {
-    "clientId": "${MY_CLIENT_ID}",
-    "clientSecret": "${MY_CLIENT_SECRET}",
-    "scope": "read write"
-  }
-}
-```
-
-Only `clientId` is required; `clientSecret` and `scope` are optional.
-
-#### Redirect URL
-
-During `login` the router starts a temporary local HTTP server and uses
-a loopback redirect URI (per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252)):
-
-```text
-http://localhost:<port>/mcp-compress-router/oauth-callback
-```
-
-`<port>` is chosen by the OS at login time, so there is no fixed port to
-register. When a provider requires a pre-registered redirect URI,
-register the loopback form **without a port**:
-
-```text
-http://localhost/mcp-compress-router/oauth-callback
-```
-
-Most providers (GitHub included) match the scheme, host, and path and
-ignore the port on `localhost`. If your provider demands a redirect URI
-with an **exact port**, pin it with `--port`:
-
-```bash
-npx mcp-compress-router@latest login my-http --port 8765
-```
-
-This binds the callback server to `8765`, so the redirect URI becomes
-`http://localhost:8765/mcp-compress-router/oauth-callback` — register
-that exact URL with the provider. To reuse the same port on every
-`login`, persist it in the server's `oauth` block instead of passing the
-flag each time:
-
-```jsonc
-"my-http": {
-  "type": "http",
-  "url": "https://example.com/mcp",
-  "oauth": { "clientId": "${ID}", "callbackPort": 8765 }
-}
-```
-
-`--port` overrides `oauth.callbackPort` for a single run. Pass `--port 0`
-to force an OS-assigned port even when `oauth.callbackPort` is set.
-
-#### GitHub MCP with OAuth (special case)
-
-The official GitHub MCP server at
-`https://api.githubcopilot.com/mcp` advertises OAuth but does **not**
-support Dynamic Client Registration, so you must pre-register a GitHub
-OAuth App and pass its credentials via the `oauth` block. GitHub also
-requires that the OAuth App be installed to the repositories and
-organizations you want the MCP to access.
-
-1. **Create a GitHub OAuth App.**
-   Open <https://github.com/settings/developers> → *New OAuth App* (or
-   *Register an application*). Give it any name and homepage URL.
-2. **Configure the callback URL.**
-   Set the *Authorization callback URL* to:
-   `http://localhost/mcp-compress-router/oauth-callback`
-3. **Add the GitHub MCP server by URL.**
-
-   ```bash
-   npx mcp-compress-router@latest add github https://api.githubcopilot.com/mcp
-   ```
-
-4. **Set `oauth` credentials in `mcp.json`.**
-   Copy the Client ID and generate a Client Secret, then put them in the
-   server entry (use variable expansion to keep secrets out of the
-   file):
-
-   ```jsonc
-   "github": {
-     "type": "http",
-     "url": "https://api.githubcopilot.com/mcp",
-     "oauth": {
-       "clientId": "${GITHUB_OAUTH_CLIENT_ID}",
-       "clientSecret": "${GITHUB_OAUTH_CLIENT_SECRET}",
-       "scope": "repo read:org"
-     }
-   }
-   ```
-
-   Request only the scopes the tools you need require; `repo read:org`
-   covers the common repo and organization operations. Put the actual
-   values in your `.env` file (see
-   [Secrets and Variable Expansion](#secrets-and-variable-expansion)).
-5. **Run the login command.**
-
-   ```bash
-   npx mcp-compress-router@latest login github
-   ```
-
-   Your browser opens to authorize. After you approve, tokens are stored
-   in `credentials.json` and the router can call GitHub MCP tools.
-
-> **Note:** if you used a *GitHub App* (not a classic OAuth App), the
-> App must be installed to the accounts/repos you want to access before
-> login will succeed, and its client secret is generated under *General*
-> → *Generate a new client secret*.
-
-#### Figma MCP with OAuth (special case)
-
-The official Figma MCP server at `https://mcp.figma.com/mcp` does **not**
-support Dynamic Client Registration through the standard MCP flow.
-Instead you register an OAuth client via Figma's REST API using a
-Personal Access Token, then pass the resulting credentials through the
-`oauth` block. Figma also requires the redirect URI to use a **fixed
-port** — the port you register is reused on every `login`, so you must
-pin it with `oauth.callbackPort`.
-
-1. **Create a Figma Personal Access Token.**
-   Follow
-   <https://developers.figma.com/docs/rest-api/personal-access-tokens/>
-   to generate a PAT and export it as `FIGMA_PERSONAL_ACCESS_TOKEN`. It
-   is only used to register the MCP client in the next step.
-
-2. **Register the MCP client via Figma's API.**
-   The redirect URI must use `127.0.0.1` on a fixed port — **the port
-   matters**, it is reused on every `login`. This example uses `19876`:
-
-   ```bash
-   curl -X POST https://api.figma.com/v1/oauth/mcp/register \
-     -H "Content-Type: application/json" \
-     -H "X-Figma-Token: $FIGMA_PERSONAL_ACCESS_TOKEN" \
-     -d '{
-       "client_name": "Claude Code (figma)",
-       "redirect_uris": ["http://127.0.0.1:19876/mcp-compress-router/oauth-callback"],
-       "grant_types": ["authorization_code", "refresh_token"],
-       "response_types": ["code"],
-       "token_endpoint_auth_method": "none"
-     }'
-   ```
-
-   Save the `client_id` and `client_secret` from the response (also note
-   the `scope` is `mcp:connect`):
-
-   ```json
-   {
-     "client_id": "CLIENTID",
-     "client_secret": "CLIENTSECRET",
-     "client_name": "Claude Code (figma)",
-     "redirect_uris": ["http://127.0.0.1:19876/mcp-compress-router/oauth-callback"],
-     "token_endpoint_auth_method": "none",
-     "scope": "mcp:connect"
-   }
-   ```
-
-3. **Add the Figma MCP server by URL.**
-
-   ```bash
-   npx mcp-compress-router@latest add --transport http figma https://mcp.figma.com/mcp
-   ```
-
-4. **Set `oauth` credentials in `mcp.json`.**
-   Put the client ID and secret from step 2 in the server entry, using
-   the `mcp:connect` scope and the **same fixed port** you registered as
-   `callbackPort`:
-
-   ```jsonc
-   "figma": {
-     "type": "http",
-     "url": "https://mcp.figma.com/mcp",
-     "oauth": {
-       "clientId": "${FIGMA_CLIENT_ID}",
-       "clientSecret": "${FIGMA_CLIENT_SECRET}",
-       "scope": "mcp:connect",
-       "callbackPort": 19876
-     }
-   }
-   ```
-
-   Put the actual values in your `.env` file (see
-   [Secrets and Variable Expansion](#secrets-and-variable-expansion)).
-
-5. **Run the login command.**
-
-   ```bash
-   npx mcp-compress-router@latest login figma
-   ```
-
-   Your browser opens to authorize. After you approve, tokens are stored
-   in `credentials.json` and the router can call Figma MCP tools.
-
-Other OAuth commands:
-
-```bash
-npx mcp-compress-router@latest logout my-http  # remove stored credentials
-```
-
-For headless or CI environments, override the browser with the
-`MCP_COMPRESS_ROUTER_BROWSER` environment variable. The authorization
-URL is appended as a single final argument (no shell):
-
-```bash
-MCP_COMPRESS_ROUTER_BROWSER="node /path/to/headless-browser.js" \
-  npx mcp-compress-router@latest login my-http
-```
-
-The default login timeout is 120 seconds; override it with
-`MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS`.
-
-### Custom Headers
-
-For HTTP servers that authenticate with a static API key or bearer
-token instead of OAuth, use the `headers` field. You can set it via the
-CLI or directly in `mcp.json`:
-
-```bash
-npx mcp-compress-router@latest add my-http \
-  --header "Authorization: Bearer mytoken" \
-  --header "X-Custom: value" \
-  https://example.com/mcp
-```
-
-```jsonc
-"my-http": {
-  "type": "http",
-  "url": "https://example.com/mcp",
-  "headers": {
-    "Authorization": "Bearer ${MY_SERVER_TOKEN}",
-    "X-Custom": "value"
-  }
-}
-```
-
-Header values support
-[variable expansion](#secrets-and-variable-expansion), so you can keep
-the actual token out of the config file.
-
-### Secrets and Variable Expansion
-
-Every string field in a server entry (`command`, `args`, `env`,
-`headers`, `url`, `oauth.*`) is expanded against the process
-environment at load time. Two syntaxes are supported:
-
-| Syntax | Behavior |
-| --- | --- |
-| `${VAR}` | Replaced with the value of `VAR`. Throws if unset. |
-| `${VAR:-default}` | Replaced with `VAR` when set and non-empty, otherwise `default`. |
-
-Put your secrets in a `.env` file next to `mcp.json`:
-
-```bash
-# <config directory>/.env
-GITHUB_PERSONAL_TOKEN=ghp_abc123
-MY_SERVER_TOKEN=secret-token
-```
-
-Shell environment variables always take precedence over `.env` values.
-
-## How It Works
-
-Once connected, the agent sees exactly **two tools**:
-
-- **`get_tool_schema(server, tools?)`** — Retrieves the JSON parameter
-  schema and the full description for one or more tools on a downstream
-  MCP server. The tool's description includes a compact listing of all
-  servers and their tools. Called with just a server name, it returns a
-  compact list of that server's tools and their argument signatures —
-  at every compression level, including `max`, where the catalog lists
-  no tool names at all.
-- **`invoke_tool(server, tool, arguments)`** — Forwards a tool call to
-  the downstream MCP server and returns the result.
-
-The typical workflow:
-
-1. The agent reads the compact catalog from the `get_tool_schema`
-   description and identifies the server it needs.
-2. If the catalog is not enough, it calls `get_tool_schema` with just
-   the server name to list that server's tools and their argument
-   signatures.
-3. It calls `get_tool_schema` with the chosen tool name to learn the
-   exact parameters.
-4. It calls `invoke_tool` to execute a tool, validated against the
-   cached schema.
-
-This replaces thousands of tokens of tool listings with a compact ~900
-token catalog, regardless of how many downstream servers you have.
-
-For the full configuration and environment variable reference, see
-[configuration.md](docs/reference/configuration.md). For the design
-rationale behind the router, see
-[architecture.md](docs/explanation/architecture.md).
-
-## Canary Builds
-
-Every push to `master` publishes a canary build to npm's `canary`
-dist-tag — the release version plus a `-canary.<sha>` suffix. Use it to
-try unreleased work:
-
-```sh
-npx mcp-compress-router@canary list
-```
-
-Canary builds never touch `latest`, and stable `v*` releases are
-published the usual way.
+them to discover and call every server you added, without ever seeing
+the raw tool listings of each downstream server. `get_tool_schema`
+accepts a server name alone to list that server's tools, or a server
+and tool names to return their parameter schemas.
 
 ## Acknowledgements
 
@@ -812,3 +118,58 @@ published the usual way.
 - [mcp-compressor](https://github.com/atlassian-labs/mcp-compressor) —
   also a very similar idea; the "two tools" approach was borrowed from
   this project, though it only compresses a single MCP server.
+
+## Measured Savings
+
+Newer coding agents have caught up: Claude Code's Tool Search, Codex
+CLI's code mode, and OpenCode V2's Code Mode each defer MCP tool
+definitions on their own, so a current agent already keeps most
+definitions out of its requests. With one of those agents on its own,
+you may not need the router for token savings — the table below shows
+how little it adds there. With several agents, the router remains the
+single place where every downstream MCP server is connected,
+configured, and authenticated, no matter how each agent defers tools.
+
+Measured router-vs-direct savings (September 2026; total tokens depend
+on the session's turn count, so the per-turn column is the stable
+signal):
+
+| Coding agent | Total token savings | Per-turn context savings | Cost savings |
+| --- | ---: | ---: | ---: |
+| OpenCode V1 | 39.8% | 33.1% | 17.5% |
+| GitHub Copilot CLI | 49.7% | 33.0% | 21.4% |
+| Claude Code, Tool Search off | 31.7% | 31.7% | 8.9% |
+| Codex CLI | 1.9% | 1.9% | 9.1% |
+| Claude Code, Tool Search on | 1.1% | 1.1% | 1.1% |
+| OpenCode V2 | -8.6% | -1.2% | -1.8% |
+
+Negative values mean the router used more. Cost figures come from each
+agent's own accounting and are approximate. See
+[Benchmarks](bench/README.md#results) for the full tables.
+
+## Documentation
+
+### Using the router
+
+- [Configuration reference](docs/reference/configuration.md) — every
+  config field, CLI command, and environment variable
+- [Connect your coding agent](docs/guides/connect-coding-agent.md)
+- [Authenticate with OAuth](docs/guides/oauth-login.md)
+- [Connect the GitHub MCP server](docs/guides/oauth-github.md)
+- [Connect the Figma MCP server](docs/guides/oauth-figma.md)
+- [About token overhead](docs/explanation/token-overhead.md) — the
+  problem, the cost model, and the two-tool workflow
+
+### Contributing
+
+- [Development guide](DEVELOPMENT.md) — set up, build, run, and debug
+  from a repository clone
+- [Benchmarks](bench/README.md) — harness, measured savings, and how to
+  reproduce a run
+- [Manual QA](qa/README.md) — the Compose stack and test plans
+- [Releasing](docs/guides/releasing.md) — releases and canary builds
+- [About the architecture](docs/explanation/architecture.md)
+- [About the process lifecycle](docs/explanation/process-lifecycle.md)
+- [About development practices](docs/explanation/development-practices.md)
+- [Changelog](CHANGELOG.md)
+- [LLM agent rules](AGENTS.md)

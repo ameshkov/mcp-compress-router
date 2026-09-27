@@ -5,8 +5,9 @@
 # Exposes the shared QA mock tools over HTTP and, with
 # `MOCK_MCP_AUTH=oauth`, a mock OAuth 2.1 authorization server that the
 # router's `login` command can complete headlessly. The compose stack
-# starts one service without auth (`mock-mcp-http`) and one with auth
-# (`mock-mcp-http-oauth`).
+# starts one service without auth (`mock-mcp-http`), one with auth
+# (`mock-mcp-http-oauth`), and one with the lifelike weather tools
+# (`mock-mcp-weather`, selected with `MOCK_MCP_TOOLS=weather`).
 #
 # Build (run from the repository root):
 #   docker build -f qa/Dockerfile.mock-mcp-http -t mcp-compress-router-qa-mock-mcp-http .
@@ -26,8 +27,9 @@ RUN pnpm install --prod --frozen-lockfile
 
 COPY qa/scripts/mock-long-description.ts ./scripts/mock-long-description.ts
 COPY qa/scripts/mock-mcp-tools.ts ./scripts/mock-mcp-tools.ts
+COPY qa/scripts/mock-mcp-weather.ts ./scripts/mock-mcp-weather.ts
 COPY qa/scripts/mock-mcp-http ./scripts/mock-mcp-http
 
-EXPOSE 3100 3101
+EXPOSE 3100 3101 3102
 
 CMD ["tsx", "scripts/mock-mcp-http/server.ts"]

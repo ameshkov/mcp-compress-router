@@ -6,9 +6,12 @@ environment with the router and a coding agent, and the mock services
 the plans drive.
 
 Everything runs in Docker Compose, and no network access, real MCP
-servers, model, or credentials are needed. The tester (a human or an
-agent) follows a plan step by step, runs the commands the steps quote
-inside the QA workspace, and records a verdict with the BDD runner.
+servers, model, or credentials are needed — except for the opt-in
+real-LLM plans, which talk to OpenRouter with a real model and need a
+key in `qa/.env` (see [Real-LLM plans](#real-llm-plans)). The tester (a
+human or an agent) follows a plan step by step, runs the commands the
+steps quote inside the QA workspace, and records a verdict with the BDD
+runner.
 
 The mock LLM is the center of the stack. It answers the coding agents
 with scripted tool calls, validates every request the agent sends
@@ -16,7 +19,8 @@ before answering, and keeps the complete raw request/response log. Most
 plan assertions are checks in that log: the router's two tools, the
 compact catalog, the exact tool-call arguments, and the downstream
 result coming back. The other channels are the agent transcript and the
-container logs of the mock MCP servers.
+container logs of the mock MCP servers. The real-LLM plans have no mock
+LLM log: there the transcript and the mock server logs are the evidence.
 
 ## How the stack is wired
 
@@ -30,18 +34,22 @@ host
     │     │                            Responses + Anthropic APIs);
     │     │                            raw request log
     │     ├── mock-mcp-http:3100       streamable-http mock MCP
-    │     └── mock-mcp-http-oauth:3101 streamable-http mock + mock OAuth
+    │     ├── mock-mcp-http-oauth:3101 streamable-http mock + mock OAuth
+    │     └── mock-mcp-weather:3102    lifelike weather mock (the
+    │                                  real-LLM plans)
     ├── mock-llm (mcr-qa-mock-llm)
     ├── mock-mcp-http (mcr-qa-mock-mcp-http)
-    └── mock-mcp-http-oauth (mcr-qa-mock-mcp-http-oauth)
+    ├── mock-mcp-http-oauth (mcr-qa-mock-mcp-http-oauth)
+    └── mock-mcp-weather (mcr-qa-mock-mcp-weather)
 ```
 
 | Service | Purpose |
 | --- | --- |
-| `workspace` | Long-lived container the tester works in: compiled router, QA scripts, stdio mock MCP server, opencode, GitHub Copilot CLI, Claude Code, Codex CLI, and the headless `qa-browser` OAuth helper |
+| `workspace` | Long-lived container the tester works in: compiled router, QA scripts, stdio mock MCP server, opencode, GitHub Copilot CLI, Claude Code, Codex CLI, and the headless `qa-browser` OAuth helper. Optional real-LLM credentials come from `qa/.env` |
 | `mock-llm` | Mock LLM with scripted conversations, request validation, and the raw request/response log; serves the OpenAI chat completions API, the OpenAI Responses API, and the Anthropic Messages API |
 | `mock-mcp-http` | Mock MCP server over streamable-http (no auth) |
 | `mock-mcp-http-oauth` | Mock MCP server over streamable-http plus a mock OAuth 2.1 authorization server |
+| `mock-mcp-weather` | Mock MCP server over streamable-http with the lifelike weather tools the real-LLM plans use (`MOCK_MCP_TOOLS=weather`) |
 
 The workspace talks to the mocks over the compose network
 (`QA_LLM_URL=http://mock-llm:8080`). No service publishes a host port,
@@ -52,6 +60,11 @@ curl ...`) or read the container logs
 (`docker compose -f qa/docker-compose.yml logs mock-llm`).
 
 ## Prepare the environment
+
+Docker with Docker Compose v2.24.0 or later is required. The workspace
+service declares `qa/.env` as optional with the `env_file.required`
+attribute, which older Compose releases reject; upgrade the Compose
+plugin if the file fails to parse.
 
 Build the images and start the stack from the repository root:
 
@@ -78,6 +91,22 @@ artifacts instead of the workspace image. The commands that talk to the
 mock LLM (`pnpm qa:agent`, `pnpm qa:llm`) fail fast when `QA_LLM_URL` is
 not set, which is the signal that the shell is outside the workspace.
 
+### Real-LLM credentials (optional)
+
+The regular plans need no credentials. The opt-in real-LLM plans
+(`pnpm qa:agent --real-llm`) run opencode against OpenRouter with a real
+model, so they need a key:
+
+```bash
+cp qa/.env.example qa/.env
+# fill in QA_OPENROUTER_API_KEY (and optionally QA_REAL_LLM_MODEL)
+docker compose -f qa/docker-compose.yml up -d
+```
+
+The workspace reads `qa/.env` at container creation, so recreate the
+container after editing the file. `qa/.env` is gitignored and is
+excluded from the image build context.
+
 ### Host access to the mocks (optional)
 
 If you explicitly need host access to the mocks (for example to `curl`
@@ -88,8 +117,8 @@ docker compose -f qa/docker-compose.yml \
   -f qa/docker-compose.host-ports.yml up -d --build
 ```
 
-The mocks are then on `127.0.0.1:8080`, `127.0.0.1:3100`, and
-`127.0.0.1:3101`. Host-side QA commands additionally need
+The mocks are then on `127.0.0.1:8080`, `127.0.0.1:3100`, `127.0.0.1:3101`,
+and `127.0.0.1:3102`. Host-side QA commands additionally need
 `QA_LLM_URL=http://127.0.0.1:8080`. The plans never need the override,
 and using it re-introduces the port-conflict risk by choice.
 
@@ -102,7 +131,7 @@ and using it re-introduces the port-conflict risk by choice.
 | `pnpm qa:router <args>` | Run the management CLI (`add`, `remove`, `list`, `tools`, `enable`, `disable`, `login`, `logout`) against the QA home. |
 | `pnpm qa:probe ...` | Spawn the compiled router over stdio, do the MCP handshake, and run one request (`--list`, `--tool <name> --args '<json>'`). Omit `tools` in the args to list a server's tools and their arguments. |
 | `pnpm qa:llm ...` | Control and inspect the mock LLM (`list`, `script`, `custom`, `status`, `log`, `reset`). |
-| `pnpm qa:agent ...` | Run a coding agent session (`--prompt '<text>'`, `--agent opencode\|copilot\|claude\|codex`) or `--mcp-list`, then report the mock LLM validation result. |
+| `pnpm qa:agent ...` | Run a coding agent session (`--prompt '<text>'`, `--agent opencode\|copilot\|claude\|codex`) or `--mcp-list`, then report the mock LLM validation result. Add `--real-llm` to run opencode against OpenRouter with a real model instead (opt-in; see [Real-LLM plans](#real-llm-plans)) |
 | `pnpm qa:run ...` | The BDD runner that walks the plans and records verdicts. |
 
 The image also installs `qa-browser`, a curl-based "browser" the router
@@ -126,14 +155,21 @@ The add commands the plans use:
 pnpm qa:router add stdio-mock --description 'QA stdio mock' \
   -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts
 
-# stdio mock with 200 extra bulk tools (the dynamic-limit plans)
-pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' \
-  --compression-level low --env MOCK_EXTRA_TOOLS=200 \
+# weather mock over stdio with the real-LLM call log (the real-LLM
+# plans)
+pnpm qa:router add weather \
+  --description 'Live weather forecasts and current conditions' \
+  --env MOCK_MCP_TOOLS=weather --env MOCK_CALL_LOG=/tmp/qa-weather-calls.log \
   -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts
 
 # streamable-http mock (runs in its own container)
 pnpm qa:router add http-mock --description 'QA streamable-http mock' \
   http://mock-mcp-http:3100/mcp
+
+# weather mock over streamable-http (the real-LLM plans)
+pnpm qa:router add weather-http \
+  --description 'Live weather forecasts and current conditions' \
+  http://mock-mcp-weather:3102/mcp
 
 # OAuth-protected streamable-http mock (auto-logs in via qa-browser)
 pnpm qa:router add oauth-mock --description 'QA OAuth mock' \
@@ -182,7 +218,21 @@ QA router is the only MCP server in play:
 
 `pnpm qa:agent --mcp-list [--agent opencode|copilot|claude|codex]` runs
 the agent's MCP listing command with the same hermetic configuration
-instead of a session, which is how the discovery scenarios start.
+instead of a session, which is how the discovery scenarios start. With
+`--real-llm` it uses the real-provider config; the OpenRouter key is not
+needed because listing never contacts the model.
+
+`pnpm qa:agent --real-llm --prompt '<text>'` (opencode only) is the
+opt-in exception: instead of the mock LLM it writes
+`qa/fixtures/opencode/opencode-real-llm.jsonc` into the scratch
+`XDG_CONFIG_HOME` and runs opencode against OpenRouter with
+`QA_REAL_LLM_MODEL` (default `openrouter/~deepseek/deepseek-flash-latest`).
+The OpenRouter key is interpolated from `QA_OPENROUTER_API_KEY` by
+opencode, so it never lands in a file. There is no scripted conversation
+and no mock LLM log in this mode: the transcript and the mock MCP server
+logs are the evidence. The real-LLM session gets a longer default
+timeout (180 s) than the scripted sessions (60 s); override it with
+`--timeout <ms>`.
 
 ### Scripts
 
@@ -193,20 +243,18 @@ the log. The built-ins are:
 
 | Script | Conversation |
 | --- | --- |
-| `stdio-catalog` | Verify the two router tools and the stdio catalog, then reply with text |
+| `stdio-catalog` | Verify the two router tools and the compact stdio catalog (bullet, hint), then list the signatures |
 | `stdio-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
 | `tool-list` | Call `get_tool_schema` without tool names, expect the signatures and hint back |
-| `http-catalog` | Verify the two router tools and the http catalog, then reply with text |
+| `http-catalog` | Verify the two router tools and the compact http catalog, then list the signatures including `whoami()` |
 | `http-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
-| `oauth-catalog` | Verify the two router tools and the oauth catalog, then reply with text |
+| `oauth-catalog` | Verify the two router tools and the compact oauth catalog, then list the signatures including `whoami()` |
 | `oauth-roundtrip` | Read the `add` schema, invoke 20 + 22, expect 42 |
 | `retry` | Invoke `add` with a missing argument, recover with the fixed call, expect 42 |
 | `fail` | Invoke `failing_tool` and expect the downstream error to come back |
-| `stdio-descriptions` | Verify every stdio tool description reaches the model as a first sentence (low compression) |
-| `long-description` | Verify the catalog carries the `documented_tool` first sentence and the result the full description |
+| `stdio-descriptions` | Verify every stdio tool description reaches the model through the schema result |
+| `long-description` | Verify the catalog stays compact and the schema result carries the full description |
 | `long-catalog-truncated` | Verify Claude Code truncates the over-long catalog description and drops the tail |
-| `dynamic-limit-degraded` | Verify a length-limited client gets the catalog degraded to `max` and list mode still returns the bulk tools |
-| `dynamic-limit-kept` | Verify a client outside the dynamic-limit list keeps the full catalog above the cap |
 
 `pnpm qa:llm list` prints the same table. For ad-hoc scenarios,
 `pnpm qa:llm custom <file.json>` installs an inline script with the same
@@ -222,8 +270,8 @@ suffix, so `get_tool_schema` matches `qa-router_get_tool_schema`.
 | --- | --- |
 | `toolsContain` | The request's tool list contains the named tool |
 | `toolsAbsent` | Downstream tools are not advertised directly to the model |
-| `catalogIncludes` | The `get_tool_schema` description contains the substrings (catalog sections, tool lines) |
-| `catalogExcludes` | The `get_tool_schema` description does not contain the substrings (for example the long-description tail, which Claude Code cuts at its 2048-character cap) |
+| `catalogIncludes` | The `get_tool_schema` description contains the substrings (server bullets, the list-mode hint) |
+| `catalogExcludes` | The `get_tool_schema` description does not contain the substrings (no tool names, signatures, or descriptions leak into the catalog) |
 | `messagesInclude` | The message history contains the substrings (tool results, guided errors) |
 | `toolCallsInclude` | The recorded tool calls exist and their compact JSON arguments contain the substrings |
 
@@ -265,9 +313,10 @@ with PASS/FAIL, and the scripted response, for example:
 
 | Server | Transport | Tools |
 | --- | --- | --- |
-| `qa/scripts/mock-mcp-stdio/` (in the workspace) | stdio | `echo`, `add`, `multi_block`, `failing_tool`, `documented_tool` |
+| `qa/scripts/mock-mcp-stdio/` (in the workspace) | stdio | `echo`, `add`, `multi_block`, `failing_tool`, `documented_tool` (or the weather tools with `MOCK_MCP_TOOLS=weather`) |
 | `mock-mcp-http` (own container) | streamable-http | The same five tools plus `whoami` |
 | `mock-mcp-http-oauth` (own container) | streamable-http + bearer token | The same five tools plus `whoami` |
+| `mock-mcp-weather` (own container) | streamable-http | The weather tools (`MOCK_MCP_TOOLS=weather`) |
 
 The shared tools live in `qa/scripts/mock-mcp-tools.ts`: `echo` returns
 `echo: <message>` so a round trip is distinguishable from the request
@@ -275,19 +324,28 @@ arguments, `add` returns the sum, `multi_block` returns a text, a
 resource, and a text block, `failing_tool` returns an `isError` result,
 and `documented_tool` carries a deliberately long description (about
 3.4 KB, bounded by the `LONG-DESCRIPTION-HEAD` and
-`LONG-DESCRIPTION-TAIL` markers). The catalog only ever shows the
-first sentence (the head marker); the description plans verify that the
-complete text arrives through the `get_tool_schema` result.
+`LONG-DESCRIPTION-TAIL` markers). The catalog never shows tool
+descriptions; the description plans verify that the complete text
+arrives through the `get_tool_schema` result.
 `pnpm --silent qa:long-description` prints the same text for use as a
 server's `--description`, which the Claude Code truncation plan uses to
 grow the catalog past Claude Code's 2048-character tool-description cap.
 
-The stdio mock also accepts `MOCK_EXTRA_TOOLS=<n>`, registering that
-many extra `bulk_tool_###` tools after the standard five. The
-dynamic-limit plans add it with `--env MOCK_EXTRA_TOOLS=200` (205 tools
-total) so the catalog exceeds the 2048-character cap: the router
-auto-degrades the catalog to `max` for Claude Code, while opencode and
-Codex keep the configured level.
+`MOCK_MCP_TOOLS=weather` selects the lifelike weather tools
+(`qa/scripts/mock-mcp-weather.ts`) on either transport: `get_forecast`
+returns a fixed multi-day forecast (Berlin tomorrow is `17°C, light rain`),
+`get_current_conditions` the fixed current weather (Lisbon is
+`24°C, clear skies`), and `list_cities` the supported cities. The
+real-LLM plans use them so their prompts can be ordinary tasks that
+never name a tool; the fixed data keeps the expected results exact.
+
+The stdio mock accepts `MOCK_CALL_LOG=<path>`, appending one line per
+incoming request (for example `[qa-mock-stdio] tools/call add`). The
+real-LLM plans set the call log to prove the model actually drove the
+server; the mock's stdout is the MCP protocol stream, so a file is the
+only channel available. The HTTP mocks log every request to their
+container stdout instead (`tools/call add` lines), which is why the
+real-LLM plan reads `docker compose logs mock-mcp-weather`.
 
 With `MOCK_MCP_AUTH=oauth`, the HTTP mock publishes mock OAuth metadata
 (RFC 9728 + RFC 8414), supports dynamic client registration, and
@@ -305,22 +363,23 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 
 | Feature file | Group | Covers |
 | --- | --- | --- |
-| `router-startup.feature` | `STARTUP` | Two-tool surface, compact catalog, disabled servers |
+| `router-startup.feature` | `STARTUP` | Two-tool surface, compact catalog, disabled servers, startup without a server description |
 | `tool-schema.feature` | `SCHEMA` | `get_tool_schema` results, list mode, and guided errors |
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
 | `oauth-server.feature` | `OAUTH` | Auto-login, logout, and login again |
-| `compression.feature` | `COMPRESS` | The four catalog levels and list mode from a `max` server |
-| `opencode.feature` | `OPENCODE` | Discovery, catalog, first-sentence descriptions, stdio/http/oauth round trips, recovery, cleanup, dynamic-limit scope |
+| `opencode.feature` | `OPENCODE` | Discovery, compact catalog, descriptions through the schema result, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
-| `claude.feature` | `CLAUDE` | Discovery, catalog, first-sentence descriptions, the long-description result path, the 2048-character truncation cap, auto-degradation, round trips, recovery, cleanup |
-| `codex.feature` | `CODEX` | Discovery, catalog, first-sentence descriptions, the long-description result path, dynamic-limit scope, round trips, recovery, cleanup |
+| `claude.feature` | `CLAUDE` | Discovery, compact catalog, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |
+| `codex.feature` | `CODEX` | Discovery, compact catalog, the long-description result path, round trips, recovery, cleanup |
+| `real-llm.feature` | `REALLLM` | Opt-in: a real OpenRouter model turns ordinary weather tasks into tool calls on the lifelike stdio and streamable-http weather mocks |
 
 The steps are written as instructions for a human tester: each one
 names the exact command to run or the exact evidence to look for. The
 mock LLM log is the primary evidence; the agent transcript and the
-container logs are secondary.
+container logs are secondary. For the real-LLM plans the transcript and
+the mock server logs are the only evidence — there is no mock LLM log.
 
 ### Test IDs
 
@@ -373,6 +432,43 @@ docker compose -f qa/docker-compose.yml \
   cp workspace:/app/qa/output/<run-id> qa/output/
 ```
 
+## Real-LLM plans
+
+`real-llm.feature` is the opt-in exception to the mock-LLM approach: it
+runs opencode against OpenRouter with a real model to observe how a
+model discovers the router and whether it actually uses the mock MCP
+servers. The plans give the model ordinary tasks ("I am flying to Berlin
+tomorrow, will it rain?") that never name a tool, so the model has to
+find it through the router the way it would in a real session. It needs
+network access and a key:
+
+```bash
+# once, from the repository root
+cp qa/.env.example qa/.env   # fill in QA_OPENROUTER_API_KEY
+docker compose -f qa/docker-compose.yml up -d
+```
+
+Then, inside the workspace:
+
+```bash
+pnpm qa:agent --real-llm --prompt 'I am flying to Berlin tomorrow and cannot decide whether to pack an umbrella. Will I need one?'
+```
+
+Unlike the scripted sessions, there is no mock LLM script and no
+`pnpm qa:llm log` validation. The runner prints the opencode transcript
+(`[tool]` calls with their inputs and outputs, `[assistant]` text), and
+the plans check the downstream logs: `/tmp/qa-weather-calls.log` for the
+weather mock over stdio (`MOCK_CALL_LOG` plus `MOCK_MCP_TOOLS=weather`)
+and `docker compose -f qa/docker-compose.yml logs mock-mcp-weather` for
+the weather mock over streamable-http. A real model is
+non-deterministic, so the plans are judged by a human; the runner exits
+non-zero only when opencode fails or times out (the default budget is
+180 s, overridable with `--timeout <ms>`).
+
+The real-LLM scenarios are part of the suite but need the key: run them
+explicitly with `pnpm qa:run --feature real-llm`, and skip them (`s`)
+in a full run when no key is configured.
+
 ## Rebuilding and troubleshooting
 
 - Rebuild after any source or QA change:
@@ -399,9 +495,21 @@ docker compose -f qa/docker-compose.yml \
   from the runner; inside the workspace container that flag is required
   because Codex's Linux sandbox cannot run under Docker.
 - The mock LLM log reports a failed `catalogExcludes` check in a
-  `long-description` run: the catalog unexpectedly contains the tail
-  marker. The router renders only the first sentence at `low`, so this
-  usually means the selected script or the router build is stale.
+  `long-description` run: the catalog unexpectedly contains the long
+  description. The router never renders tool descriptions in the
+  catalog, so this usually means the selected script or the router build
+  is stale.
+- `pnpm qa:agent --real-llm --prompt` fails with
+  "QA_OPENROUTER_API_KEY is not set": create `qa/.env` from
+  `qa/.env.example`, fill in the key, and recreate the workspace
+  container (`docker compose -f qa/docker-compose.yml up -d`).
+  `--mcp-list` does not need the key.
+- A real-LLM session times out or returns a provider error: check the
+  model reference in `QA_REAL_LLM_MODEL` (it must be
+  `openrouter/<model>`) and the key's quota, and raise `--timeout <ms>`
+  if the model is slow. The model is non-deterministic: a run that
+  ignores the prompt is a verdict for the tester to record, not a stack
+  failure.
 - The router refuses to start with an empty server list: run
   `pnpm qa:setup` and add a server before `pnpm qa:probe` or an agent.
 - `pnpm qa:llm log` exits 1 and shows FAIL lines: the agent did not

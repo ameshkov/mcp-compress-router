@@ -35,6 +35,7 @@ describe('handleAdd', () => {
   it('adds a stdio server with command and args', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'myserver',
       transport: 'stdio',
       commandOrUrl: 'npx',
@@ -49,12 +50,14 @@ describe('handleAdd', () => {
       type: 'stdio',
       command: 'npx',
       args: ['-y', 'my-mcp-server'],
+      description: 'Test server',
     });
   });
 
   it('adds a stdio server with env vars', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'myserver',
       transport: 'stdio',
       commandOrUrl: 'node',
@@ -72,6 +75,7 @@ describe('handleAdd', () => {
   it('adds an HTTP server with URL', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'sentry',
       transport: 'http',
       commandOrUrl: 'https://mcp.sentry.dev/mcp',
@@ -84,12 +88,14 @@ describe('handleAdd', () => {
     expect(parsed.mcpServers.sentry).toEqual({
       type: 'http',
       url: 'https://mcp.sentry.dev/mcp',
+      description: 'Test server',
     });
   });
 
   it('adds an HTTP server with headers', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'sentry',
       transport: 'http',
       commandOrUrl: 'https://mcp.sentry.dev/mcp',
@@ -106,6 +112,7 @@ describe('handleAdd', () => {
   it('auto-detects HTTP transport when URL starts with https://', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'server',
       transport: 'stdio', // default, but URL overrides
       commandOrUrl: 'https://example.com/mcp',
@@ -126,6 +133,7 @@ describe('handleAdd', () => {
 
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'existing',
         transport: 'stdio',
         commandOrUrl: 'node',
@@ -136,6 +144,7 @@ describe('handleAdd', () => {
   it('creates config file on first use', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'first',
       transport: 'stdio',
       commandOrUrl: 'echo',
@@ -154,6 +163,7 @@ describe('handleAdd', () => {
     );
 
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'newone',
       transport: 'stdio',
       commandOrUrl: 'ls',
@@ -177,6 +187,7 @@ describe('handleAdd', () => {
     handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
 
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'github',
       transport: 'http',
       commandOrUrl: 'https://example.com/mcp',
@@ -200,6 +211,7 @@ describe('handleAdd', () => {
     handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
 
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'github',
       transport: 'http',
       commandOrUrl: 'https://example.com/mcp',
@@ -216,6 +228,7 @@ describe('handleAdd', () => {
     discoverAuthMock.mockResolvedValue({ serverMetadata: undefined });
 
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'plain',
       transport: 'http',
       commandOrUrl: 'https://example.com/mcp',
@@ -233,6 +246,7 @@ describe('handleAdd', () => {
     discoverAuthMock.mockRejectedValue(new Error('network down'));
 
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'flaky',
       transport: 'http',
       commandOrUrl: 'https://example.com/mcp',
@@ -247,6 +261,7 @@ describe('handleAdd', () => {
   it('does not start login when server has no OAuth metadata', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     const result = await handleAdd(configPath, {
+      description: 'Test server',
       name: 'plain',
       transport: 'http',
       commandOrUrl: 'https://example.com/mcp',
@@ -290,22 +305,63 @@ describe('handleAdd', () => {
     expect(parsed.mcpServers.sentry.description).toBe('Sentry error tracking tools');
   });
 
-  it('does not write description when not provided', async () => {
+  it('throws when description is not provided', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'plain',
+        transport: 'stdio',
+        commandOrUrl: 'echo',
+      }),
+    ).rejects.toThrow(/--description.*description of the MCP server/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it('throws when description is blank', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await expect(
+      handleAdd(configPath, {
+        name: 'plain',
+        transport: 'stdio',
+        commandOrUrl: 'echo',
+        description: '   ',
+      }),
+    ).rejects.toThrow(/--description/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it('trims the description before writing it', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
-      name: 'plain',
+      name: 'trimmed',
       transport: 'stdio',
       commandOrUrl: 'echo',
+      description: '  Trimmed server description  ',
     });
 
-    const contents = await fs.readFile(configPath, 'utf-8');
-    const parsed = JSON.parse(contents);
-    expect(parsed.mcpServers.plain.description).toBeUndefined();
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.trimmed.description).toBe('Trimmed server description');
+  });
+
+  it('collapses interior whitespace so the description stays one line', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await handleAdd(configPath, {
+      name: 'multiline',
+      transport: 'stdio',
+      commandOrUrl: 'echo',
+      description: 'First line.\n\n## fake-server   Second line.',
+    });
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers.multiline.description).toBe('First line. ## fake-server Second line.');
   });
 
   it('writes "enabled": false when --disabled is passed', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'github',
       transport: 'stdio',
       commandOrUrl: 'npx',
@@ -322,6 +378,7 @@ describe('handleAdd', () => {
   it('writes no enabled field when --enabled is passed', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'fs',
       transport: 'stdio',
       commandOrUrl: 'npx',
@@ -338,6 +395,7 @@ describe('handleAdd', () => {
   it('writes no enable/filter fields when no selection flags are passed', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'x',
       transport: 'stdio',
       commandOrUrl: 'npx',
@@ -353,6 +411,7 @@ describe('handleAdd', () => {
   it('collects repeated --allowed-tools values in order', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'y',
       transport: 'stdio',
       commandOrUrl: 'npx',
@@ -368,6 +427,7 @@ describe('handleAdd', () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'z',
         transport: 'stdio',
         commandOrUrl: 'npx',
@@ -383,6 +443,7 @@ describe('handleAdd', () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'z2',
         transport: 'stdio',
         commandOrUrl: 'npx',
@@ -398,6 +459,7 @@ describe('handleAdd', () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'both',
         transport: 'stdio',
         commandOrUrl: 'npx',
@@ -413,6 +475,7 @@ describe('handleAdd', () => {
   it('writes oauth.callbackPort for HTTP servers when --port is passed', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await handleAdd(configPath, {
+      description: 'Test server',
       name: 'github',
       transport: 'http',
       commandOrUrl: 'https://api.githubcopilot.com/mcp',
@@ -427,6 +490,7 @@ describe('handleAdd', () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'local',
         transport: 'stdio',
         commandOrUrl: 'npx',
@@ -440,66 +504,12 @@ describe('handleAdd', () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await expect(
       handleAdd(configPath, {
+        description: 'Test server',
         name: 'github',
         transport: 'http',
         commandOrUrl: 'https://api.githubcopilot.com/mcp',
         port: 70000,
       }),
     ).rejects.toThrow(/--port must be an integer between 1 and 65535/);
-  });
-
-  it('writes compressionLevel when a valid level is provided', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await handleAdd(configPath, {
-      name: 'srv',
-      transport: 'stdio',
-      commandOrUrl: 'npx',
-      rest: ['-y', 'some-server'],
-      compressionLevel: 'medium',
-    });
-
-    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
-    expect(parsed.mcpServers.srv.compressionLevel).toBe('medium');
-  });
-
-  it('writes no compressionLevel field when the flag is absent', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await handleAdd(configPath, {
-      name: 'srv',
-      transport: 'stdio',
-      commandOrUrl: 'npx',
-      rest: ['-y', 'some-server'],
-    });
-
-    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
-    expect(parsed.mcpServers.srv.compressionLevel).toBeUndefined();
-  });
-
-  it('throws and writes nothing when --compression-level is invalid', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await expect(
-      handleAdd(configPath, {
-        name: 'srv',
-        transport: 'stdio',
-        commandOrUrl: 'npx',
-        rest: ['-y', 'some-server'],
-        compressionLevel: 'invalid',
-      }),
-    ).rejects.toThrow(/--compression-level.*invalid/);
-
-    await expect(fs.access(configPath)).rejects.toThrow();
-  });
-
-  it('error message lists the valid levels for an invalid --compression-level', async () => {
-    const configPath = path.join(tempDir, 'mcp.json');
-    await expect(
-      handleAdd(configPath, {
-        name: 'srv',
-        transport: 'stdio',
-        commandOrUrl: 'npx',
-        rest: ['-y', 'some-server'],
-        compressionLevel: 'fast',
-      }),
-    ).rejects.toThrow(/max, high, medium, low/);
   });
 });

@@ -54,7 +54,10 @@ describe('handleTools — stdio fixture', () => {
   });
 
   async function writeConfig(server: Record<string, unknown>): Promise<void> {
-    await fs.writeFile(configPath, JSON.stringify({ mcpServers: { fs: server } }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { fs: { description: 'Fixture server', ...server } } }),
+    );
   }
 
   it('lists every advertised tool marked [exposed] when no selection is set', async () => {
@@ -152,37 +155,22 @@ describe('handleTools — stdio fixture', () => {
     expect(out).not.toContain('[filtered]');
   });
 
-  it('shows identical full output regardless of compressionLevel (max vs high)', async () => {
+  it('always shows the full tool table with descriptions', async () => {
     const resolved = await resolveCommand();
 
     await writeConfig({
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
-      compressionLevel: 'max',
     });
-    const outMax = await handleTools(configPath, 'fs');
+    const out = await handleTools(configPath, 'fs');
 
-    await writeConfig({
-      type: 'stdio',
-      command: resolved.command,
-      args: resolved.args,
-      compressionLevel: 'high',
-    });
-    const outHigh = await handleTools(configPath, 'fs');
-
-    // Output must be byte-for-byte identical — compressionLevel does
-    // not leak into the human-inspection command path.
-    expect(outHigh).toBe(outMax);
-
-    // The full description appears (table-truncated for width): the
-    // tools table is never compressed, whatever the catalog level.
-    expect(outMax).toContain('Returns the input message unchanged.');
-
-    // The table layout is used (header columns present), proving the
-    // max-level count-and-pointer line never appears here.
-    expect(outMax).toContain('Exposure');
-    expect(outMax).not.toContain('Call get_tool_schema with');
+    // The tools table is never compressed: the full description appears
+    // (table-truncated for width), and the catalog count-and-pointer
+    // line never leaks into the human-inspection command path.
+    expect(out).toContain('Returns the input message unchanged.');
+    expect(out).toContain('Exposure');
+    expect(out).not.toContain('Call get_tool_schema with');
   });
 });
 
@@ -225,7 +213,9 @@ describe('handleTools — HTTP fixture', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { http: { type: 'streamable-http', url: baseUrl } },
+        mcpServers: {
+          http: { type: 'streamable-http', url: baseUrl, description: 'HTTP fixture server' },
+        },
       }),
     );
 
@@ -239,7 +229,11 @@ describe('handleTools — HTTP fixture', () => {
       configPath,
       JSON.stringify({
         mcpServers: {
-          http: { type: 'streamable-http', url: 'http://127.0.0.1:1/mcp' },
+          http: {
+            type: 'streamable-http',
+            url: 'http://127.0.0.1:1/mcp',
+            description: 'Unreachable HTTP server',
+          },
         },
       }),
     );
@@ -255,7 +249,9 @@ describe('handleTools — HTTP fixture', () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        mcpServers: { http: { type: 'streamable-http', url: baseUrl } },
+        mcpServers: {
+          http: { type: 'streamable-http', url: baseUrl, description: 'HTTP fixture server' },
+        },
       }),
     );
     await writeCredentials(configPath, 'http', {
@@ -288,6 +284,7 @@ describe('handleTools — HTTP fixture', () => {
           http: {
             type: 'streamable-http',
             url: baseUrl,
+            description: 'HTTP fixture server',
             oauth: { clientId: 'override-client-id' },
           },
         },

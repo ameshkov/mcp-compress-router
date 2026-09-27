@@ -40,11 +40,17 @@ describe('MCP Compress Router E2E — startup resilience', () => {
 
     const config = {
       mcpServers: {
-        quick: { type: 'stdio', command: fixture.command, args: fixture.args },
+        quick: {
+          type: 'stdio',
+          command: fixture.command,
+          args: fixture.args,
+          description: 'Quick fixture server',
+        },
         stuck: {
           type: 'stdio',
           command: 'node',
           args: [stuckServerPath],
+          description: 'Stuck server',
         },
       },
     };
@@ -116,6 +122,7 @@ describe('MCP Compress Router E2E — startup resilience', () => {
           command: 'node',
           args: [stuckServerPath],
           env: { MCP_TEST_PID_FILE: pidFile },
+          description: 'Stuck server',
         },
       },
     };

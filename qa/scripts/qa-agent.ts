@@ -25,6 +25,12 @@
  * - `--events <path>` — save the raw JSON event stream.
  * - `--keep` — keep the scratch agent config for debugging.
  * - `--mcp-list` — run the agent's MCP listing command instead of a session.
+ * - `--real-llm` — opt-in: run opencode against OpenRouter with a real
+ *   model instead of the mock LLM. Needs `QA_OPENROUTER_API_KEY` and
+ *   optionally `QA_REAL_LLM_MODEL` in `qa/.env`; no mock LLM script is
+ *   required and no mock LLM log is validated. Only valid for
+ *   `--agent opencode`. The key is not needed with `--mcp-list`, which
+ *   never contacts the model.
  */
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -34,6 +40,11 @@ import { listClaudeMcp, runClaudeSession } from './agent/claude.js';
 import { listCodexMcp, runCodexSession } from './agent/codex.js';
 import { listCopilotMcp, runCopilotSession } from './agent/copilot.js';
 import { listOpencodeMcp, runOpencodeSession } from './agent/opencode.js';
+import {
+  REAL_LLM_DEFAULT_TIMEOUT_MS,
+  resolveRealLlmModel,
+  resolveRealLlmOptions,
+} from './agent/real-llm.js';
 import {
   AGENT_DEFAULT_TIMEOUT_MS,
   type AgentListOptions,
@@ -75,11 +86,12 @@ const AGENT_LISTERS: Record<AgentName, (options: AgentListOptions) => Promise<nu
  * Parses and validates the `--timeout` value.
  *
  * @param raw - The raw option value.
+ * @param fallback - Timeout used when the option is absent.
  * @returns The timeout in milliseconds.
  */
-function parseTimeout(raw: string | undefined): number {
+function parseTimeout(raw: string | undefined, fallback: number): number {
   if (raw === undefined) {
-    return AGENT_DEFAULT_TIMEOUT_MS;
+    return fallback;
   }
   const value = Number(raw);
   if (!Number.isInteger(value) || value <= 0) {
@@ -125,6 +137,35 @@ async function listAgent(agent: AgentName, options: AgentListOptions): Promise<n
 }
 
 /**
+ * Builds the options for the agent's MCP listing command.
+ *
+ * The real-provider config is selected without requiring the OpenRouter
+ * key: listing never contacts the model, so only real sessions need
+ * credentials.
+ *
+ * @param realLlm - Whether `--real-llm` was passed.
+ * @param timeout - The raw `--timeout` value.
+ * @param keep - Whether to keep the scratch config home.
+ * @returns The listing options.
+ */
+function buildListOptions(
+  realLlm: boolean,
+  timeout: string | undefined,
+  keep: boolean,
+): AgentListOptions {
+  const realModel = realLlm ? { model: resolveRealLlmModel() } : undefined;
+  return {
+    llmUrl: realModel ? '' : llmBaseUrl(),
+    timeoutMs: parseTimeout(
+      timeout,
+      realModel ? REAL_LLM_DEFAULT_TIMEOUT_MS : AGENT_DEFAULT_TIMEOUT_MS,
+    ),
+    keep,
+    realLlm: realModel,
+  };
+}
+
+/**
  * Runs one agent session and reports the mock LLM validation results.
  *
  * @param options - The session options.
@@ -154,6 +195,33 @@ async function runSession(options: AgentRunOptions & { agent: AgentName }): Prom
 }
 
 /**
+ * Runs one real-model session.
+ *
+ * There is no mock LLM log to validate: the agent transcript and the
+ * mock MCP server logs are the evidence, so the exit code comes from
+ * the agent alone.
+ *
+ * @param options - The session options (with `realLlm` set).
+ * @returns Process exit code.
+ */
+async function runRealSession(options: AgentRunOptions & { agent: AgentName }): Promise<number> {
+  console.log(`Real LLM: ${options.realLlm?.model} (OpenRouter)`);
+  console.log('No mock LLM script is used; inspect the transcript and the mock MCP server logs.\n');
+  const result = await runAgent(options.agent, options);
+  if (result.exitCode !== 0) {
+    return result.exitCode;
+  }
+  return result.timedOut ? 1 : 0;
+}
+
+/** Usage text shown when a required argument is missing. */
+const USAGE =
+  'Usage: pnpm qa:agent --prompt "<text>" [--agent opencode|copilot|claude|codex] ' +
+  '[--timeout <ms>] [--events <path>] [--keep]\n' +
+  '       pnpm qa:agent --mcp-list [--agent opencode|copilot|claude|codex]\n' +
+  '       pnpm qa:agent --real-llm --prompt "<text>" [--timeout <ms>]';
+
+/**
  * Runs the selected mode.
  *
  * @returns Process exit code.
@@ -167,34 +235,41 @@ async function main(): Promise<number> {
       events: { type: 'string' },
       keep: { type: 'boolean', default: false },
       'mcp-list': { type: 'boolean', default: false },
+      'real-llm': { type: 'boolean', default: false },
     },
   });
   if (!existsSync(ROUTER_ENTRY)) {
     console.error(`Router build not found: ${ROUTER_ENTRY}\nRun "pnpm build" first.`);
     return 1;
   }
-  const llmUrl = llmBaseUrl();
-  const timeoutMs = parseTimeout(values.timeout);
   const agent = parseAgent(values.agent);
-  if (values['mcp-list']) {
-    return listAgent(agent, { llmUrl, timeoutMs, keep: values.keep });
-  }
-  if (values.prompt === undefined) {
-    console.error(
-      'Usage: pnpm qa:agent --prompt "<text>" [--agent opencode|copilot|claude|codex] ' +
-        '[--timeout <ms>] [--events <path>] [--keep]\n' +
-        '       pnpm qa:agent --mcp-list [--agent opencode|copilot|claude|codex]',
-    );
+  if (values['real-llm'] && agent !== 'opencode') {
+    console.error('--real-llm is only supported for --agent opencode.');
     return 2;
   }
-  return runSession({
+  if (values['mcp-list']) {
+    return listAgent(agent, buildListOptions(values['real-llm'], values.timeout, values.keep));
+  }
+  if (values.prompt === undefined) {
+    console.error(USAGE);
+    return 2;
+  }
+  const realLlm = values['real-llm'] ? resolveRealLlmOptions() : undefined;
+  const timeoutMs = parseTimeout(
+    values.timeout,
+    realLlm ? REAL_LLM_DEFAULT_TIMEOUT_MS : AGENT_DEFAULT_TIMEOUT_MS,
+  );
+  const llmUrl = realLlm ? '' : llmBaseUrl();
+  const options = {
     agent,
     prompt: values.prompt,
     llmUrl,
     timeoutMs,
     eventsPath: values.events,
     keep: values.keep,
-  });
+    realLlm,
+  };
+  return realLlm ? runRealSession(options) : runSession(options);
 }
 
 main()

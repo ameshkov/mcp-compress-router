@@ -15,17 +15,22 @@ Scenario: The router exposes exactly two tools
   Then the output lists exactly "get_tool_schema" and "invoke_tool"
 
 @TC-STARTUP-2
-Scenario: The catalog describes the stdio server and its tools
+Scenario: The catalog describes the stdio server compactly
   When I list the router tools with "pnpm qa:probe --list"
-  Then the "get_tool_schema" description contains a "## stdio-mock" section
-  And that section lists "echo"
-  And that section lists "add"
-  And that section lists "multi_block"
-  And that section lists "failing_tool"
-  And that section lists "documented_tool"
+  Then the "get_tool_schema" description contains the bullet "- stdio-mock (5 tools) - QA stdio mock"
+  And the description ends with the list-mode hint "Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(stdio-mock)"
+  And the description lists no tool names
 
 @TC-STARTUP-3
 Scenario: A disabled downstream server stays out of the catalog
   When I add the disabled archive server with "pnpm qa:router add archive --disabled --description 'Disabled QA mock' -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
   And I list the router tools with "pnpm qa:probe --list"
-  Then the "get_tool_schema" description does not contain "## archive"
+  Then the "get_tool_schema" description does not contain "- archive"
+
+@TC-STARTUP-4
+Scenario: A server without a description does not stop the router
+  Given I removed the server descriptions with "sed -i '/description/d' qa/home/mcp.jsonc"
+  When I list the router tools with "pnpm qa:probe --list"
+  Then the "get_tool_schema" description contains the bullet "- stdio-mock (5 tools)"
+  And that bullet has no description after the tool count
+  And the description lists no tool names

@@ -4,7 +4,7 @@
       "type": "function",
       "function": {
         "name": "get_tool_schema",
-        "description": "Get the JSON schema for one or more tools from a connected MCP server, or omit the tool names to list a server's tools and their arguments. You MUST call this for a tool before you can invoke it with invoke_tool.\n\n## GitHub MCP\n\nProvides 44 tools. Call get_tool_schema with \"GitHub MCP\" to list them.\n\n## Notion MCP\n\nProvides 14 tools. Call get_tool_schema with \"Notion MCP\" to list them.\n\n## Pylance MCP\n\nProvides 13 tools. Call get_tool_schema with \"Pylance MCP\" to list them.",
+        "description": "Get the JSON schema for one or more tools from a connected MCP server, or omit the tool names to list a server's tools and their arguments. You MUST call this for a tool before you can invoke it with invoke_tool.\n\n- GitHub MCP (44 tools) - GitHub API tools for browsing repositories, issues, and pull requests.\n- Notion MCP (14 tools) - Notion workspace tools for searching pages and managing content.\n- Pylance MCP (13 tools) - Python language-server tools for type checking, code navigation, and refactoring.\n\nCall get_tool_schema with the server name to list all tools, i.e. get_tool_schema(GitHub MCP)",
         "parameters": {
           "type": "object",
           "required": ["server"],

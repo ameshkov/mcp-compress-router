@@ -1,5 +1,5 @@
-# Docker build context for the QA images (qa/Dockerfile and the
-# per-service mock images).
+# Docker build context for the QA and benchmark images (qa/Dockerfile,
+# bench/Dockerfile and the per-service mock images).
 .git
 .github
 .husky
@@ -10,6 +10,9 @@ coverage
 test
 qa/home
 qa/output
+qa/.env
+bench/runs
+bench/.env
 dev-home
 .env
 .env.*

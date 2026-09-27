@@ -142,7 +142,7 @@ export async function listToolsOrEmpty(
 export interface DiscoveredServer {
   /** The server name (from config). */
   name: string;
-  /** The server's optional description. */
+  /** The server's description from config, when configured. */
   description?: string;
   /** Discovered tool descriptors. */
   tools: ToolDescriptor[];

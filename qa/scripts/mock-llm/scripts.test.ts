@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LONG_DESCRIPTION_HEAD, LONG_DESCRIPTION_TAIL } from '../mock-long-description.js';
+import { DOWNSTREAM_TOOLS, HTTP_DOWNSTREAM_TOOLS } from './script-constants.js';
 import { CLAUDE_TRUNCATION_MARKER, getScript, listScripts, scriptNames } from './scripts.js';
 
 describe('built-in mock LLM scripts', () => {
@@ -49,24 +50,43 @@ describe('built-in mock LLM scripts', () => {
         'stdio-descriptions',
         'long-description',
         'long-catalog-truncated',
-        'dynamic-limit-degraded',
-        'dynamic-limit-kept',
       ]),
     );
   });
 
-  it('checks the degraded and kept catalogs in the dynamic-limit scripts', () => {
-    const degraded = getScript('dynamic-limit-degraded');
-    expect(degraded).toBeDefined();
-    const first = degraded!.steps[0].expect;
-    expect(first?.catalogIncludes).toContain('Provides 205 tools');
-    expect(first?.catalogExcludes).toContain('bulk_tool_001');
-    expect(degraded!.steps[1].expect?.messagesInclude).toContain('bulk_tool_001');
+  it('checks the compact catalog and the list-mode signatures in the catalog script', () => {
+    const script = getScript('stdio-catalog');
+    expect(script).toBeDefined();
+    const first = script!.steps[0].expect;
+    expect(first?.catalogIncludes).toContain('- stdio-mock (5 tools)');
+    expect(first?.catalogExcludes).toEqual(
+      expect.arrayContaining(['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool']),
+    );
+    expect(script!.steps[1].expect?.messagesInclude).toContain('echo(message)');
+    expect(script!.steps[1].expect?.messagesInclude).toContain('documented_tool(input)');
+  });
 
-    const kept = getScript('dynamic-limit-kept');
-    expect(kept).toBeDefined();
-    expect(kept!.steps[0].expect?.catalogIncludes).toContain('bulk_tool_001');
-    expect(kept!.steps[0].expect?.catalogExcludes).toContain('Provides 205 tools');
+  it('derives the HTTP downstream tool names from the signatures', () => {
+    expect(DOWNSTREAM_TOOLS).not.toContain('whoami');
+    expect(HTTP_DOWNSTREAM_TOOLS).toEqual([...DOWNSTREAM_TOOLS, 'whoami']);
+  });
+
+  it('checks the http catalog excludes every HTTP tool, including whoami', () => {
+    const script = getScript('http-catalog');
+    expect(script).toBeDefined();
+    const first = script!.steps[0].expect;
+    expect(first?.catalogIncludes).toContain('- http-mock (6 tools)');
+    expect(first?.catalogExcludes).toContain('whoami');
+    expect(first?.toolsAbsent).toContain('whoami');
+    expect(script!.steps[1].expect?.messagesInclude).toContain('whoami()');
+  });
+
+  it('checks the oauth catalog and the HTTP round trips exclude whoami too', () => {
+    const oauthCatalog = getScript('oauth-catalog')!.steps[0].expect;
+    expect(oauthCatalog?.catalogExcludes).toContain('whoami');
+    for (const name of ['oauth-catalog', 'http-roundtrip', 'oauth-roundtrip']) {
+      expect(getScript(name)!.steps[0].expect?.toolsAbsent).toContain('whoami');
+    }
   });
 
   it('checks the list-mode signatures and hint in the tool-list script', () => {
@@ -77,11 +97,11 @@ describe('built-in mock LLM scripts', () => {
     expect(expectations).toContain('Call get_tool_schema with a tool name');
   });
 
-  it('checks the catalog head and the full description in the result', () => {
+  it('checks that the long description arrives through the result, not the catalog', () => {
     const script = getScript('long-description');
     expect(script).toBeDefined();
     const first = script!.steps[0].expect;
-    expect(first?.catalogIncludes).toContain(LONG_DESCRIPTION_HEAD);
+    expect(first?.catalogExcludes).toContain(LONG_DESCRIPTION_HEAD);
     expect(first?.catalogExcludes).toContain(LONG_DESCRIPTION_TAIL);
     expect(script!.steps[1].expect?.messagesInclude).toContain(LONG_DESCRIPTION_TAIL);
   });
@@ -90,7 +110,7 @@ describe('built-in mock LLM scripts', () => {
     const script = getScript('long-catalog-truncated');
     expect(script).toBeDefined();
     const expect1 = script!.steps[0].expect;
-    expect(expect1?.catalogIncludes).toContain('## stdio-mock-long');
+    expect(expect1?.catalogIncludes).toContain('- stdio-mock-long (');
     expect(expect1?.catalogIncludes).toContain(LONG_DESCRIPTION_HEAD);
     expect(expect1?.catalogIncludes).toContain(CLAUDE_TRUNCATION_MARKER);
     expect(expect1?.catalogExcludes).toContain(LONG_DESCRIPTION_TAIL);

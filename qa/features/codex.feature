@@ -6,22 +6,18 @@ Feature: Driving Codex CLI with the router
   "CODEX_HOME", so the plans exercise the real agent without an OpenAI
   account. The mock LLM log is the primary evidence: it shows the router
   tools inside Codex's "mcp__qa_router" namespace tool, the compact
-  catalog, the first-sentence descriptions, and the round-trip results.
+  catalog, and the round-trip results.
 
   Codex advertises MCP tools as namespace children, so the log shows the
   qualified "mcp__qa_router__get_tool_schema" and
-  "mcp__qa_router__invoke_tool" names. The catalog carries only the
-  first sentence of each tool description, so the long-description plan
-  checks that the complete text arrives through the schema result.
-
-  The dynamic-limit plan proves the auto-degradation is scoped to
-  length-limited clients: with the same 205-tool mock, Codex keeps the
-  configured catalog and sees every bulk tool name.
+  "mcp__qa_router__invoke_tool" names. The catalog carries only a
+  bullet per server with its tool count and description; the complete
+  tool descriptions arrive through the schema result.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
   And I prepared the router home with "pnpm qa:setup"
-  And I added the stdio mock server with "pnpm qa:router add stdio-mock --description 'QA stdio mock' --compression-level low -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
+  And I added the stdio mock server with "pnpm qa:router add stdio-mock --description 'QA stdio mock' -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
 
 @TC-CODEX-1
 Scenario: Codex CLI is configured with the router server
@@ -30,14 +26,16 @@ Scenario: Codex CLI is configured with the router server
   And the JSON output contains the command "node" and the argument "build/index.js"
 
 @TC-CODEX-2
-Scenario: Codex discovers the router tools and the stdio catalog
+Scenario: Codex discovers the router tools and the compact stdio catalog
   Given I selected the mock LLM script "stdio-catalog" with "pnpm qa:llm script stdio-catalog"
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the mock LLM log shows the request tools "mcp__qa_router__get_tool_schema" and "mcp__qa_router__invoke_tool"
-  And the mock LLM log shows the catalog section "## stdio-mock"
-  And the mock LLM log shows the catalog tool line "add(a, b)"
+  And the mock LLM log shows the catalog bullet "- stdio-mock (5 tools)"
+  And the mock LLM log shows the catalog hint "Call get_tool_schema with the server name to list all tools"
   And the mock LLM log shows no downstream tool "echo" in the request tools
+  And the mock LLM log shows a passed "catalogExcludes" check for "echo"
+  And the mock LLM log shows the list-mode signature "echo(message)"
   And the mock LLM log shows no validation failures
 
 @TC-CODEX-3
@@ -56,10 +54,10 @@ Scenario: Codex passes every downstream tool description to the model
   Given I selected the mock LLM script "stdio-descriptions" with "pnpm qa:llm script stdio-descriptions"
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
-  Then the log shows the complete "echo" tool description
-  And the log shows the complete "add" tool description
-  And the log shows the complete "multi_block" tool description
-  And the log shows the complete "failing_tool" tool description
+  Then the log shows the complete "echo" tool description in the schema result
+  And the log shows the complete "add" tool description in the schema result
+  And the log shows the complete "multi_block" tool description in the schema result
+  And the log shows the complete "failing_tool" tool description in the schema result
   And the log reports "0 failed" checks
 
 @TC-CODEX-5
@@ -67,9 +65,9 @@ Scenario: A long tool description reaches Codex complete through the schema resu
   Given I selected the mock LLM script "long-description" with "pnpm qa:llm script long-description"
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Read the documented tool schema'"
   And I show the mock LLM log with "pnpm qa:llm log"
-  Then the log shows the catalog beginning "LONG-DESCRIPTION-HEAD"
+  Then the log shows no "LONG-DESCRIPTION-HEAD" in the catalog
   And the log shows no "LONG-DESCRIPTION-TAIL" in the catalog
-  And the log shows the end of the long description in a "get_tool_schema" result
+  And the log shows the complete long description in a "get_tool_schema" result
   And the log reports "0 failed" checks
 
 @TC-CODEX-6
@@ -97,13 +95,3 @@ Scenario: Closing Codex leaves no QA processes behind
   When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
   Then running "pgrep -fl build/index.js" finds no router process
   And running "pgrep -fl qa/scripts/mock-mcp-stdio" finds no stdio mock process
-
-@TC-CODEX-9
-Scenario: Codex keeps the full catalog above the truncation cap
-  Given I selected the mock LLM script "dynamic-limit-kept" with "pnpm qa:llm script dynamic-limit-kept"
-  And I added the stdio mock server with "pnpm qa:router add stdio-mock-bulk --description 'QA stdio bulk mock' --compression-level low --env MOCK_EXTRA_TOOLS=200 -- node_modules/.bin/tsx qa/scripts/mock-mcp-stdio/server.ts"
-  When I run the codex agent with "pnpm qa:agent --agent codex --prompt 'Test the stdio mcp server'"
-  And I show the mock LLM log with "pnpm qa:llm log"
-  Then the log shows a passed "catalogIncludes" check for "bulk_tool_001"
-  And the log shows a passed "catalogExcludes" check for "Provides 205 tools"
-  And the log reports "0 failed" checks

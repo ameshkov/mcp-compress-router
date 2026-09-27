@@ -1,5 +1,4 @@
 export type {
-  CompressionLevel,
   DownstreamServerConfig,
   OAuthConfig,
   ServerTransportType,
@@ -16,6 +15,7 @@ export type { ToolExposureEntry } from './tool-filter.js';
 export { filterTools } from './tool-filter.js';
 export { renderCompactCatalog, renderToolListResponse } from './text-format.js';
 export { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
+export { SERVER_DESCRIPTION_GUIDANCE, normalizeDescription } from './description-guidance.js';
 export { validateArguments } from './validate-arguments.js';
 export { validateGlobPattern } from './validate-glob.js';
 export { expandEnvField } from './expand-env.js';
@@ -23,10 +23,8 @@ export { Logger } from './logger.js';
 export { parseJsonc } from './parse-jsonc.js';
 export { atomicWriteFile } from './atomic-write.js';
 export { killProcessTree } from './process-tree.js';
-export { VALID_COMPRESSION_LEVELS, isCompressionLevel } from './compression-level.js';
 export {
   getDownstreamTimeoutMs,
   getAuthDiscoveryTimeoutMs,
   createTimeoutFetch,
 } from './timeout.js';
-export { exceedsDynamicLimit } from './dynamic-limit.js';

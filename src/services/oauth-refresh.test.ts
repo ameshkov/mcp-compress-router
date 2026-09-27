@@ -51,6 +51,7 @@ const SERVER_METADATA = {
 
 const server: DownstreamServerConfig = {
   name: 'test-server',
+  description: 'Test OAuth server',
   type: 'http',
   url: 'https://example.com/mcp',
 };

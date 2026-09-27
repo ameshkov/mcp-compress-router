@@ -104,7 +104,6 @@ interface AddCommandOptions {
   allowedTools: string[];
   disabledTools: string[];
   port?: number;
-  compressionLevel?: string;
 }
 
 /**
@@ -131,7 +130,6 @@ function buildAddOptions(
     disabledTools:
       options.disabledTools && options.disabledTools.length > 0 ? options.disabledTools : undefined,
     port: options.port,
-    compressionLevel: options.compressionLevel || undefined,
   };
 }
 
@@ -145,7 +143,7 @@ function registerAddCommand(program: Command): void {
     .option('-e, --env <env>', 'environment variable (KEY=value)', collectEnv, {})
     .option(
       '--description <text>',
-      'server description exposed to the LLM to help it route requests',
+      'short (1-2 sentences) server description shown to the model; required',
     )
     .option('--enabled', 'mark the server as enabled (default; writes no field)')
     .option('--disabled', 'mark the server as disabled (writes "enabled": false)')
@@ -160,10 +158,6 @@ function registerAddCommand(program: Command): void {
       'glob pattern denylisting tool names (repeatable)',
       collectStringArray,
       [],
-    )
-    .option(
-      '--compression-level <level>',
-      'tool listing compression level (max, high, medium, low; default high)',
     )
     .option(
       '-p, --port <number>',

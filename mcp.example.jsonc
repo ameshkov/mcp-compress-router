@@ -11,7 +11,7 @@
       "env": {
         "GITHUB_PERSONAL_TOKEN": "${GITHUB_PERSONAL_TOKEN}"
       },
-      "description": "GitHub API tools"
+      "description": "GitHub API tools for browsing repositories, issues, and pull requests."
     },
     // http example — bearer token via env var
     "my-server": {
@@ -20,7 +20,7 @@
       "headers": {
         "Authorization": "Bearer ${MY_SERVER_TOKEN}"
       },
-      "description": "My custom MCP server"
+      "description": "My custom MCP server for internal project data."
     },
     // Tool selection example — only these two tools are exposed; all
     // others the server advertises are hidden and hard-rejected by
@@ -35,7 +35,7 @@
       },
       "allowedTools": ["list_issues", "get_pull_request"],
       "disabledTools": ["*_delete"],
-      "description": "GitHub API tools (restricted)"
+      "description": "GitHub API tools restricted to issue and pull request reads."
     },
     // Disabled server example — skipped entirely at startup (no spawn,
     // no connection, no discovery). All config is preserved so it can
@@ -44,6 +44,7 @@
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-archive"],
+      "description": "Archive tools for old releases (currently disabled).",
       "enabled": false
     }
   }

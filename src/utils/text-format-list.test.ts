@@ -9,7 +9,7 @@ const HINT =
 function makeServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     name: 'fixture',
-    compressionLevel: 'high',
+    description: 'A test fixture server',
     status: 'ok',
     tools: [
       {
@@ -79,12 +79,6 @@ describe('renderToolListResponse', () => {
     expect(text).not.toContain('Echoes the input message.');
     expect(text).not.toContain('Adds two numbers.');
     expect(text).not.toContain('Terminates the server.');
-  });
-
-  it('ignores the compression level and always renders signatures', () => {
-    const text = renderToolListResponse(makeServer({ compressionLevel: 'max' }));
-    expect(text).toContain('echo(message)');
-    expect(text).toContain('add(a, b)');
   });
 
   it('places the authentication status line under the header', () => {
