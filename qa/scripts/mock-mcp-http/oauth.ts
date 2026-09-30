@@ -102,6 +102,7 @@ function authorizationServerMetadata(state: OAuthMockState): Record<string, unkn
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    authorization_response_iss_parameter_supported: true,
   };
 }
 
@@ -123,7 +124,9 @@ function handleRegister(res: ServerResponse, body: string, state: OAuthMockState
   const clientId = randomToken('client');
   const clientSecret = randomToken('secret');
   state.clients.set(clientId, { clientSecret, redirectUris });
-  console.log(`[mock-mcp-http-oauth] registered client ${clientId}`);
+  console.log(
+    `[mock-mcp-http-oauth] registered client ${clientId} redirect_uris=[${redirectUris.join(', ')}]`,
+  );
   sendJson(res, 201, {
     client_id: clientId,
     client_secret: clientSecret,
@@ -133,7 +136,54 @@ function handleRegister(res: ServerResponse, body: string, state: OAuthMockState
 }
 
 /**
+ * Whether a requested redirect URI matches a registered one. Loopback
+ * redirect URIs are matched ignoring the port (RFC 8252 §8.4 excludes the
+ * port from loopback redirect matching); any other URI must match exactly.
+ *
+ * @internal Exported for tests only; not part of the module API.
+ * @param registered - A redirect URI from the client registration.
+ * @param requested - The `redirect_uri` of an authorization request.
+ * @returns True when the request is allowed.
+ */
+export function redirectUriMatches(registered: string, requested: string): boolean {
+  if (registered === requested) {
+    return true;
+  }
+  let registeredUrl: URL;
+  let requestedUrl: URL;
+  try {
+    registeredUrl = new URL(registered);
+    requestedUrl = new URL(requested);
+  } catch {
+    return false;
+  }
+  if (!isLoopbackHost(registeredUrl.hostname) || !isLoopbackHost(requestedUrl.hostname)) {
+    return false;
+  }
+  return (
+    registeredUrl.protocol === requestedUrl.protocol &&
+    registeredUrl.hostname === requestedUrl.hostname &&
+    registeredUrl.pathname === requestedUrl.pathname
+  );
+}
+
+/**
+ * Whether a URL hostname is a loopback address.
+ *
+ * @param hostname - The URL hostname.
+ * @returns True for `127.0.0.1`, `localhost`, and `[::1]`.
+ */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
+}
+
+/**
  * Handles the authorization endpoint (auto-approves and redirects).
+ *
+ * Matches `redirect_uri` against the client registration under the
+ * RFC 8252 loopback rule: scheme, host, and path must match, the port is
+ * ignored for loopback addresses. Echoes the RFC 9207 issuer (`iss`)
+ * advertised in the metadata.
  *
  * @param url - The parsed request URL.
  * @param res - The server response.
@@ -145,18 +195,35 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
     sendJson(res, 400, { error: 'invalid_request', error_description: 'missing redirect_uri' });
     return;
   }
+  const clientId = url.searchParams.get('client_id') ?? '';
+  const registered = state.clients.get(clientId);
+  // A dynamically registered client must use one of its registered
+  // redirect URIs; an unknown client is let through so a static client_id
+  // from the router config keeps working.
+  if (
+    registered &&
+    !registered.redirectUris.some((entry) => redirectUriMatches(entry, redirectUri))
+  ) {
+    console.log(`[mock-mcp-http-oauth] rejected redirect_uri ${redirectUri} for ${clientId}`);
+    sendJson(res, 400, {
+      error: 'invalid_request',
+      error_description: 'redirect_uri does not match the client registration',
+    });
+    return;
+  }
   const code = randomToken('code');
-  state.codes.set(code, {
-    clientId: url.searchParams.get('client_id') ?? '',
-    redirectUri,
-  });
+  state.codes.set(code, { clientId, redirectUri });
   const location = new URL(redirectUri);
   location.searchParams.set('code', code);
   const stateParam = url.searchParams.get('state');
   if (stateParam !== null) {
     location.searchParams.set('state', stateParam);
   }
-  console.log(`[mock-mcp-http-oauth] auto-approved, redirecting to ${redirectUri}`);
+  // RFC 9207 issuer identification, advertised in the metadata above.
+  location.searchParams.set('iss', state.issuer);
+  console.log(
+    `[mock-mcp-http-oauth] auto-approved, redirecting to ${redirectUri} (iss=${state.issuer})`,
+  );
   res.writeHead(302, { location: location.toString() });
   res.end();
 }

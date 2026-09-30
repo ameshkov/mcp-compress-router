@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The OAuth loopback redirect URI now uses `127.0.0.1` instead of
+  `localhost`; pre-registered clients must register
+  `http://127.0.0.1/mcp-compress-router/oauth-callback` (any port).
+- OAuth dynamic client registration now registers that portless loopback
+  redirect URI instead of the ephemeral callback port; a stored
+  registration for a different host (such as legacy `localhost`) is
+  replaced on the next `login`.
+- Dynamic client registration now declares `application_type: "native"`.
+
+### Fixed
+
+- Fixed OAuth login to ignore callbacks that do not echo the generated
+  `state` or that carry a mismatched RFC 9207 `iss`, instead of aborting
+  the login. The advertised `iss` support flag is read from the raw
+  metadata document, so it also covers authorization servers discovered
+  through OpenID Connect discovery, and the OAuth error text shown on
+  the callback page is now HTML-escaped.
+
 ## [v2.0.0] - 2026-09-27
 
 ### Added

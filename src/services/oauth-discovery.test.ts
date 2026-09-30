@@ -118,6 +118,49 @@ function startBareServer(): Promise<{ server: http.Server; mcpUrl: string }> {
 }
 
 /**
+ * Starts a server that publishes ONLY OpenID Connect discovery metadata
+ * (no RFC 8414 endpoint), advertising RFC 9207 `iss` support. The SDK
+ * parses OIDC discovery with a schema that strips undeclared fields, so
+ * the flag is only observable from the raw metadata document.
+ */
+function startOidcServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const origin = `http://${req.headers.host}`;
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    if (req.method === 'GET' && url.pathname === '/.well-known/openid-configuration') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          jwks_uri: `${origin}/jwks`,
+          response_types_supported: ['code'],
+          grant_types_supported: ['authorization_code'],
+          code_challenge_methods_supported: ['S256'],
+          subject_types_supported: ['public'],
+          id_token_signing_alg_values_supported: ['RS256'],
+          authorization_response_iss_parameter_supported: true,
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('{}');
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+    });
+  });
+}
+
+/**
  * Starts a server that answers every request with an HTML page (an SPA
  * catch-all route or a plain web page). The well-known endpoints are not
  * OAuth metadata endpoints, so discovery must treat this as a clean
@@ -193,6 +236,7 @@ function startParallelProbeServer(): Promise<{ server: http.Server; mcpUrl: stri
 describe('discoverAuth', () => {
   let prm: Awaited<ReturnType<typeof startPrmServer>>;
   let legacy: Awaited<ReturnType<typeof startLegacyServer>>;
+  let oidc: Awaited<ReturnType<typeof startOidcServer>>;
   let bare: Awaited<ReturnType<typeof startBareServer>>;
   let html: Awaited<ReturnType<typeof startHtmlServer>>;
   let parallelProbe: Awaited<ReturnType<typeof startParallelProbeServer>>;
@@ -200,6 +244,7 @@ describe('discoverAuth', () => {
   beforeAll(async () => {
     prm = await startPrmServer();
     legacy = await startLegacyServer();
+    oidc = await startOidcServer();
     bare = await startBareServer();
     html = await startHtmlServer();
     parallelProbe = await startParallelProbeServer();
@@ -209,6 +254,7 @@ describe('discoverAuth', () => {
     await Promise.all([
       closeServer(prm.server),
       closeServer(legacy.server),
+      closeServer(oidc.server),
       closeServer(bare.server),
       closeServer(html.server),
       closeServer(parallelProbe.server),
@@ -237,6 +283,23 @@ describe('discoverAuth', () => {
     // AS metadata still found via the origin-root fallback.
     expect(discovered.serverMetadata).toBeDefined();
     expect(discovered.authorizationServerUrl.href).toBe(new URL(legacy.mcpUrl).origin + '/');
+  });
+
+  it('reads the RFC 9207 iss flag from raw OIDC discovery metadata', async () => {
+    const discovered = await discoverAuth(new URL(oidc.mcpUrl));
+
+    expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.authorizationServerUrl.href).toBe(new URL(oidc.mcpUrl).origin + '/');
+    // The SDK parses OIDC discovery with a schema that strips undeclared
+    // fields, so the flag must come from the raw metadata document.
+    expect(discovered.authorizationResponseIssParameterSupported).toBe(true);
+  });
+
+  it('reports no iss support when the metadata does not advertise it', async () => {
+    const discovered = await discoverAuth(new URL(legacy.mcpUrl));
+
+    expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.authorizationResponseIssParameterSupported).toBe(false);
   });
 
   it('returns undefined serverMetadata when no OAuth metadata is published', async () => {

@@ -229,6 +229,20 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(result.stdout).toContain('authsrv');
     expect(result.stdout).toContain('credentials.json');
 
+    // Dynamic client registration registers the portless loopback URI;
+    // RFC 8252 §8.4 excludes the port from loopback matching, so one
+    // registration stays valid across logins.
+    const registeredRedirect = authFixture.getLastRegisteredRedirectUris()?.[0];
+    expect(registeredRedirect).toBe('http://127.0.0.1/mcp-compress-router/oauth-callback');
+
+    // The authorization request carries the ephemeral port the callback
+    // server bound; the fixture accepts it under the loopback rule.
+    const requestedRedirect = authFixture.getLastRedirectUri();
+    expect(requestedRedirect).toMatch(
+      /^http:\/\/127\.0\.0\.1:\d+\/mcp-compress-router\/oauth-callback$/,
+    );
+    expect(requestedRedirect).not.toBe(registeredRedirect);
+
     // The full flow (discover -> register -> authorize -> exchange) must
     // have persisted real tokens in credentials.json.
     const credPath = path.join(tempDir, 'credentials.json');
@@ -267,8 +281,13 @@ describe('MCP Compress Router E2E — OAuth', () => {
 
     // The redirect_uri the fixture received must carry the exact fixed port.
     expect(authFixture.getLastRedirectUri()).toBe(
-      `http://localhost:${port}/mcp-compress-router/oauth-callback`,
+      `http://127.0.0.1:${port}/mcp-compress-router/oauth-callback`,
     );
+    // The registration stays portless even with a pinned port; the
+    // fixture accepts the pinned port under the RFC 8252 loopback rule.
+    expect(authFixture.getLastRegisteredRedirectUris()).toEqual([
+      'http://127.0.0.1/mcp-compress-router/oauth-callback',
+    ]);
   }, 25000);
 
   it('login uses oauth.callbackPort from config when --port is omitted', async () => {
@@ -295,7 +314,12 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Successfully authenticated');
     expect(authFixture.getLastRedirectUri()).toBe(
-      `http://localhost:${port}/mcp-compress-router/oauth-callback`,
+      `http://127.0.0.1:${port}/mcp-compress-router/oauth-callback`,
     );
+    // The registration stays portless even with a configured port; the
+    // fixture accepts the configured port under the RFC 8252 loopback rule.
+    expect(authFixture.getLastRegisteredRedirectUris()).toEqual([
+      'http://127.0.0.1/mcp-compress-router/oauth-callback',
+    ]);
   }, 25000);
 });

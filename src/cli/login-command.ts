@@ -3,6 +3,9 @@ import { Logger } from '../utils/index.js';
 import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
 import { loadConfig } from '../services/config.js';
 import { discoverAuth, discoverSingleServer, saveToolCache } from '../services/index.js';
+import { OAUTH_LOOPBACK_URI, type OAuthCredentialManager } from '../services/oauth.js';
+import type { OAuthClientInformationMixed } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
 
 /** SDK OAuth metadata type (non-null after discovery). */
 type OAuthMetadata = NonNullable<
@@ -11,11 +14,6 @@ type OAuthMetadata = NonNullable<
       typeof import('@modelcontextprotocol/sdk/client/auth.js').discoverAuthorizationServerMetadata
     >
   >
->;
-
-/** SDK `startAuthorization` result type. */
-type AuthResult = Awaited<
-  ReturnType<typeof import('@modelcontextprotocol/sdk/client/auth.js').startAuthorization>
 >;
 
 /**
@@ -69,242 +67,145 @@ async function _getSdkAuth(): Promise<typeof import('@modelcontextprotocol/sdk/c
   return _sdkAuth;
 }
 
+// Cached lazy import for the browser launcher.
+let _openBrowser: ((url: string) => Promise<void>) | undefined;
+
 /**
- * Discovers OAuth metadata and registers the client if dynamic registration
- * is needed.
+ * Returns the browser launcher, loading the module on first use.
  *
- * @param mgr - OAuth credential manager for the target server.
+ * @returns The `openBrowser` function.
+ */
+async function _getOpenBrowser(): Promise<(url: string) => Promise<void>> {
+  if (!_openBrowser) {
+    _openBrowser = (await import('../utils/open-browser.js')).openBrowser;
+  }
+  return _openBrowser;
+}
+
+/**
+ * Discovers the OAuth authorization server metadata for a server.
+ *
  * @param targetServer - Typed downstream server configuration.
  * @param name - Server name (for error messages).
- * @returns The discovered OAuth metadata (non-null after validation).
- * @throws If the server does not expose OAuth metadata or registration.
+ * @returns The discovered OAuth metadata and whether the authorization
+ *   server commits to the RFC 9207 `iss` parameter (read from the raw
+ *   metadata document, so it also covers OpenID Connect discovery).
+ * @throws If the server does not expose OAuth metadata.
  */
-async function setupOAuthClient(
-  mgr: import('../services/oauth.js').OAuthCredentialManager,
+async function discoverOAuthMetadata(
   targetServer: DownstreamServerConfig,
   name: string,
-): Promise<OAuthMetadata> {
-  const { registerClient } = await _getSdkAuth();
-
+): Promise<{ metadata: OAuthMetadata; requireIssuer: boolean }> {
   const serverUrl = new URL(targetServer.url!);
   const discovered = await discoverAuth(serverUrl);
   const metadata = discovered.serverMetadata;
   if (!metadata) {
     throw new Error(`Server "${name}" does not expose OAuth metadata.`);
   }
-
-  // DCR is only required when there is no pre-registered client (static
-  // override) and no previously stored client information. Servers without a
-  // registration_endpoint (e.g. GitHub) work when an "oauth.clientId"
-  // override is configured.
-  if (!mgr.hasStaticClient() && !(await mgr.clientInformation())) {
-    if (!metadata.registration_endpoint) {
-      throw new Error(
-        `Server "${name}" does not support dynamic client registration. Configure an "oauth.clientId" override in mcp.json with a pre-registered client ID.`,
-      );
-    }
-    const regResult = await registerClient(new URL(metadata.registration_endpoint), {
-      metadata,
-      clientMetadata: mgr.clientMetadata,
-    });
-    await mgr.saveClientInformation(regResult);
-  }
-
-  return metadata as NonNullable<typeof metadata>;
+  return {
+    metadata: metadata as NonNullable<typeof metadata>,
+    requireIssuer: discovered.authorizationResponseIssParameterSupported,
+  };
 }
 
 /**
- * Starts a temporary HTTP server, opens the browser for authorization,
- * and waits for the OAuth callback with a configurable timeout.
+ * Whether a stored client registration covers the portless loopback
+ * redirect URI. The comparison ignores the port (RFC 8252 §8.4 excludes
+ * it from loopback redirect matching) but requires the scheme, host, and
+ * path to match, so a registration for a different host (e.g.
+ * `localhost`) is not reused.
  *
- * @param mgr - OAuth credential manager.
+ * @param client - The stored client registration.
+ * @returns True when at least one registered redirect URI matches
+ *   {@link OAUTH_LOOPBACK_URI} ignoring the port.
+ */
+function _registrationCoversLoopback(client: OAuthClientInformationMixed): boolean {
+  if (!('redirect_uris' in client) || client.redirect_uris.length === 0) {
+    return false;
+  }
+  const expected = new URL(OAUTH_LOOPBACK_URI);
+  return client.redirect_uris.some((entry) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(entry);
+    } catch {
+      return false;
+    }
+    return (
+      parsed.protocol === expected.protocol &&
+      parsed.hostname === expected.hostname &&
+      parsed.pathname === expected.pathname
+    );
+  });
+}
+
+/**
+ * Registers a client through dynamic client registration (RFC 7591) unless
+ * a static `oauth.clientId` override is configured or a stored registration
+ * already covers the loopback redirect URI. Registration does not depend on
+ * the callback port: the registered URI is the portless
+ * {@link OAUTH_LOOPBACK_URI}, and RFC 8252 §8.4 excludes the port from
+ * loopback redirect matching.
+ *
+ * @param mgr - OAuth credential manager for the target server.
+ * @param metadata - Discovered OAuth metadata.
+ * @param name - Server name (for error messages).
+ * @throws If the server does not support dynamic client registration and no
+ *   reusable registration or static client is available.
+ */
+async function registerClientIfNeeded(
+  mgr: OAuthCredentialManager,
+  metadata: OAuthMetadata,
+  name: string,
+): Promise<void> {
+  if (mgr.hasStaticClient()) {
+    return;
+  }
+  const stored = await mgr.clientInformation();
+  if (stored && _registrationCoversLoopback(stored)) {
+    return;
+  }
+  if (!metadata.registration_endpoint) {
+    throw new Error(
+      `Server "${name}" does not support dynamic client registration. Configure an "oauth.clientId" override in mcp.json with a pre-registered client ID.`,
+    );
+  }
+  const { registerClient } = await _getSdkAuth();
+  const registration = await registerClient(new URL(metadata.registration_endpoint), {
+    metadata,
+    clientMetadata: mgr.clientMetadata,
+  });
+  await mgr.saveClientInformation(registration);
+}
+
+/**
+ * Registers the client if needed and builds the authorization URL. Passed to
+ * the callback server as its post-listen hook, so it runs once the real
+ * callback port is known and the authorization request carries it.
+ *
+ * @param mgr - OAuth credential manager for the target server.
  * @param metadata - Discovered OAuth metadata.
  * @param targetServer - Typed downstream server configuration.
- * @returns The authorization code and the full `startAuthorization` result.
- * @throws If the callback times out or the authorization is denied.
+ * @param name - Server name (for error messages).
+ * @param state - CSRF state generated for this login attempt.
+ * @returns The `startAuthorization` result.
  */
-async function acquireAuthorizationCode(
-  mgr: import('../services/oauth.js').OAuthCredentialManager,
+async function beginAuthorization(
+  mgr: OAuthCredentialManager,
   metadata: OAuthMetadata,
   targetServer: DownstreamServerConfig,
-  callbackPort: number,
-): Promise<{
-  authorizationCode: string;
-  authResult: AuthResult;
-}> {
+  name: string,
+  state: string,
+): Promise<AuthResult> {
+  await registerClientIfNeeded(mgr, metadata, name);
   const { startAuthorization } = await _getSdkAuth();
-  const { openBrowser } = await import('../utils/open-browser.js');
-  const TIMEOUT_MS = _readTimeoutMs();
-
-  return _startCallbackServerAndWait(
-    mgr,
+  return startAuthorization(new URL(metadata.authorization_endpoint!), {
     metadata,
-    targetServer,
-    startAuthorization,
-    openBrowser,
-    TIMEOUT_MS,
-    callbackPort,
-  );
-}
-
-/**
- * Creates the HTTP request listener for the temporary OAuth callback server.
- *
- * Uses `tempServer` captured via closure for calling `.close()` and the
- * `resolve`/`reject` functions to settle the promise. The `timeoutHandle`
- * wrapper allows the callback to clear the timeout when a response arrives.
- *
- * @param timeoutHandle - Mutable object wrapping the timeout ID.
- * @param tempServer - The temporary HTTP server (to close on completion).
- * @param resolve - Promise resolve function.
- * @param reject - Promise reject function.
- * @returns An HTTP request listener.
- */
-function _makeCallbackHandler(
-  timeoutHandle: { current: ReturnType<typeof setTimeout> | undefined },
-  tempServer: import('node:http').Server,
-  resolve: (code: string) => void,
-  reject: (err: Error) => void,
-): import('node:http').RequestListener {
-  return (req, res) => {
-    const url = new URL(req.url!, `http://localhost`);
-    const code = url.searchParams.get('code');
-    const error = url.searchParams.get('error');
-
-    if (code) {
-      if (timeoutHandle.current) clearTimeout(timeoutHandle.current);
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(
-        '<html><body><h1>Authorization successful!</h1><p>You can close this window.</p></body></html>',
-      );
-      tempServer.close();
-      resolve(code);
-    } else if (error) {
-      if (timeoutHandle.current) clearTimeout(timeoutHandle.current);
-      res.writeHead(400, { 'Content-Type': 'text/html' });
-      res.end(`<html><body><h1>Authorization failed</h1><p>${error}</p></body></html>`);
-      tempServer.close();
-      reject(new Error(`Authorization failed: ${error}`));
-    } else {
-      res.writeHead(404);
-      res.end('Not found');
-    }
-  };
-}
-
-/** Creates a temp HTTP server, starts OAuth flow, waits for callback. */
-async function _startCallbackServerAndWait(
-  mgr: import('../services/oauth.js').OAuthCredentialManager,
-  metadata: OAuthMetadata,
-  targetServer: DownstreamServerConfig,
-  startAuthorization: Awaited<ReturnType<typeof _getSdkAuth>>['startAuthorization'],
-  openBrowser: (url: string) => Promise<void>,
-  TIMEOUT_MS: number,
-  callbackPort: number,
-): Promise<{
-  authorizationCode: string;
-  authResult: AuthResult;
-}> {
-  const http = await import('node:http');
-  const timeoutHandle: {
-    current: ReturnType<typeof setTimeout> | undefined;
-  } = { current: undefined };
-
-  const authResultRef: {
-    value: Awaited<ReturnType<typeof startAuthorization>> | undefined;
-  } = { value: undefined };
-
-  const authorizationCode = await new Promise<string>((resolve, reject) => {
-    const tempServer = http.createServer();
-    tempServer.on('request', _makeCallbackHandler(timeoutHandle, tempServer, resolve, reject));
-
-    tempServer.listen(
-      callbackPort,
-      _onServerListen(
-        tempServer,
-        mgr,
-        metadata,
-        targetServer,
-        startAuthorization,
-        openBrowser,
-        TIMEOUT_MS,
-        timeoutHandle,
-        authResultRef,
-        reject,
-      ),
-    );
-
-    tempServer.on('error', (err) => {
-      if (timeoutHandle.current) clearTimeout(timeoutHandle.current);
-      reject(err);
-    });
+    clientInformation: (await mgr.clientInformation())!,
+    redirectUrl: mgr.redirectUrl as string,
+    scope: targetServer.oauth?.scope,
+    state,
   });
-
-  if (timeoutHandle.current) clearTimeout(timeoutHandle.current);
-
-  return { authorizationCode, authResult: authResultRef.value! };
-}
-
-/** Listen callback: sets port, starts auth, opens browser, arms timeout. */
-function _onServerListen(
-  tempServer: import('node:http').Server,
-  mgr: import('../services/oauth.js').OAuthCredentialManager,
-  metadata: OAuthMetadata,
-  targetServer: DownstreamServerConfig,
-  startAuthorization: Awaited<ReturnType<typeof _getSdkAuth>>['startAuthorization'],
-  openBrowser: (url: string) => Promise<void>,
-  TIMEOUT_MS: number,
-  timeoutHandle: { current: ReturnType<typeof setTimeout> | undefined },
-  authResultRef: { value: AuthResult | undefined },
-  reject: (err: Error) => void,
-): () => Promise<void> {
-  return async () => {
-    try {
-      const address = tempServer.address();
-      if (!address || typeof address === 'string') {
-        reject(new Error('Failed to get server address'));
-        return;
-      }
-      const actualPort = address.port;
-
-      mgr.setActualPort(actualPort);
-
-      authResultRef.value = await startAuthorization(new URL(metadata.authorization_endpoint!), {
-        metadata,
-        clientInformation: (await mgr.clientInformation())!,
-        redirectUrl: mgr.redirectUrl as string,
-        scope: targetServer.oauth?.scope,
-      });
-
-      await mgr.saveCodeVerifier(authResultRef.value.codeVerifier);
-
-      void openBrowser(authResultRef.value.authorizationUrl.toString());
-
-      timeoutHandle.current = setTimeout(() => {
-        tempServer.close();
-        reject(
-          new Error(`OAuth login timed out after ${TIMEOUT_MS / 1000} seconds. Please try again.`),
-        );
-      }, TIMEOUT_MS);
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error(String(err)));
-    }
-  };
-}
-
-/**
- * Reads the OAuth login timeout from the
- * `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` env var, defaulting to 120 seconds.
- *
- * @returns Timeout in milliseconds.
- */
-function _readTimeoutMs(): number {
-  const env = process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS;
-  if (env) {
-    const parsed = parseInt(env, 10);
-    if (!isNaN(parsed) && parsed > 0) return parsed;
-  }
-  return 120_000;
 }
 
 /**
@@ -352,9 +253,11 @@ function _resolveCallbackPort(
  *
  * Validates the server exists in config and is an HTTP type.
  * For HTTP servers, runs the OAuth authorization-code flow
- * using the SDK's OAuth client infrastructure. The flow opens
- * a browser, handles the redirect callback, exchanges the
- * authorization code for tokens, and persists them in credentials.json.
+ * using the SDK's OAuth client infrastructure. The flow binds a
+ * temporary loopback callback server, registers the client (when
+ * needed) with the portless loopback callback URI, opens a browser,
+ * handles the redirect callback, exchanges the authorization code for
+ * tokens, and persists them in credentials.json.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
@@ -378,14 +281,16 @@ export async function handleLogin(
   const { OAuthCredentialManager } = await import('../services/oauth.js');
   const mgr = new OAuthCredentialManager(configPath, targetServer);
 
-  const metadata = await setupOAuthClient(mgr, targetServer, name);
+  const { metadata, requireIssuer } = await discoverOAuthMetadata(targetServer, name);
 
-  const { authorizationCode, authResult } = await acquireAuthorizationCode(
+  const { authorizationCode, authResult } = await acquireAuthorizationCode({
     mgr,
-    metadata,
-    targetServer,
     callbackPort,
-  );
+    openBrowser: await _getOpenBrowser(),
+    expectedIssuer: metadata.issuer,
+    requireIssuer,
+    beginAuthorization: (state) => beginAuthorization(mgr, metadata, targetServer, name, state),
+  });
 
   const { exchangeAuthorization } = await _getSdkAuth();
 

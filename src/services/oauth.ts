@@ -55,16 +55,29 @@ function needsRefresh(expiresAtIso: string): boolean {
 
 /**
  * The OAuth redirect callback path served by the temporary local HTTP
- * server started during `login`. The full redirect URI is
- * `http://localhost:<port>/mcp-compress-router/oauth-callback`, where
- * `<port>` is assigned by the OS. Register this path (on `localhost`,
- * any port) with OAuth providers that require a pre-registered client.
+ * server started during `login`. The authorization-request redirect URI
+ * is `http://127.0.0.1:<port>/mcp-compress-router/oauth-callback`, where
+ * `<port>` is assigned by the OS. Register this path (on the loopback
+ * interface, any port) with OAuth providers that require a pre-registered
+ * client.
  *
  * @internal Exported for tests only; not part of the public module API.
- *   The constant is consumed internally by `redirectUrl`; tests import
- *   it directly to avoid hardcoding the path string.
+ *   The constant is consumed internally by `redirectUrl` and
+ *   `OAUTH_LOOPBACK_URI`; tests import it directly to avoid hardcoding
+ *   the path string.
  */
 export const OAUTH_CALLBACK_PATH = '/mcp-compress-router/oauth-callback';
+
+/**
+ * The loopback redirect URI registered with OAuth providers through
+ * dynamic client registration. It carries no port: RFC 8252 §8.4
+ * excludes the port from loopback redirect matching, so one registration
+ * stays valid across logins no matter which port the callback server
+ * binds. The authorization request and the token exchange use
+ * {@link OAuthCredentialManager.redirectUrl} instead, which carries the
+ * actual port.
+ */
+export const OAUTH_LOOPBACK_URI = `http://127.0.0.1${OAUTH_CALLBACK_PATH}`;
 
 /**
  * Implements OAuthClientProvider backed by credentials.json credential storage.
@@ -102,22 +115,45 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     }
   }
 
+  /**
+   * The redirect URI sent with the authorization request and with the
+   * token exchange. Carries the actual port assigned by the OS (0 until
+   * {@link setActualPort} is called); both requests must send the same
+   * value (RFC 6749 §4.1.3). Dynamic client registration does not use
+   * it — the registered URI is the portless {@link OAUTH_LOOPBACK_URI}.
+   */
   get redirectUrl(): string | URL | undefined {
-    // Return the callback URL with the actual port assigned by the OS.
-    // Falls back to port 0 until setActualPort() is called by login-command.
-    return `http://localhost:${this._actualPort}${OAUTH_CALLBACK_PATH}`;
+    return `http://127.0.0.1:${this._actualPort}${OAUTH_CALLBACK_PATH}`;
   }
 
-  get clientMetadata(): OAuthClientMetadata {
+  /**
+   * Client metadata used for dynamic client registration. The registered
+   * redirect URI is the portless loopback form
+   * ({@link OAUTH_LOOPBACK_URI}): RFC 8252 §8.4 excludes the port from
+   * loopback redirect matching, so the registration stays valid across
+   * logins regardless of the port the callback server binds.
+   *
+   * `application_type` is required for native clients by the MCP
+   * authorization specification (and by OIDC-aware registration
+   * endpoints, which otherwise default to "web"). The SDK's
+   * OAuthClientMetadata type does not declare it yet, so the return
+   * type widens explicitly; the SDK spreads this object into the
+   * registration body unchanged, so the field reaches the server.
+   */
+  get clientMetadata(): OAuthClientMetadata & { application_type: 'native' } {
     return {
-      redirect_uris: [this.redirectUrl as string],
+      redirect_uris: [OAUTH_LOOPBACK_URI],
       client_name: 'mcp-compress-router',
+      application_type: 'native',
     };
   }
 
   /**
    * Sets the actual listening port of the temporary HTTP callback server.
-   * Must be called before startAuthorization so the redirect_uri is correct.
+   * Must be called before startAuthorization so the authorization request
+   * (and the token exchange that follows it) carries the correct
+   * redirect_uri. Dynamic client registration does not depend on it: the
+   * registered URI is the portless {@link OAUTH_LOOPBACK_URI}.
    *
    * @param port - The actual port the callback server is listening on.
    */

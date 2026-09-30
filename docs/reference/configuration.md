@@ -324,16 +324,21 @@ The `login` command starts a temporary local HTTP server and uses a
 loopback redirect URI (per RFC 8252):
 
 ```text
-http://localhost:<port>/mcp-compress-router/oauth-callback
+http://127.0.0.1:<port>/mcp-compress-router/oauth-callback
 ```
 
 `<port>` is assigned by the OS at login time, so there is no fixed port
-to register. When the provider requires a pre-registered redirect URI,
-register the loopback form without a port:
+to register. Dynamic client registration registers the loopback form
+without a port:
 
 ```text
-http://localhost/mcp-compress-router/oauth-callback
+http://127.0.0.1/mcp-compress-router/oauth-callback
 ```
+
+RFC 8252 §8.4 excludes the port when a provider matches loopback
+redirect URIs, so the registration stays valid across logins. When the
+provider requires a pre-registered redirect URI, register the same
+portless form.
 
 If the provider demands a redirect URI with an exact port, pin it with
 the `--port` flag or the `oauth.callbackPort` field:
@@ -341,6 +346,11 @@ the `--port` flag or the `oauth.callbackPort` field:
 ```bash
 mcp-compress-router login my-http --port 8765
 ```
+
+An exact-port requirement applies to pre-registered clients: enter
+`http://127.0.0.1:8765/mcp-compress-router/oauth-callback` in the
+provider's console. Dynamic client registration always registers the
+portless form.
 
 `--port` overrides `oauth.callbackPort` for a single run; pass `--port 0`
 to force an OS-assigned port even when `oauth.callbackPort` is set.

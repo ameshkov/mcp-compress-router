@@ -13,6 +13,8 @@ export interface AuthFixtureServer {
   getLastRefreshToken: () => string | undefined;
   /** Get the last `redirect_uri` received on the /authorize endpoint. */
   getLastRedirectUri: () => string | undefined;
+  /** Get the last `redirect_uris` received on the /register endpoint. */
+  getLastRegisteredRedirectUris: () => string[] | undefined;
   /** Mark all refresh tokens as expired/unusable. */
   invalidateRefreshToken: () => void;
 }
@@ -31,10 +33,11 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   let lastCode: string | undefined;
   let lastRefreshToken: string | undefined;
   let lastRedirectUri: string | undefined;
+  let lastRegisteredRedirectUris: string[] | undefined;
   let refreshTokensValid = true;
 
-  // In-memory store: client_id -> client_secret
-  const registeredClients = new Map<string, string>();
+  // In-memory store: client_id -> registration (secret + redirect URIs)
+  const registeredClients = new Map<string, { clientSecret: string; redirectUris: string[] }>();
   // In-memory store: access_token -> { refresh_token, expires_at }
   const issuedTokens = new Map<string, { refreshToken: string; expiresAt: number }>();
 
@@ -112,6 +115,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           code_challenge_methods_supported: ['S256'],
+          authorization_response_iss_parameter_supported: true,
         }),
       );
       return;
@@ -121,17 +125,19 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
     if (req.method === 'POST' && url.pathname === '/register') {
       const body = await readBody(req);
       const parsed = JSON.parse(body);
+      lastRegisteredRedirectUris = parsed.redirect_uris;
       const clientId = `client-${randomBytes(4).toString('hex')}`;
       const clientSecret = `secret-${randomBytes(8).toString('hex')}`;
-      registeredClients.set(clientId, clientSecret);
+      registeredClients.set(clientId, {
+        clientSecret,
+        redirectUris: parsed.redirect_uris ?? [],
+      });
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
-          redirect_uris: parsed.redirect_uris || [
-            'http://localhost:0/mcp-compress-router/oauth-callback',
-          ],
+          redirect_uris: parsed.redirect_uris ?? [],
         }),
       );
       return;
@@ -141,6 +147,22 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
     if (req.method === 'GET' && url.pathname === '/authorize') {
       const redirectUri = url.searchParams.get('redirect_uri');
       lastRedirectUri = redirectUri ?? undefined;
+      const clientId = url.searchParams.get('client_id');
+      const registered = clientId ? registeredClients.get(clientId) : undefined;
+      if (
+        registered &&
+        (!redirectUri ||
+          !registered.redirectUris.some((entry) => redirectUriMatches(entry, redirectUri)))
+      ) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'redirect_uri does not match the client registration',
+          }),
+        );
+        return;
+      }
       const state = url.searchParams.get('state');
       const code = `auth-code-${randomBytes(8).toString('hex')}`;
       lastCode = code;
@@ -150,6 +172,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
       if (state) {
         redirectUrl.searchParams.set('state', state);
       }
+      // RFC 9207 issuer identification, advertised in the metadata above.
+      redirectUrl.searchParams.set('iss', `http://localhost:${port}`);
       res.writeHead(302, { Location: redirectUrl.toString() });
       res.end();
       return;
@@ -287,6 +311,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         getLastCode: () => lastCode,
         getLastRefreshToken: () => lastRefreshToken,
         getLastRedirectUri: () => lastRedirectUri,
+        getLastRegisteredRedirectUris: () => lastRegisteredRedirectUris,
         invalidateRefreshToken: () => {
           refreshTokensValid = false;
         },
@@ -294,6 +319,38 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
     });
     server.on('error', reject);
   });
+}
+
+/**
+ * Whether a requested redirect URI matches a registered one. Loopback
+ * redirect URIs are matched ignoring the port (RFC 8252 §8.4); any other
+ * URI must match exactly.
+ */
+function redirectUriMatches(registered: string, requested: string): boolean {
+  let registeredUrl: URL;
+  let requestedUrl: URL;
+  try {
+    registeredUrl = new URL(registered);
+    requestedUrl = new URL(requested);
+  } catch {
+    return false;
+  }
+  if (registered === requested) {
+    return true;
+  }
+  if (!isLoopbackHost(registeredUrl.hostname) || !isLoopbackHost(requestedUrl.hostname)) {
+    return false;
+  }
+  return (
+    registeredUrl.protocol === requestedUrl.protocol &&
+    registeredUrl.hostname === requestedUrl.hostname &&
+    registeredUrl.pathname === requestedUrl.pathname
+  );
+}
+
+/** Whether a URL hostname is a loopback address. */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
 }
 
 async function readBody(req: http.IncomingMessage): Promise<string> {

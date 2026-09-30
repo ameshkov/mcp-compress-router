@@ -4,7 +4,15 @@ Feature: Using an OAuth-protected streamable-http MCP server
   storage, logout, and login again. The agent-driven authenticated round
   trip lives in `opencode.feature`. The workspace sets
   MCP_COMPRESS_ROUTER_BROWSER=qa-browser, so `add` and `login` complete
-  the authorization flow headlessly.
+  the authorization flow headlessly. A login completing also proves the
+  CSRF `state` round trip: the mock echoes the state back, and a callback
+  that does not echo it is ignored, so the login would time out instead.
+  The mock authorization server matches `redirect_uri` against the
+  client registration under the RFC 8252 loopback rule: scheme, host,
+  and path must match, the port is ignored. It also advertises and
+  echoes the RFC 9207 issuer (`iss`), so a login completing proves the
+  router used a callback URI the registration covers and accepted the
+  matching issuer.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -33,3 +41,18 @@ Scenario: A logged-out server can be logged in again
   And I run "pnpm qa:router list"
   Then the output reports "Successfully authenticated server "oauth-mock""
   And the output shows an "oauth-mock" row with auth "authenticated"
+
+@TC-OAUTH-4
+Scenario: The login registers the portless loopback callback URI
+  When I add the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  Then the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "redirect_uris=[http://127.0.0.1/mcp-compress-router/oauth-callback]" line
+  And the same output shows an "auto-approved, redirecting to http://127.0.0.1:" line
+  And the same output contains the callback path "/mcp-compress-router/oauth-callback"
+
+@TC-OAUTH-5
+Scenario: Login accepts the issuer the mock advertises
+  When I add the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  And I run "pnpm qa:router list"
+  Then the output reports "Successfully authenticated server "oauth-mock""
+  And the output shows an "oauth-mock" row with auth "authenticated"
+  And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows an "iss=http://mock-mcp-http-oauth:3101" line

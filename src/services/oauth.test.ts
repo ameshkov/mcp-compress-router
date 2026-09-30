@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { OAuthCredentialManager, OAUTH_CALLBACK_PATH } from './oauth.js';
+import { OAuthCredentialManager, OAUTH_CALLBACK_PATH, OAUTH_LOOPBACK_URI } from './oauth.js';
 import { GuidedAuthError } from './index.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
@@ -28,24 +28,30 @@ describe('OAuthCredentialManager', () => {
     url: 'https://example.com/mcp',
   };
 
-  it('redirectUrl returns localhost URL with actual port after setActualPort', () => {
+  it('redirectUrl returns loopback URL with actual port after setActualPort', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
     mgr.setActualPort(54321);
-    expect(mgr.redirectUrl).toBe(`http://localhost:54321${OAUTH_CALLBACK_PATH}`);
+    expect(mgr.redirectUrl).toBe(`http://127.0.0.1:54321${OAUTH_CALLBACK_PATH}`);
   });
 
   it('redirectUrl returns fallback port 0 before setActualPort is called', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
-    expect(mgr.redirectUrl).toBe(`http://localhost:0${OAUTH_CALLBACK_PATH}`);
+    expect(mgr.redirectUrl).toBe(`http://127.0.0.1:0${OAUTH_CALLBACK_PATH}`);
   });
 
-  it('clientMetadata returns correct metadata with actual port', () => {
+  it('clientMetadata registers the loopback callback URI without a port', () => {
     const mgr = new OAuthCredentialManager(configPath, server);
+    expect(new URL(mgr.clientMetadata.redirect_uris[0]).port).toBe('');
     mgr.setActualPort(54321);
     expect(mgr.clientMetadata.client_name).toBe('mcp-compress-router');
-    expect(mgr.clientMetadata.redirect_uris).toEqual([
-      `http://localhost:54321${OAUTH_CALLBACK_PATH}`,
-    ]);
+    expect(mgr.clientMetadata.redirect_uris).toEqual([OAUTH_LOOPBACK_URI]);
+    // The registered URI must stay portless after the callback server
+    // binds: RFC 8252 §8.4 excludes the port from loopback redirect
+    // matching, so one registration stays valid across logins.
+    expect(new URL(mgr.clientMetadata.redirect_uris[0]).port).toBe('');
+    // Native clients must declare application_type so OIDC-aware
+    // registration endpoints do not default to "web".
+    expect(mgr.clientMetadata.application_type).toBe('native');
   });
 
   it('clientInformation returns undefined when no credentials stored', async () => {

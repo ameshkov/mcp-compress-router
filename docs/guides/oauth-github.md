@@ -12,7 +12,7 @@ access.
    *Register an application*). Give it any name and homepage URL.
 2. **Configure the callback URL.**
    Set the *Authorization callback URL* to:
-   `http://localhost/mcp-compress-router/oauth-callback`
+   `http://127.0.0.1/mcp-compress-router/oauth-callback`
 3. **Add the GitHub MCP server by URL.**
 
    ```bash

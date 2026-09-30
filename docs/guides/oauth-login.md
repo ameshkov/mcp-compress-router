@@ -53,28 +53,35 @@ a loopback redirect URI (per
 [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252)):
 
 ```text
-http://localhost:<port>/mcp-compress-router/oauth-callback
+http://127.0.0.1:<port>/mcp-compress-router/oauth-callback
 ```
 
 `<port>` is chosen by the OS at login time, so there is no fixed port
-to register. When a provider requires a pre-registered redirect URI,
-register the loopback form **without a port**:
+to register. Dynamic client registration registers the loopback form
+**without a port**:
 
 ```text
-http://localhost/mcp-compress-router/oauth-callback
+http://127.0.0.1/mcp-compress-router/oauth-callback
 ```
 
+RFC 8252 §8.4 excludes the port when a provider matches loopback
+redirect URIs, so the registration stays valid across logins even though
+the authorization request carries the ephemeral port. When a provider
+requires a pre-registered redirect URI, register the same portless form.
+
 Most providers (GitHub included) match the scheme, host, and path and
-ignore the port on `localhost`. If your provider demands a redirect URI
-with an **exact port**, pin it with `--port`:
+ignore the port on loopback addresses. If your provider demands a
+redirect URI with an **exact port**, pin it with `--port`:
 
 ```bash
 npx mcp-compress-router@latest login my-http --port 8765
 ```
 
-This binds the callback server to `8765`, so the redirect URI becomes
-`http://localhost:8765/mcp-compress-router/oauth-callback` — register
-that exact URL with the provider. To reuse the same port on every
+This binds the callback server to `8765`, so the authorization request
+uses `http://127.0.0.1:8765/mcp-compress-router/oauth-callback`. An
+exact-port requirement applies to pre-registered clients: enter that
+exact URL in the provider's console. Dynamic client registration always
+registers the portless form above. To reuse the same port on every
 `login`, persist it in the server's `oauth` block instead of passing
 the flag each time:
 

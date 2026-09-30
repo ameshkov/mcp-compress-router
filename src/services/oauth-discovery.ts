@@ -21,6 +21,14 @@ interface DiscoveredAuth {
    * server URL itself.
    */
   authorizationServerUrl: URL;
+  /**
+   * Whether the authorization server advertised RFC 9207
+   * `authorization_response_iss_parameter_supported: true`. Read from the
+   * raw metadata document because the SDK parses OpenID Connect discovery
+   * metadata with a schema that strips fields it does not declare. Always
+   * `false` when no metadata was discovered.
+   */
+  authorizationResponseIssParameterSupported: boolean;
 }
 
 /**
@@ -59,13 +67,68 @@ function toUrl(value: string): URL | undefined {
 }
 
 /**
+ * Captured raw JSON of a successful metadata response, filled in by
+ * {@link createRawMetadataFetch}.
+ */
+interface RawMetadataCapture {
+  /** Raw JSON body of the last successful response, when it parsed. */
+  raw?: Record<string, unknown>;
+}
+
+/**
+ * Wraps a fetch function so the raw JSON body of every successful
+ * response is captured. The SDK parses OpenID Connect discovery metadata
+ * with a schema that strips undeclared fields (such as the RFC 9207
+ * `authorization_response_iss_parameter_supported` flag), so the raw
+ * document is the only place those fields remain observable.
+ *
+ * The SDK's discovery helper returns as soon as one discovery URL yields
+ * metadata, so the last captured body belongs to the response the
+ * returned metadata was parsed from.
+ *
+ * @param base - The fetch function to wrap.
+ * @param capture - Sink for the raw JSON body.
+ * @returns A fetch function that captures successful JSON responses.
+ */
+function createRawMetadataFetch(base: typeof fetch, capture: RawMetadataCapture): typeof fetch {
+  return async (input, init) => {
+    const response = await base(input, init);
+    if (response.ok) {
+      try {
+        const raw: unknown = await response.clone().json();
+        if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+          capture.raw = raw as Record<string, unknown>;
+        }
+      } catch {
+        // A non-JSON body is a clean discovery miss, not metadata; the
+        // SDK reports it to the caller.
+      }
+    }
+    return response;
+  };
+}
+
+/**
+ * Reads the RFC 9207 `authorization_response_iss_parameter_supported`
+ * flag from the captured raw metadata document.
+ *
+ * @param capture - The captured raw metadata, when one was parsed.
+ * @returns True when the document declares the flag as `true`.
+ */
+function readIssParameterSupported(capture: RawMetadataCapture): boolean {
+  return capture.raw?.authorization_response_iss_parameter_supported === true;
+}
+
+/**
  * Result of probing a single authorization-server candidate.
  */
 interface CandidateResult {
   /** The candidate URL that was probed. */
   url: URL;
-  /** The metadata found at the candidate, or `undefined` on a miss. */
-  metadata: AuthorizationServerMetadata | undefined;
+  /** The metadata found at the candidate. */
+  metadata: AuthorizationServerMetadata;
+  /** RFC 9207 `iss` support read from the raw metadata document. */
+  authorizationResponseIssParameterSupported: boolean;
 }
 
 /**
@@ -75,25 +138,80 @@ interface CandidateResult {
  * delay a hit found by another candidate.
  *
  * @param urls - The candidate URLs to probe.
- * @param probe - The per-candidate probe callback (never throws).
+ * @param probe - The per-candidate probe callback (never throws; returns
+ *   `undefined` on a miss).
  * @returns The first hit, or `undefined` when every candidate missed.
  */
 async function raceCandidates(
   urls: URL[],
-  probe: (url: URL) => Promise<AuthorizationServerMetadata | undefined>,
+  probe: (url: URL) => Promise<CandidateResult | undefined>,
 ): Promise<CandidateResult | undefined> {
   if (urls.length === 0) {
     return undefined;
   }
   return Promise.any(
     urls.map(async (url) => {
-      const metadata = await probe(url);
-      if (!metadata) {
+      const result = await probe(url);
+      if (!result) {
         throw new Error(`No OAuth metadata at ${url.href}`);
       }
-      return { url, metadata } satisfies CandidateResult;
+      return result;
     }),
   ).catch(() => undefined);
+}
+
+/**
+ * Builds the authorization-server candidate URL groups for discovery.
+ * Advertised AS URLs (from RFC 9728 Protected Resource Metadata) take
+ * precedence; the legacy fallback group — the server URL itself and, for
+ * subpath URLs, its origin root — is only probed when no advertised AS
+ * yields metadata.
+ *
+ * @param serverUrl - The downstream MCP server URL.
+ * @param resourceMetadata - Discovered Protected Resource Metadata, if any.
+ * @returns The advertised and fallback candidate URL lists.
+ */
+function buildCandidateUrls(
+  serverUrl: URL,
+  resourceMetadata: OAuthProtectedResourceMetadata | undefined,
+): { advertised: URL[]; fallback: URL[] } {
+  const advertised = (resourceMetadata?.authorization_servers ?? [])
+    .map((value) => toUrl(value))
+    .filter((url): url is URL => url !== undefined);
+  const fallback: URL[] = [serverUrl];
+  if (serverUrl.pathname !== '/') {
+    fallback.push(new URL(serverUrl.origin));
+  }
+  return { advertised, fallback };
+}
+
+/**
+ * Builds the discovery result from an optional candidate hit.
+ *
+ * @param resourceMetadata - Discovered Protected Resource Metadata, if any.
+ * @param hit - The winning AS candidate, or `undefined` on a full miss.
+ * @param serverUrl - The downstream MCP server URL (fallback AS URL).
+ * @returns The discovery result.
+ */
+function toDiscoveredAuth(
+  resourceMetadata: OAuthProtectedResourceMetadata | undefined,
+  hit: CandidateResult | undefined,
+  serverUrl: URL,
+): DiscoveredAuth {
+  if (!hit) {
+    return {
+      resourceMetadata,
+      serverMetadata: undefined,
+      authorizationServerUrl: serverUrl,
+      authorizationResponseIssParameterSupported: false,
+    };
+  }
+  return {
+    resourceMetadata,
+    serverMetadata: hit.metadata,
+    authorizationServerUrl: hit.url,
+    authorizationResponseIssParameterSupported: hit.authorizationResponseIssParameterSupported,
+  };
 }
 
 /**
@@ -149,9 +267,22 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
 
   // Tolerant AS discovery: any error (404-as-throw, 5xx, network) is
   // recorded and treated as "not found" so the other candidates are tried.
-  const safeDiscoverAs = async (url: URL): Promise<AuthorizationServerMetadata | undefined> => {
+  // The raw metadata document is captured alongside the SDK's parsed
+  // result so RFC 9207 fields stripped by the OIDC schema stay visible.
+  const safeDiscoverAs = async (url: URL): Promise<CandidateResult | undefined> => {
+    const capture: RawMetadataCapture = {};
     try {
-      return await discoverAuthorizationServerMetadata(url, { fetchFn });
+      const metadata = await discoverAuthorizationServerMetadata(url, {
+        fetchFn: createRawMetadataFetch(fetchFn, capture),
+      });
+      if (!metadata) {
+        return undefined;
+      }
+      return {
+        url,
+        metadata,
+        authorizationResponseIssParameterSupported: readIssParameterSupported(capture),
+      };
     } catch (err) {
       if (!isNonJsonResponse(err)) {
         lastError = err;
@@ -171,34 +302,17 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
     // No PRM published; fall through to direct AS discovery below.
   }
 
-  // Step 2: probe the candidates in parallel, first hit wins. Advertised
-  // AS URLs take precedence; the legacy fallback group (the server URL
-  // and, for subpath URLs, its origin root) is only probed when no
-  // advertised AS yields metadata.
-  const advertisedUrls = (resourceMetadata?.authorization_servers ?? [])
-    .map((value) => toUrl(value))
-    .filter((url): url is URL => url !== undefined);
-  const fallbackUrls: URL[] = [serverUrl];
-  if (serverUrl.pathname !== '/') {
-    fallbackUrls.push(new URL(serverUrl.origin));
-  }
+  // Step 2: probe the candidates in parallel, first hit wins.
+  const { advertised, fallback } = buildCandidateUrls(serverUrl, resourceMetadata);
 
-  const advertisedHit = await raceCandidates(advertisedUrls, safeDiscoverAs);
+  const advertisedHit = await raceCandidates(advertised, safeDiscoverAs);
   if (advertisedHit) {
-    return {
-      resourceMetadata,
-      serverMetadata: advertisedHit.metadata,
-      authorizationServerUrl: advertisedHit.url,
-    };
+    return toDiscoveredAuth(resourceMetadata, advertisedHit, serverUrl);
   }
 
-  const fallbackHit = await raceCandidates(fallbackUrls, safeDiscoverAs);
+  const fallbackHit = await raceCandidates(fallback, safeDiscoverAs);
   if (fallbackHit) {
-    return {
-      resourceMetadata,
-      serverMetadata: fallbackHit.metadata,
-      authorizationServerUrl: fallbackHit.url,
-    };
+    return toDiscoveredAuth(resourceMetadata, fallbackHit, serverUrl);
   }
 
   // No metadata found anywhere. If any candidate actually errored (vs. a
@@ -208,5 +322,5 @@ export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
     throw lastError;
   }
 
-  return { resourceMetadata, serverMetadata: undefined, authorizationServerUrl: serverUrl };
+  return toDiscoveredAuth(resourceMetadata, undefined, serverUrl);
 }
