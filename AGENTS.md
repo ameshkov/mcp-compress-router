@@ -209,6 +209,14 @@ Universal design principles this codebase follows:
   `tools/list` and tool calls wait for discovery (bounded by the
   per-server connect timeouts, aborted on shutdown) so the compact
   catalog always reflects the final discovery state.
+- **Resource-bound OAuth** — every OAuth request the router makes
+  (authorization, code exchange, proactive refresh) MUST carry the
+  RFC 8707 `resource` indicator whenever the downstream server
+  publishes RFC 9728 Protected Resource Metadata, selected through the
+  SDK's `selectResourceURL` so the CLI login, proactive refresh, and
+  the SDK's own `auth()` path agree on the value. Omitting it breaks
+  providers that bind tokens to a server: they reject the request with
+  `invalid_target`.
 - **Keep It Boring** — prefer well-understood patterns over clever or
   novel solutions.
 

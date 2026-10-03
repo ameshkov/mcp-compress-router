@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The OAuth `login` callback pages shown in the browser now render as a
+  simple styled card with a success or error icon and the
+  `mcp-compress-router` name, and the failure page shows the
+  authorization server's `error_description` when it provides one.
+
+### Fixed
+
+- Fixed OAuth `login` and proactive token refresh to send the RFC 8707
+  `resource` parameter derived from the server's Protected Resource
+  Metadata, so providers that bind tokens to a specific MCP server and
+  reject requests without a matching resource (for example, with
+  `invalid_target`) accept the authorization request. Servers that
+  publish no protected resource metadata are unchanged: no `resource`
+  parameter is sent.
+
 ## [v3.0.0] - 2026-09-30
 
 ### Changed

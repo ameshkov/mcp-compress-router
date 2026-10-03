@@ -87,6 +87,12 @@ describe('acquireAuthorizationCode', () => {
 
     const response = await fetch(callbackUrl(setup, { code: 'code-123', state: setup.state }));
     expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+
+    const body = await response.text();
+    expect(body).toContain('Authorization successful');
+    expect(body).toContain('mcp-compress-router');
 
     const result = await pending;
     expect(result.authorizationCode).toBe('code-123');
@@ -185,9 +191,19 @@ describe('acquireAuthorizationCode', () => {
     const setup = await waitForSetup(captured);
 
     const response = await fetch(
-      callbackUrl(setup, { error: 'access_denied', state: setup.state }),
+      callbackUrl(setup, {
+        error: 'access_denied',
+        error_description: 'The user denied the request',
+        state: setup.state,
+      }),
     );
     expect(response.status).toBe(400);
+
+    // The failure page shows the error code and, when the authorization
+    // server provides one, the human-readable description.
+    const body = await response.text();
+    expect(body).toContain('<code>access_denied</code>');
+    expect(body).toContain('The user denied the request');
 
     await rejection;
   });
@@ -216,11 +232,16 @@ describe('acquireAuthorizationCode', () => {
     const setup = await waitForSetup(captured);
 
     const response = await fetch(
-      callbackUrl(setup, { error: '<script>alert(1)</script>', state: setup.state }),
+      callbackUrl(setup, {
+        error: '<script>alert(1)</script>',
+        error_description: '<script>alert(2)</script>',
+        state: setup.state,
+      }),
     );
     expect(response.status).toBe(400);
     const body = await response.text();
     expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(body).toContain('&lt;script&gt;alert(2)&lt;/script&gt;');
     expect(body).not.toContain('<script>');
 
     await rejection;

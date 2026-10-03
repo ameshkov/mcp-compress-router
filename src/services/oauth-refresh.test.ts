@@ -12,7 +12,10 @@ import type { DownstreamServerConfig } from '../utils/types.js';
 // proactive-refresh logic can be exercised without real network I/O.
 // `refreshAuthorization` is imported as a top-level static value in
 // oauth.ts; vitest's hoisted mock intercepts it at the module
-// registry level before any static import is evaluated.
+// registry level before any static import is evaluated. The rest of
+// the SDK auth module stays real, including `selectResourceURL` (which
+// oauth.ts also imports), so the resource indicator the refresh
+// carries is derived by the same code the SDK's auth() flow uses.
 const { discoverAuthMock, refreshAuthorizationMock } = vi.hoisted(() => ({
   discoverAuthMock: vi.fn(),
   refreshAuthorizationMock: vi.fn(),
@@ -22,12 +25,13 @@ vi.mock('./oauth-discovery.js', () => ({
   discoverAuth: discoverAuthMock,
 }));
 
-vi.mock('@modelcontextprotocol/sdk/client/auth.js', () => ({
-  refreshAuthorization: refreshAuthorizationMock,
-  // OAuthClientProvider is a TypeScript type-only import (erased at
-  // runtime); other exports from this module are not consumed by
-  // oauth.ts, so they are absent from this runtime mock without issue.
-}));
+vi.mock('@modelcontextprotocol/sdk/client/auth.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@modelcontextprotocol/sdk/client/auth.js')>();
+  return {
+    ...actual,
+    refreshAuthorization: refreshAuthorizationMock,
+  };
+});
 
 /**
  * Fresh mock token response returned by `refreshAuthorization`. Has
@@ -157,7 +161,9 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     expect(discoverAuthMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
     expect(refreshAuthorizationMock).toHaveBeenCalledWith(
       AS_URL,
-      expect.objectContaining({ refreshToken: 'stale-rt' }),
+      // No Protected Resource Metadata was discovered, so no RFC 8707
+      // resource indicator is sent (legacy-server behavior).
+      expect.objectContaining({ refreshToken: 'stale-rt', resource: undefined }),
     );
 
     // New tokens persisted with a fresh access token and a future
@@ -169,6 +175,31 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     expect(store[server.name]?.tokens?.expires_at).toBeDefined();
     const expiresMs = Date.parse(store[server.name]!.tokens!.expires_at!);
     expect(expiresMs).toBeGreaterThan(Date.now());
+  });
+
+  it('sends the RFC 8707 resource indicator from protected resource metadata', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString());
+    const resourceMetadata = {
+      resource: 'https://example.com/mcp',
+      authorization_servers: ['https://as.example.com/'],
+    };
+    discoverAuthMock.mockResolvedValue({
+      serverMetadata: SERVER_METADATA,
+      authorizationServerUrl: AS_URL,
+      resourceMetadata,
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    // The refresh request must carry the same resource indicator the
+    // server published in its Protected Resource Metadata (RFC 8707);
+    // a provider that binds tokens to a resource rejects refreshes
+    // without a matching one.
+    expect(refreshAuthorizationMock).toHaveBeenCalledWith(
+      AS_URL,
+      expect.objectContaining({ resource: new URL('https://example.com/mcp') }),
+    );
   });
 
   it('refreshes the token when expiry is within the refresh buffer', async () => {

@@ -355,10 +355,13 @@ request's `redirect_uri` against the client registration under the
 RFC 8252 loopback rule — scheme, host, and path must match, the port is
 ignored — and advertises and echoes the RFC 9207 issuer (`iss`), so the
 login plans exercise the redirect-URI and issuer handling a real
-provider enforces. The OAuth container advertises itself as
-`http://mock-mcp-http-oauth:3101`, the in-network name the router can
-resolve. Its container log shows the registered redirect URIs, each
-authorization redirect with its issuer, and the authenticated tool
+provider enforces. Like a strict provider, it also requires the RFC 8707
+`resource` parameter on the authorization and token requests, so the
+login plans exercise resource-bound token issuance. The OAuth container
+advertises itself as `http://mock-mcp-http-oauth:3101`, the in-network
+name the router can resolve. Its container log shows the registered
+redirect URIs, each authorization redirect with its issuer and resource,
+each token issuance with its resource, and the authenticated tool
 calls:
 
 ```bash
@@ -375,7 +378,7 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
-| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, and the RFC 9207 issuer |
+| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the RFC 9207 issuer, and the RFC 8707 resource indicator |
 | `opencode.feature` | `OPENCODE` | Discovery, compact catalog, descriptions through the schema result, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
 | `claude.feature` | `CLAUDE` | Discovery, compact catalog, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |

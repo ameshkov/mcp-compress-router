@@ -4,7 +4,10 @@ import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-i
 import { loadConfig } from '../services/config.js';
 import { discoverAuth, discoverSingleServer, saveToolCache } from '../services/index.js';
 import { OAUTH_LOOPBACK_URI, type OAuthCredentialManager } from '../services/oauth.js';
-import type { OAuthClientInformationMixed } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type {
+  OAuthClientInformationMixed,
+  OAuthProtectedResourceMetadata,
+} from '@modelcontextprotocol/sdk/shared/auth.js';
 import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
 
 /** SDK OAuth metadata type (non-null after discovery). */
@@ -87,15 +90,21 @@ async function _getOpenBrowser(): Promise<(url: string) => Promise<void>> {
  *
  * @param targetServer - Typed downstream server configuration.
  * @param name - Server name (for error messages).
- * @returns The discovered OAuth metadata and whether the authorization
+ * @returns The discovered OAuth metadata, whether the authorization
  *   server commits to the RFC 9207 `iss` parameter (read from the raw
- *   metadata document, so it also covers OpenID Connect discovery).
+ *   metadata document, so it also covers OpenID Connect discovery),
+ *   and the RFC 9728 Protected Resource Metadata when the server
+ *   publishes it (used to derive the RFC 8707 `resource` indicator).
  * @throws If the server does not expose OAuth metadata.
  */
 async function discoverOAuthMetadata(
   targetServer: DownstreamServerConfig,
   name: string,
-): Promise<{ metadata: OAuthMetadata; requireIssuer: boolean }> {
+): Promise<{
+  metadata: OAuthMetadata;
+  requireIssuer: boolean;
+  resourceMetadata?: OAuthProtectedResourceMetadata;
+}> {
   const serverUrl = new URL(targetServer.url!);
   const discovered = await discoverAuth(serverUrl);
   const metadata = discovered.serverMetadata;
@@ -105,6 +114,7 @@ async function discoverOAuthMetadata(
   return {
     metadata: metadata as NonNullable<typeof metadata>,
     requireIssuer: discovered.authorizationResponseIssParameterSupported,
+    resourceMetadata: discovered.resourceMetadata,
   };
 }
 
@@ -188,6 +198,9 @@ async function registerClientIfNeeded(
  * @param targetServer - Typed downstream server configuration.
  * @param name - Server name (for error messages).
  * @param state - CSRF state generated for this login attempt.
+ * @param resource - RFC 8707 resource indicator selected from the
+ *   server's Protected Resource Metadata, or undefined when the server
+ *   publishes none (the SDK then omits the `resource` parameter).
  * @returns The `startAuthorization` result.
  */
 async function beginAuthorization(
@@ -196,6 +209,7 @@ async function beginAuthorization(
   targetServer: DownstreamServerConfig,
   name: string,
   state: string,
+  resource: URL | undefined,
 ): Promise<AuthResult> {
   await registerClientIfNeeded(mgr, metadata, name);
   const { startAuthorization } = await _getSdkAuth();
@@ -205,6 +219,7 @@ async function beginAuthorization(
     redirectUrl: mgr.redirectUrl as string,
     scope: targetServer.oauth?.scope,
     state,
+    resource,
   });
 }
 
@@ -257,7 +272,9 @@ function _resolveCallbackPort(
  * temporary loopback callback server, registers the client (when
  * needed) with the portless loopback callback URI, opens a browser,
  * handles the redirect callback, exchanges the authorization code for
- * tokens, and persists them in credentials.json.
+ * tokens, and persists them in credentials.json. The authorization and
+ * token requests carry the RFC 8707 `resource` indicator derived from
+ * the server's Protected Resource Metadata when it publishes one.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
@@ -281,7 +298,18 @@ export async function handleLogin(
   const { OAuthCredentialManager } = await import('../services/oauth.js');
   const mgr = new OAuthCredentialManager(configPath, targetServer);
 
-  const { metadata, requireIssuer } = await discoverOAuthMetadata(targetServer, name);
+  const { metadata, requireIssuer, resourceMetadata } = await discoverOAuthMetadata(
+    targetServer,
+    name,
+  );
+
+  const { selectResourceURL, exchangeAuthorization } = await _getSdkAuth();
+
+  // RFC 8707 resource indicator, selected from the server's Protected
+  // Resource Metadata the same way the SDK's auth() flow selects it.
+  // Undefined when the server publishes no such metadata: the SDK then
+  // omits the parameter, matching the runtime transport path.
+  const resource = await selectResourceURL(new URL(targetServer.url!), mgr, resourceMetadata);
 
   const { authorizationCode, authResult } = await acquireAuthorizationCode({
     mgr,
@@ -289,10 +317,9 @@ export async function handleLogin(
     openBrowser: await _getOpenBrowser(),
     expectedIssuer: metadata.issuer,
     requireIssuer,
-    beginAuthorization: (state) => beginAuthorization(mgr, metadata, targetServer, name, state),
+    beginAuthorization: (state) =>
+      beginAuthorization(mgr, metadata, targetServer, name, state, resource),
   });
-
-  const { exchangeAuthorization } = await _getSdkAuth();
 
   const realRedirectUrl = mgr.redirectUrl as string;
   const tokens = await exchangeAuthorization(new URL(metadata.token_endpoint!), {
@@ -301,6 +328,7 @@ export async function handleLogin(
     authorizationCode,
     codeVerifier: authResult.codeVerifier,
     redirectUri: realRedirectUrl,
+    resource,
   });
 
   await mgr.saveTokens(tokens);

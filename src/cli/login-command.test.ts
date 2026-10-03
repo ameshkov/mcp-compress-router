@@ -17,8 +17,12 @@ vi.mock('../utils/open-browser.js', () => ({
  * handles dynamic client registration. The authorization endpoint returns
  * a 302 redirect, but since openBrowser is mocked, the browser never opens
  * and the callback never reaches the temp server, triggering the timeout.
+ *
+ * With `withProtectedResourceMetadata`, the server also publishes RFC 9728
+ * Protected Resource Metadata pointing at its own `/mcp` endpoint, so the
+ * login flow derives and sends the RFC 8707 `resource` indicator.
  */
-function startDiscoveryServer(): Promise<{
+function startDiscoveryServer(options: { withProtectedResourceMetadata?: boolean } = {}): Promise<{
   server: http.Server;
   url: string;
   registrations: Array<Record<string, unknown>>;
@@ -27,6 +31,23 @@ function startDiscoveryServer(): Promise<{
     const registrations: Array<Record<string, unknown>> = [];
     const server = http.createServer((req, res) => {
       const url = new URL(req.url!, `http://${req.headers.host}`);
+
+      if (
+        options.withProtectedResourceMetadata &&
+        req.method === 'GET' &&
+        (url.pathname === '/.well-known/oauth-protected-resource' ||
+          url.pathname === '/.well-known/oauth-protected-resource/mcp')
+      ) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            resource: `http://${req.headers.host}/mcp`,
+            authorization_servers: [`http://${req.headers.host}`],
+            bearer_methods_supported: ['header'],
+          }),
+        );
+        return;
+      }
 
       if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
         const addr = server.address();
@@ -328,6 +349,40 @@ describe('handleLogin', () => {
     expect(requested.pathname).toBe(registered.pathname);
     expect(Number(requested.port)).toBeGreaterThan(0);
     expect(authorizationUrl.searchParams.get('state')).toBeTruthy();
+
+    // The server publishes no Protected Resource Metadata, so no RFC 8707
+    // resource indicator is sent (legacy-server behavior).
+    expect(authorizationUrl.searchParams.get('resource')).toBeNull();
+  }, 10_000);
+
+  it('sends the RFC 8707 resource indicator from protected resource metadata', async () => {
+    process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS = '500';
+
+    const { server, url } = await startDiscoveryServer({ withProtectedResourceMetadata: true });
+
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          test: { type: 'http', url: url + '/mcp', description: 'PRM test server' },
+        },
+      }),
+    );
+
+    try {
+      // openBrowser is mocked, so the flow reaches the callback wait and
+      // times out after the registration and authorization requests.
+      await expect(handleLogin(configPath, 'test')).rejects.toThrow(/timed out/);
+    } finally {
+      delete process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS;
+      server.close();
+    }
+
+    // The authorization request must carry the resource indicator the
+    // server published in its Protected Resource Metadata, so a provider
+    // that binds tokens to a resource accepts the login (RFC 8707).
+    const authorizationUrl = new URL(vi.mocked(openBrowser).mock.calls[0]![0]);
+    expect(authorizationUrl.searchParams.get('resource')).toBe(url + '/mcp');
   }, 10_000);
 
   it('reuses a stored registration that covers the loopback URI', async () => {

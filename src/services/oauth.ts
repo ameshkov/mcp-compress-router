@@ -1,5 +1,6 @@
 import {
   refreshAuthorization,
+  selectResourceURL,
   type OAuthClientProvider,
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
@@ -372,16 +373,20 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    * Performs the token refresh: discovers the authorization server
    * metadata, calls the SDK's `refreshAuthorization`, and persists the
    * refreshed tokens via {@link saveTokens} (which recomputes
-   * `expires_at`). Errors are logged (when a logger is supplied) and
-   * swallowed — proactive refresh is best-effort; the SDK's 401 path
-   * handles terminal failures.
+   * `expires_at`). The request carries the RFC 8707 `resource`
+   * indicator selected from the server's Protected Resource Metadata —
+   * the same indicator `login` sent — so a provider that binds tokens
+   * to a specific resource accepts the refresh. Errors are logged
+   * (when a logger is supplied) and swallowed — proactive refresh is
+   * best-effort; the SDK's 401 path handles terminal failures.
    */
   private async _refreshTokens(refreshToken: string, logger?: Logger): Promise<void> {
     try {
       if (!this._server.url) {
         return;
       }
-      const discovered = await discoverAuth(new URL(this._server.url));
+      const serverUrl = new URL(this._server.url);
+      const discovered = await discoverAuth(serverUrl);
       if (!discovered.serverMetadata) {
         return;
       }
@@ -389,10 +394,12 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       if (!clientInformation) {
         return;
       }
+      const resource = await selectResourceURL(serverUrl, this, discovered.resourceMetadata);
       const newTokens = await refreshAuthorization(discovered.authorizationServerUrl, {
         metadata: discovered.serverMetadata,
         clientInformation,
         refreshToken,
+        resource,
       });
       await this.saveTokens(newTokens);
     } catch (err) {

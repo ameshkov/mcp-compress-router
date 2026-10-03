@@ -243,6 +243,13 @@ describe('MCP Compress Router E2E — OAuth', () => {
     );
     expect(requestedRedirect).not.toBe(registeredRedirect);
 
+    // The authorization and token requests must carry the RFC 8707
+    // resource indicator published in the fixture's Protected Resource
+    // Metadata, so a provider that binds tokens to a resource accepts
+    // the login and issues tokens bound to that same resource.
+    expect(authFixture.getLastAuthorizeResource()).toBe(`${authFixture.url}/mcp`);
+    expect(authFixture.getLastTokenResource()).toBe(`${authFixture.url}/mcp`);
+
     // The full flow (discover -> register -> authorize -> exchange) must
     // have persisted real tokens in credentials.json.
     const credPath = path.join(tempDir, 'credentials.json');

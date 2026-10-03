@@ -46,6 +46,18 @@ See the
 [OAuth configuration reference](../reference/configuration.md#oauth-configuration)
 for every `oauth` field.
 
+## Resource indicator
+
+When the server publishes RFC 9728
+[Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728),
+the authorization and token requests carry the RFC 8707
+[`resource`](https://datatracker.ietf.org/doc/html/rfc8707) indicator
+that the metadata names, and proactive token refresh carries it too.
+This binds the issued token to that specific MCP server, which
+providers that enforce resource binding require. Servers that publish
+no protected resource metadata are unaffected: the parameter is simply
+omitted, matching the MCP SDK's behavior.
+
 ## Redirect URL
 
 During `login` the router starts a temporary local HTTP server and uses

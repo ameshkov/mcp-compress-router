@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import * as http from 'node:http';
 import type { OAuthCredentialManager } from '../services/oauth.js';
+import { renderCallbackPage } from './login-callback-page.js';
 
 /**
  * SDK `startAuthorization` result: the authorization URL to open in the
@@ -162,31 +163,164 @@ function validateCallback(flow: CallbackFlow, url: URL): string | undefined {
 }
 
 /**
- * Escapes the HTML special characters in a reflected value, so an OAuth
- * error string cannot inject markup into the callback page.
- *
- * @param value - The raw value to escape.
- * @returns The escaped value.
+ * Response headers for every callback page: self-contained HTML plus a
+ * strict CSP. The pages load no scripts and no external resources; the
+ * policy is defense in depth behind the renderer's HTML escaping.
  */
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+const PAGE_HEADERS: http.OutgoingHttpHeaders = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+};
+
+/**
+ * Writes one callback page response.
+ *
+ * @param res - The server response.
+ * @param status - HTTP status code.
+ * @param html - The complete page document.
+ */
+function sendPage(res: http.ServerResponse, status: number, html: string): void {
+  res.writeHead(status, PAGE_HEADERS);
+  res.end(html);
+}
+
+/**
+ * Responds with the failure page for a callback that failed validation
+ * (a stray or forged request that must not settle the flow).
+ *
+ * @param res - The server response.
+ */
+function respondInvalidCallback(res: http.ServerResponse): void {
+  sendPage(
+    res,
+    400,
+    renderCallbackPage({
+      kind: 'error',
+      heading: 'Authorization failed',
+      message: 'Invalid OAuth callback.',
+    }),
+  );
+}
+
+/**
+ * Responds with the failure page for an authorization error, showing the
+ * OAuth error code and, when provided, the server's description.
+ *
+ * @param res - The server response.
+ * @param error - The OAuth error code from the callback.
+ * @param description - The OAuth `error_description`, or null.
+ */
+function respondAuthorizationError(
+  res: http.ServerResponse,
+  error: string,
+  description: string | null,
+): void {
+  sendPage(
+    res,
+    400,
+    renderCallbackPage({
+      kind: 'error',
+      heading: 'Authorization failed',
+      message: description ?? 'The authorization server rejected the request.',
+      detail: error,
+    }),
+  );
+}
+
+/**
+ * Responds with the success page after a valid callback.
+ *
+ * @param res - The server response.
+ */
+function respondSuccess(res: http.ServerResponse): void {
+  sendPage(
+    res,
+    200,
+    renderCallbackPage({
+      kind: 'success',
+      heading: 'Authorization successful',
+      message: 'You can close this window and return to your terminal.',
+    }),
+  );
+}
+
+/**
+ * Settles the flow with a failure: clears the callback timeout, closes
+ * the temporary server, and rejects the pending promise.
+ *
+ * @param flow - Callback flow state for this login attempt.
+ * @param tempServer - The temporary callback server (closed on failure).
+ * @param reject - Promise reject function.
+ * @param message - The error message for the rejection.
+ */
+function failFlow(
+  flow: CallbackFlow,
+  tempServer: http.Server,
+  reject: (err: Error) => void,
+  message: string,
+): void {
+  if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
+  tempServer.close();
+  reject(new Error(message));
+}
+
+/**
+ * Handles one callback request: validates the CSRF `state` echoed by the
+ * authorization server and, when present, the RFC 9207 `iss` issuer
+ * parameter before acting on the callback. A callback that fails
+ * validation is ignored: it gets a 400 response but never settles the
+ * flow, so a stray loopback request cannot abort a login whose
+ * legitimate callback is still on its way.
+ *
+ * @param flow - Callback flow state for this login attempt.
+ * @param tempServer - The temporary callback server (closed on completion).
+ * @param resolve - Promise resolve function (authorization code).
+ * @param reject - Promise reject function.
+ * @param req - The incoming request.
+ * @param res - The server response.
+ */
+function handleCallbackRequest(
+  flow: CallbackFlow,
+  tempServer: http.Server,
+  resolve: (code: string) => void,
+  reject: (err: Error) => void,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): void {
+  const url = new URL(req.url!, `http://127.0.0.1`);
+  const error = url.searchParams.get('error');
+  const code = url.searchParams.get('code');
+
+  // Only authorization responses (a code or an error) carry a state to
+  // validate; anything else is not a callback.
+  if (error !== null || code !== null) {
+    const validationError = validateCallback(flow, url);
+    if (validationError) {
+      respondInvalidCallback(res);
+      return;
+    }
+  }
+
+  if (error !== null) {
+    respondAuthorizationError(res, error, url.searchParams.get('error_description'));
+    failFlow(flow, tempServer, reject, `Authorization failed: ${error}`);
+    return;
+  }
+
+  if (code === null) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+
+  if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
+  respondSuccess(res);
+  tempServer.close();
+  resolve(code);
 }
 
 /**
  * Creates the HTTP request listener for the temporary callback server.
- *
- * Validates the CSRF `state` echoed by the authorization server and, when
- * present, the RFC 9207 `iss` issuer parameter before acting on the
- * callback. A callback that fails validation is ignored: it gets a 400
- * response but never settles the flow, so a stray loopback request cannot
- * abort a login whose legitimate callback is still on its way. Uses
- * `tempServer` captured via closure to close the listener once the
- * callback settles.
  *
  * @param flow - Callback flow state for this login attempt.
  * @param tempServer - The temporary callback server (closed on completion).
@@ -200,51 +334,7 @@ function makeCallbackHandler(
   resolve: (code: string) => void,
   reject: (err: Error) => void,
 ): http.RequestListener {
-  const fail = (message: string): void => {
-    if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
-    tempServer.close();
-    reject(new Error(message));
-  };
-
-  return (req, res) => {
-    const url = new URL(req.url!, `http://127.0.0.1`);
-    const error = url.searchParams.get('error');
-    const code = url.searchParams.get('code');
-
-    // Only authorization responses (a code or an error) carry a state to
-    // validate; anything else is not a callback.
-    if (error !== null || code !== null) {
-      const validationError = validateCallback(flow, url);
-      if (validationError) {
-        res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(
-          '<html><body><h1>Authorization failed</h1><p>Invalid OAuth callback.</p></body></html>',
-        );
-        return;
-      }
-    }
-
-    if (error !== null) {
-      res.writeHead(400, { 'Content-Type': 'text/html' });
-      res.end(`<html><body><h1>Authorization failed</h1><p>${escapeHtml(error)}</p></body></html>`);
-      fail(`Authorization failed: ${error}`);
-      return;
-    }
-
-    if (code === null) {
-      res.writeHead(404);
-      res.end('Not found');
-      return;
-    }
-
-    if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(
-      '<html><body><h1>Authorization successful!</h1><p>You can close this window.</p></body></html>',
-    );
-    tempServer.close();
-    resolve(code);
-  };
+  return (req, res) => handleCallbackRequest(flow, tempServer, resolve, reject, req, res);
 }
 
 /**

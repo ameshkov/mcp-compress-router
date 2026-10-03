@@ -3,11 +3,14 @@
  *
  * The mock implements just enough of RFC 9728 (Protected Resource
  * Metadata), RFC 8414 (Authorization Server Metadata), RFC 7591
- * (Dynamic Client Registration), and the authorization-code + PKCE flow
- * for the router's `login` command to work headlessly. The authorization
- * endpoint auto-approves and redirects straight back to the caller's
- * loopback callback, so the QA workspace only needs a tiny curl-based
- * "browser" (`qa-browser`) instead of a real one.
+ * (Dynamic Client Registration), RFC 8707 (Resource Indicators), and
+ * the authorization-code + PKCE flow for the router's `login` command
+ * to work headlessly. Like a strict provider, it requires the RFC 8707
+ * `resource` parameter on the authorization and token requests and logs
+ * the value it received. The authorization endpoint auto-approves and
+ * redirects straight back to the caller's loopback callback, so the QA
+ * workspace only needs a tiny curl-based "browser" (`qa-browser`)
+ * instead of a real one.
  */
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -182,7 +185,8 @@ function isLoopbackHost(hostname: string): boolean {
  *
  * Matches `redirect_uri` against the client registration under the
  * RFC 8252 loopback rule: scheme, host, and path must match, the port is
- * ignored for loopback addresses. Echoes the RFC 9207 issuer (`iss`)
+ * ignored for loopback addresses. Requires the RFC 8707 `resource`
+ * parameter, like a strict provider. Echoes the RFC 9207 issuer (`iss`)
  * advertised in the metadata.
  *
  * @param url - The parsed request URL.
@@ -193,6 +197,15 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
   const redirectUri = url.searchParams.get('redirect_uri');
   if (redirectUri === null) {
     sendJson(res, 400, { error: 'invalid_request', error_description: 'missing redirect_uri' });
+    return;
+  }
+  const resource = url.searchParams.get('resource');
+  if (resource === null) {
+    console.log('[mock-mcp-http-oauth] rejected authorize without resource (RFC 8707)');
+    sendJson(res, 400, {
+      error: 'invalid_target',
+      error_description: 'The resource (RFC 8707) parameter is required',
+    });
     return;
   }
   const clientId = url.searchParams.get('client_id') ?? '';
@@ -222,14 +235,15 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
   // RFC 9207 issuer identification, advertised in the metadata above.
   location.searchParams.set('iss', state.issuer);
   console.log(
-    `[mock-mcp-http-oauth] auto-approved, redirecting to ${redirectUri} (iss=${state.issuer})`,
+    `[mock-mcp-http-oauth] auto-approved, redirecting to ${redirectUri} (iss=${state.issuer}, resource=${resource})`,
   );
   res.writeHead(302, { location: location.toString() });
   res.end();
 }
 
 /**
- * Handles the token endpoint for code exchange and refresh.
+ * Handles the token endpoint for code exchange and refresh. Requires the
+ * RFC 8707 `resource` parameter, like a strict provider.
  *
  * @param res - The server response.
  * @param body - The raw form-encoded request body.
@@ -238,6 +252,15 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
 function handleToken(res: ServerResponse, body: string, state: OAuthMockState): void {
   const params = new URLSearchParams(body);
   const grantType = params.get('grant_type');
+  const resource = params.get('resource');
+  if (resource === null) {
+    console.log('[mock-mcp-http-oauth] rejected token request without resource (RFC 8707)');
+    sendJson(res, 400, {
+      error: 'invalid_target',
+      error_description: 'The resource (RFC 8707) parameter is required',
+    });
+    return;
+  }
   if (grantType === 'authorization_code') {
     const code = params.get('code');
     if (code === null || !state.codes.has(code)) {
@@ -260,7 +283,7 @@ function handleToken(res: ServerResponse, body: string, state: OAuthMockState): 
   const refreshToken = randomToken('rt');
   state.accessTokens.add(accessToken);
   state.refreshTokens.add(refreshToken);
-  console.log(`[mock-mcp-http-oauth] issued tokens (${grantType})`);
+  console.log(`[mock-mcp-http-oauth] issued tokens (${grantType}, resource=${resource})`);
   sendJson(res, 200, {
     access_token: accessToken,
     token_type: 'Bearer',

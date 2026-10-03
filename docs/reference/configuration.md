@@ -361,6 +361,12 @@ Authenticate a configured server with the `login` command:
 mcp-compress-router login my-http
 ```
 
+When the server publishes RFC 9728 Protected Resource Metadata, the
+authorization and token requests carry the RFC 8707 `resource` indicator
+it names (proactive token refresh repeats it), binding the issued token
+to that server. Servers without that metadata send no `resource`
+parameter.
+
 Remove stored credentials with `logout <name>`.
 
 ## Credential Storage

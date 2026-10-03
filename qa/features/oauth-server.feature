@@ -12,7 +12,11 @@ Feature: Using an OAuth-protected streamable-http MCP server
   and path must match, the port is ignored. It also advertises and
   echoes the RFC 9207 issuer (`iss`), so a login completing proves the
   router used a callback URI the registration covers and accepted the
-  matching issuer.
+  matching issuer. Finally, the mock requires the RFC 8707 `resource`
+  parameter on the authorization and token requests and logs the value:
+  the router derives it from the mock's protected resource metadata, so
+  a login completing proves the router sent the per-server resource
+  indicator a strict provider demands.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -56,3 +60,9 @@ Scenario: Login accepts the issuer the mock advertises
   Then the output reports "Successfully authenticated server "oauth-mock""
   And the output shows an "oauth-mock" row with auth "authenticated"
   And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows an "iss=http://mock-mcp-http-oauth:3101" line
+
+@TC-OAUTH-6
+Scenario: The login sends the RFC 8707 resource indicator
+  When I add the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  Then the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows an "auto-approved, redirecting to http://127.0.0.1:" line with "resource=http://mock-mcp-http-oauth:3101/mcp"
+  And the same output shows an "issued tokens (authorization_code" line with "resource=http://mock-mcp-http-oauth:3101/mcp"

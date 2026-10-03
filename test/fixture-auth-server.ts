@@ -15,6 +15,10 @@ export interface AuthFixtureServer {
   getLastRedirectUri: () => string | undefined;
   /** Get the last `redirect_uris` received on the /register endpoint. */
   getLastRegisteredRedirectUris: () => string[] | undefined;
+  /** Get the last RFC 8707 `resource` received on the /authorize endpoint. */
+  getLastAuthorizeResource: () => string | undefined;
+  /** Get the last RFC 8707 `resource` received on the /token endpoint. */
+  getLastTokenResource: () => string | undefined;
   /** Mark all refresh tokens as expired/unusable. */
   invalidateRefreshToken: () => void;
 }
@@ -23,6 +27,7 @@ export interface AuthFixtureServer {
  * Creates a minimal OAuth authorization server that protects an MCP server.
  *
  * Endpoints:
+ * - GET /.well-known/oauth-protected-resource — RFC 9728 protected resource metadata
  * - GET /.well-known/oauth-authorization-server — metadata
  * - POST /register — dynamic client registration
  * - GET /authorize — authorization endpoint (auto-approves, redirects with code)
@@ -34,6 +39,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   let lastRefreshToken: string | undefined;
   let lastRedirectUri: string | undefined;
   let lastRegisteredRedirectUris: string[] | undefined;
+  let lastAuthorizeResource: string | undefined;
+  let lastTokenResource: string | undefined;
   let refreshTokensValid = true;
 
   // In-memory store: client_id -> registration (secret + redirect URIs)
@@ -101,6 +108,26 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
       return;
     }
 
+    // RFC 9728 Protected Resource Metadata. Served at the root path and
+    // under the resource path, so a server URL of either `/` or `/mcp`
+    // finds it.
+    if (
+      req.method === 'GET' &&
+      (url.pathname === '/.well-known/oauth-protected-resource' ||
+        url.pathname === '/.well-known/oauth-protected-resource/mcp')
+    ) {
+      const baseUrl = `http://localhost:${port}`;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          resource: `${baseUrl}/mcp`,
+          authorization_servers: [baseUrl],
+          bearer_methods_supported: ['header'],
+        }),
+      );
+      return;
+    }
+
     // OAuth authorization server metadata
     if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
       const baseUrl = `http://localhost:${port}`;
@@ -147,6 +174,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
     if (req.method === 'GET' && url.pathname === '/authorize') {
       const redirectUri = url.searchParams.get('redirect_uri');
       lastRedirectUri = redirectUri ?? undefined;
+      lastAuthorizeResource = url.searchParams.get('resource') ?? undefined;
       const clientId = url.searchParams.get('client_id');
       const registered = clientId ? registeredClients.get(clientId) : undefined;
       if (
@@ -184,6 +212,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
       const body = await readBody(req);
       const params = new URLSearchParams(body);
       const grantType = params.get('grant_type');
+      lastTokenResource = params.get('resource') ?? undefined;
 
       if (grantType === 'authorization_code') {
         // Exchange code for tokens
@@ -312,6 +341,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         getLastRefreshToken: () => lastRefreshToken,
         getLastRedirectUri: () => lastRedirectUri,
         getLastRegisteredRedirectUris: () => lastRegisteredRedirectUris,
+        getLastAuthorizeResource: () => lastAuthorizeResource,
+        getLastTokenResource: () => lastTokenResource,
         invalidateRefreshToken: () => {
           refreshTokensValid = false;
         },
