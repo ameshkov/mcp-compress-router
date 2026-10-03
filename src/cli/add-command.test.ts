@@ -6,7 +6,10 @@ import { handleAdd } from './add-command.js';
 
 const { discoverAuthMock, handleLoginMock } = vi.hoisted(() => ({
   discoverAuthMock: vi.fn<(url: URL) => Promise<{ serverMetadata?: Record<string, unknown> }>>(),
-  handleLoginMock: vi.fn<(configPath: string, name: string) => Promise<string>>(),
+  handleLoginMock:
+    vi.fn<
+      (configPath: string, name: string, options?: { noBrowser?: boolean }) => Promise<string>
+    >(),
 }));
 
 vi.mock('../services/oauth-discovery.js', () => ({
@@ -194,9 +197,31 @@ describe('handleAdd', () => {
     });
 
     expect(discoverAuthMock).toHaveBeenCalledWith(new URL('https://example.com/mcp'));
-    expect(handleLoginMock).toHaveBeenCalledWith(configPath, 'github');
+    expect(handleLoginMock).toHaveBeenCalledWith(configPath, 'github', { noBrowser: undefined });
     expect(result).toContain('Added server "github" (http).');
     expect(result).toContain('Successfully authenticated server "github".');
+  });
+
+  it('forwards --no-browser to the automatic login', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    discoverAuthMock.mockResolvedValue({
+      serverMetadata: {
+        issuer: 'https://example.com',
+        authorization_endpoint: 'https://example.com/authorize',
+        token_endpoint: 'https://example.com/token',
+      },
+    });
+    handleLoginMock.mockResolvedValue('Successfully authenticated server "github".');
+
+    await handleAdd(configPath, {
+      description: 'Test server',
+      name: 'github',
+      transport: 'http',
+      commandOrUrl: 'https://example.com/mcp',
+      noBrowser: true,
+    });
+
+    expect(handleLoginMock).toHaveBeenCalledWith(configPath, 'github', { noBrowser: true });
   });
 
   it('caches authRequirement "oauth" when the server advertises OAuth', async () => {

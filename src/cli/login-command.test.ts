@@ -592,7 +592,7 @@ describe('handleLogin', () => {
     );
 
     // Validation runs before any network probe, so no server is contacted.
-    await expect(handleLogin(configPath, 'nodcr', 70000)).rejects.toThrow(
+    await expect(handleLogin(configPath, 'nodcr', { portOverride: 70000 })).rejects.toThrow(
       /--port must be an integer/,
     );
   });

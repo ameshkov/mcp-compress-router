@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added `--no-browser` to `login` and `add`: the authorization URL is
+  printed and the login accepts a pasted redirect URL or authorization
+  code from stdin, so OAuth works in containers, over SSH, and in other
+  environments where a loopback browser redirect cannot reach the
+  router. Without an interactive terminal the flow keeps waiting for
+  the callback as before.
+- `login` now always prints the authorization URL before opening the
+  browser, so it can be copied to another device.
+
+### Fixed
+
+- Fixed OAuth `login` to surface a failed browser launch instead of
+  swallowing the error and failing later with a timeout; when stdin is
+  interactive, the flow falls back to the paste prompt.
+
 ## [v3.0.1] - 2026-10-03
 
 ### Changed
@@ -526,6 +545,7 @@ The changes below are based on
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
+[Unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v3.0.1...HEAD
 [v3.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.0.1
 [v3.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.0.0
 [v2.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v2.0.0

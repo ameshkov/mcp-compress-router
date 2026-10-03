@@ -9,6 +9,7 @@ import type {
   OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
+import { createPasteReader, type PasteReader } from './login-paste.js';
 
 /** SDK OAuth metadata type (non-null after discovery). */
 type OAuthMetadata = NonNullable<
@@ -264,36 +265,81 @@ function _resolveCallbackPort(
 }
 
 /**
+ * Options for the `login` subcommand.
+ */
+export interface LoginOptions {
+  /**
+   * Optional `--port` override for the local callback server. 0 forces
+   * an OS-assigned port; a positive integer binds to that exact port
+   * (overrides `oauth.callbackPort`). When omitted,
+   * `oauth.callbackPort` from config is used, falling back to an
+   * OS-assigned port.
+   */
+  portOverride?: number;
+  /**
+   * Set by `--no-browser`: print the authorization URL and read a
+   * pasted redirect URL or authorization code from stdin instead of
+   * opening a browser.
+   */
+  noBrowser?: boolean;
+}
+
+/**
+ * Creates the lazy manual reader used by the paste fallback. The reader
+ * is created only when the manual path starts, so a normal browser
+ * login never touches stdin; `close` releases it afterwards so an idle
+ * interface cannot keep the CLI process alive.
+ *
+ * @returns The reader provider and its close function.
+ */
+function _createManualReader(): {
+  getManualReader: () => Pick<PasteReader, 'readLine'> | undefined;
+  close: () => void;
+} {
+  let reader: PasteReader | undefined;
+  return {
+    getManualReader: () => {
+      reader ??= createPasteReader();
+      return reader;
+    },
+    close: () => {
+      reader?.close();
+    },
+  };
+}
+
+/**
  * Handles the `login <name>` subcommand.
  *
  * Validates the server exists in config and is an HTTP type.
  * For HTTP servers, runs the OAuth authorization-code flow
  * using the SDK's OAuth client infrastructure. The flow binds a
  * temporary loopback callback server, registers the client (when
- * needed) with the portless loopback callback URI, opens a browser,
- * handles the redirect callback, exchanges the authorization code for
- * tokens, and persists them in credentials.json. The authorization and
- * token requests carry the RFC 8707 `resource` indicator derived from
- * the server's Protected Resource Metadata when it publishes one.
+ * needed) with the portless loopback callback URI, prints the
+ * authorization URL, opens a browser (unless `noBrowser` is set),
+ * accepts either the redirect callback or a pasted redirect URL or
+ * authorization code, exchanges the code for tokens, and persists them
+ * in credentials.json. The authorization and token requests carry the
+ * RFC 8707 `resource` indicator derived from the server's Protected
+ * Resource Metadata when it publishes one.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
- * @param portOverride - Optional `--port` override for the local
- *   callback server. 0 forces an OS-assigned port; a positive integer
- *   binds to that exact port (overrides `oauth.callbackPort`). When
- *   omitted, `oauth.callbackPort` from config is used, falling back to
- *   an OS-assigned port.
+ * @param options - Optional login options.
  * @returns Human-readable confirmation message.
  * @throws If the server name is not found or is not an HTTP type.
  */
 export async function handleLogin(
   configPath: string,
   name: string,
-  portOverride?: number,
+  options?: LoginOptions,
 ): Promise<string> {
   const { targetServer } = await validateServerForLogin(configPath, name);
 
-  const callbackPort = _resolveCallbackPort(_validatePortOverride(portOverride), targetServer);
+  const callbackPort = _resolveCallbackPort(
+    _validatePortOverride(options?.portOverride),
+    targetServer,
+  );
 
   const { OAuthCredentialManager } = await import('../services/oauth.js');
   const mgr = new OAuthCredentialManager(configPath, targetServer);
@@ -311,15 +357,18 @@ export async function handleLogin(
   // omits the parameter, matching the runtime transport path.
   const resource = await selectResourceURL(new URL(targetServer.url!), mgr, resourceMetadata);
 
+  const manualReader = _createManualReader();
   const { authorizationCode, authResult } = await acquireAuthorizationCode({
     mgr,
     callbackPort,
     openBrowser: await _getOpenBrowser(),
     expectedIssuer: metadata.issuer,
     requireIssuer,
+    noBrowser: options?.noBrowser,
+    getManualReader: manualReader.getManualReader,
     beginAuthorization: (state) =>
       beginAuthorization(mgr, metadata, targetServer, name, state, resource),
-  });
+  }).finally(manualReader.close);
 
   const realRedirectUrl = mgr.redirectUrl as string;
   const tokens = await exchangeAuthorization(new URL(metadata.token_endpoint!), {

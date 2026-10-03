@@ -553,7 +553,9 @@ Windows, and `xdg-open` on Linux.
 
 Time in milliseconds the `login` command waits for the OAuth callback
 before failing. Must be a positive integer; invalid values fall back to
-the default of 120 seconds.
+the default of 120 seconds. The timeout does not apply while an
+interactive paste prompt is active: the prompt waits until the user
+responds or cancels.
 
 ```bash
 MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS=300000 \
@@ -645,6 +647,7 @@ probe is best-effort and never blocks the command; see
 | `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
 | `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
 | `-p, --port <number>` | Fixed local OAuth callback port (HTTP only). Written to `oauth.callbackPort` so subsequent `login` runs reuse it. Integer 1-65535 |
+| `--no-browser` | Do not launch a browser during the automatic login: print the authorization URL and read a pasted redirect URL or authorization code from stdin (HTTP only) |
 
 ```bash
 mcp-compress-router add my-tool \
@@ -785,9 +788,15 @@ authentication, also discovers the server's current tools and writes
 them to `tools-cache.json` so the next router startup (or
 self-recovery) has an up-to-date cache.
 
+The authorization URL is always printed before the browser opens. With
+`--no-browser`, or when the browser command fails to start, the flow
+also accepts a pasted redirect URL or authorization code from stdin; an
+interactive paste prompt is not subject to the login timeout.
+
 | Flag | Description |
 | --- | --- |
 | `-p, --port <number>` | Fixed local OAuth callback port. Overrides `oauth.callbackPort`; `0` forces an OS-assigned port. |
+| `--no-browser` | Do not launch a browser: print the authorization URL and read a pasted redirect URL or authorization code from stdin |
 
 ### `logout <name>`
 

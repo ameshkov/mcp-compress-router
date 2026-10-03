@@ -11,6 +11,7 @@ import {
   handleDisable,
   handleTools,
   type AddOptions,
+  type LoginOptions,
 } from './index.js';
 import { runRouter } from './router-runner.js';
 
@@ -104,6 +105,16 @@ interface AddCommandOptions {
   allowedTools: string[];
   disabledTools: string[];
   port?: number;
+  browser?: boolean;
+}
+
+/**
+ * Commander options shape for the `login` command.
+ */
+interface LoginCommandOptions {
+  config?: string;
+  port?: number;
+  browser?: boolean;
 }
 
 /**
@@ -130,6 +141,7 @@ function buildAddOptions(
     disabledTools:
       options.disabledTools && options.disabledTools.length > 0 ? options.disabledTools : undefined,
     port: options.port,
+    noBrowser: options.browser === false ? true : undefined,
   };
 }
 
@@ -163,6 +175,10 @@ function registerAddCommand(program: Command): void {
       '-p, --port <number>',
       'fixed local OAuth callback port (HTTP only; written to oauth.callbackPort)',
       parsePort,
+    )
+    .option(
+      '--no-browser',
+      'print the authorization URL and paste the redirect URL or code instead of opening a browser',
     )
     .action(
       guardedAction(async (name, commandOrUrl, rest, options: AddCommandOptions) => {
@@ -221,10 +237,18 @@ function registerLoginCommand(program: Command): void {
       'fixed local OAuth callback port (overrides oauth.callbackPort; 0 = OS-assigned)',
       parsePort,
     )
+    .option(
+      '--no-browser',
+      'print the authorization URL and paste the redirect URL or code instead of opening a browser',
+    )
     .action(
-      guardedAction(async (name, options: { config?: string; port?: number }) => {
+      guardedAction(async (name, options: LoginCommandOptions) => {
         const configPath = await resolveConfigPath(options.config);
-        return handleLogin(configPath, name, options.port);
+        const loginOptions: LoginOptions = {
+          portOverride: options.port,
+          noBrowser: options.browser === false,
+        };
+        return handleLogin(configPath, name, loginOptions);
       }),
     );
 }

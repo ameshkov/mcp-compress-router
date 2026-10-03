@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as http from 'node:http';
 import type { OAuthCredentialManager } from '../services/oauth.js';
 import { renderCallbackPage } from './login-callback-page.js';
+import { startManualCodeWait, type PasteReader } from './login-paste.js';
 
 /**
  * SDK `startAuthorization` result: the authorization URL to open in the
@@ -22,6 +23,29 @@ interface AcquireAuthorizationCodeOptions {
   callbackPort: number;
   /** Opens the authorization URL in the user's browser. */
   openBrowser: (url: string) => Promise<void>;
+  /**
+   * When true, never launch a browser: print the authorization URL and
+   * accept a pasted redirect URL or authorization code instead.
+   */
+  noBrowser?: boolean;
+  /**
+   * Creates the reader for pasted authorization responses. Called lazily
+   * when the manual path starts (with `noBrowser` or after a failed
+   * browser launch); returning undefined means stdin is not interactive
+   * and the flow keeps waiting for the loopback callback.
+   */
+  getManualReader?: () => Pick<PasteReader, 'readLine'> | undefined;
+  /**
+   * Prints the authorization URL before the browser is opened. Defaults
+   * to writing the URL to stdout, so it is always available for manual
+   * use (for example, over SSH).
+   */
+  onAuthorizationUrl?: (url: string) => void;
+  /**
+   * Prints progress notices (browser launch failure, rejected pasted
+   * input). Defaults to writing to stdout.
+   */
+  onNotice?: (message: string) => void;
   /** Authorization-server issuer identifier (the `issuer` in AS metadata). */
   expectedIssuer: string;
   /**
@@ -67,8 +91,14 @@ interface CallbackFlow {
  * the generated `state`; when it carries `iss`, the value must match the
  * expected authorization-server issuer.
  *
+ * The authorization URL is always printed. When `noBrowser` is set, or
+ * the browser fails to launch, an interactive reader is created through
+ * `getManualReader` and a pasted redirect URL or authorization code can
+ * settle the same flow; whichever completes first wins.
+ *
  * The callback timeout comes from `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS`
- * (default 120 seconds).
+ * (default 120 seconds). It is not armed while an interactive paste
+ * prompt is active: the user decides when to finish or cancel.
  *
  * @param options - Callback server inputs.
  * @returns The authorization code and the `startAuthorization` result.
@@ -108,7 +138,9 @@ function readTimeoutMs(): number {
 /**
  * Creates the temporary HTTP server, binds it to the loopback interface,
  * and resolves with the authorization code once the browser delivers the
- * callback.
+ * callback or the user pastes one. The first path to complete wins; the
+ * timeout, the callback, and the paste prompt all settle through guarded
+ * callbacks so only one can end the flow.
  *
  * @param flow - Callback flow state for this login attempt.
  * @returns The authorization code and the `startAuthorization` result.
@@ -116,21 +148,30 @@ function readTimeoutMs(): number {
 async function startCallbackServerAndWait(flow: CallbackFlow): Promise<AuthorizationCodeResult> {
   const authorizationCode = await new Promise<string>((resolve, reject) => {
     const tempServer = http.createServer();
-    tempServer.on('request', makeCallbackHandler(flow, tempServer, resolve, reject));
+    let settled = false;
 
-    tempServer.listen(
-      flow.options.callbackPort,
-      '127.0.0.1',
-      onServerListen(flow, tempServer, reject),
-    );
-
-    tempServer.on('error', (err) => {
+    const settle = (code: string): void => {
+      if (settled) return;
+      settled = true;
       if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
-      reject(err);
-    });
-  });
+      tempServer.close();
+      resolve(code);
+    };
 
-  if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
+      tempServer.close();
+      reject(err);
+    };
+
+    tempServer.on('request', makeCallbackHandler(flow, settle, fail));
+    tempServer.listen(flow.options.callbackPort, '127.0.0.1', () => {
+      void onServerListen(flow, tempServer, settle, fail);
+    });
+    tempServer.on('error', fail);
+  });
 
   return { authorizationCode, authResult: flow.authResultRef.value! };
 }
@@ -245,23 +286,75 @@ function respondSuccess(res: http.ServerResponse): void {
 }
 
 /**
- * Settles the flow with a failure: clears the callback timeout, closes
- * the temporary server, and rejects the pending promise.
+ * Prints the authorization URL to stdout before any browser attempt, so
+ * it is always available to open on another device.
+ *
+ * @param url - The authorization URL.
+ */
+function printAuthorizationUrl(url: string): void {
+  process.stdout.write(`Open this URL to authorize:\n  ${url}\n`);
+}
+
+/**
+ * Writes one progress notice to stdout.
+ *
+ * @param message - The notice text.
+ */
+function writeNotice(message: string): void {
+  process.stdout.write(`${message}\n`);
+}
+
+/**
+ * Emits a progress notice through the configured (or default) printer.
  *
  * @param flow - Callback flow state for this login attempt.
- * @param tempServer - The temporary callback server (closed on failure).
- * @param reject - Promise reject function.
- * @param message - The error message for the rejection.
+ * @param message - The notice text.
  */
-function failFlow(
+function notice(flow: CallbackFlow, message: string): void {
+  (flow.options.onNotice ?? writeNotice)(message);
+}
+
+/**
+ * Arms the callback timeout. Interactive paste waits are not bounded:
+ * they end when the user responds or cancels.
+ *
+ * @param flow - Callback flow state for this login attempt.
+ * @param fail - Promise failure callback.
+ */
+function armCallbackTimeout(flow: CallbackFlow, fail: (err: Error) => void): void {
+  flow.timeoutHandle.current = setTimeout(() => {
+    fail(
+      new Error(`OAuth login timed out after ${flow.timeoutMs / 1000} seconds. Please try again.`),
+    );
+  }, flow.timeoutMs);
+}
+
+/**
+ * Starts the manual paste path when an interactive reader is available;
+ * otherwise falls back to the callback timeout. Pasted input is
+ * validated exactly like a callback.
+ *
+ * @param flow - Callback flow state for this login attempt.
+ * @param settle - Promise settlement callback (authorization code).
+ * @param fail - Promise failure callback.
+ */
+function beginManualCodeWait(
   flow: CallbackFlow,
-  tempServer: http.Server,
-  reject: (err: Error) => void,
-  message: string,
+  settle: (code: string) => void,
+  fail: (err: Error) => void,
 ): void {
-  if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
-  tempServer.close();
-  reject(new Error(message));
+  const reader = flow.options.getManualReader?.();
+  if (!reader) {
+    armCallbackTimeout(flow, fail);
+    return;
+  }
+  startManualCodeWait({
+    reader,
+    validate: (url) => validateCallback(flow, url),
+    print: flow.options.onNotice ?? writeNotice,
+    settle,
+    fail,
+  });
 }
 
 /**
@@ -273,17 +366,15 @@ function failFlow(
  * legitimate callback is still on its way.
  *
  * @param flow - Callback flow state for this login attempt.
- * @param tempServer - The temporary callback server (closed on completion).
- * @param resolve - Promise resolve function (authorization code).
- * @param reject - Promise reject function.
+ * @param settle - Promise settlement callback (authorization code).
+ * @param fail - Promise failure callback.
  * @param req - The incoming request.
  * @param res - The server response.
  */
 function handleCallbackRequest(
   flow: CallbackFlow,
-  tempServer: http.Server,
-  resolve: (code: string) => void,
-  reject: (err: Error) => void,
+  settle: (code: string) => void,
+  fail: (err: Error) => void,
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ): void {
@@ -303,7 +394,7 @@ function handleCallbackRequest(
 
   if (error !== null) {
     respondAuthorizationError(res, error, url.searchParams.get('error_description'));
-    failFlow(flow, tempServer, reject, `Authorization failed: ${error}`);
+    fail(new Error(`Authorization failed: ${error}`));
     return;
   }
 
@@ -313,76 +404,78 @@ function handleCallbackRequest(
     return;
   }
 
-  if (flow.timeoutHandle.current) clearTimeout(flow.timeoutHandle.current);
   respondSuccess(res);
-  tempServer.close();
-  resolve(code);
+  settle(code);
 }
 
 /**
  * Creates the HTTP request listener for the temporary callback server.
  *
  * @param flow - Callback flow state for this login attempt.
- * @param tempServer - The temporary callback server (closed on completion).
- * @param resolve - Promise resolve function (authorization code).
- * @param reject - Promise reject function.
+ * @param settle - Promise settlement callback (authorization code).
+ * @param fail - Promise failure callback.
  * @returns An HTTP request listener.
  */
 function makeCallbackHandler(
   flow: CallbackFlow,
-  tempServer: http.Server,
-  resolve: (code: string) => void,
-  reject: (err: Error) => void,
+  settle: (code: string) => void,
+  fail: (err: Error) => void,
 ): http.RequestListener {
-  return (req, res) => handleCallbackRequest(flow, tempServer, resolve, reject, req, res);
+  return (req, res) => handleCallbackRequest(flow, settle, fail, req, res);
 }
 
 /**
  * Listen callback: records the bound port, prepares the authorization
- * request, opens the browser, and arms the callback timeout. Closes the
- * listener when preparation fails so the process is not kept alive while
- * the error is reported.
+ * request, prints the authorization URL, and either opens the browser
+ * (arming the callback timeout) or starts the manual paste path. Closes
+ * the listener when preparation fails so the process is not kept alive
+ * while the error is reported.
  *
  * @param flow - Callback flow state for this login attempt.
  * @param tempServer - The temporary callback server.
- * @param reject - Promise reject function.
- * @returns The async listen handler.
+ * @param settle - Promise settlement callback (authorization code).
+ * @param fail - Promise failure callback.
+ * @returns A promise that resolves once preparation and the wait are started.
  */
-function onServerListen(
+async function onServerListen(
   flow: CallbackFlow,
   tempServer: http.Server,
-  reject: (err: Error) => void,
-): () => Promise<void> {
-  return async () => {
-    try {
-      const address = tempServer.address();
-      if (!address || typeof address === 'string') {
-        throw new Error('Failed to get server address');
-      }
-
-      // Record the OS-assigned port before the authorization request, so
-      // it (and the token exchange that follows) carries the real
-      // redirect URI.
-      flow.options.mgr.setActualPort(address.port);
-
-      flow.authResultRef.value = await flow.options.beginAuthorization(flow.state);
-      await flow.options.mgr.saveCodeVerifier(flow.authResultRef.value.codeVerifier);
-
-      void flow.options.openBrowser(flow.authResultRef.value.authorizationUrl.toString());
-
-      flow.timeoutHandle.current = setTimeout(() => {
-        tempServer.close();
-        reject(
-          new Error(
-            `OAuth login timed out after ${flow.timeoutMs / 1000} seconds. Please try again.`,
-          ),
-        );
-      }, flow.timeoutMs);
-    } catch (err) {
-      // Close the listener so a failed setup cannot keep the CLI process
-      // alive while the error is reported.
-      tempServer.close();
-      reject(err instanceof Error ? err : new Error(String(err)));
+  settle: (code: string) => void,
+  fail: (err: Error) => void,
+): Promise<void> {
+  try {
+    const address = tempServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to get server address');
     }
-  };
+
+    // Record the OS-assigned port before the authorization request, so
+    // it (and the token exchange that follows) carries the real
+    // redirect URI.
+    flow.options.mgr.setActualPort(address.port);
+
+    flow.authResultRef.value = await flow.options.beginAuthorization(flow.state);
+    await flow.options.mgr.saveCodeVerifier(flow.authResultRef.value.codeVerifier);
+
+    const authorizationUrl = flow.authResultRef.value.authorizationUrl.toString();
+    (flow.options.onAuthorizationUrl ?? printAuthorizationUrl)(authorizationUrl);
+
+    if (flow.options.noBrowser) {
+      beginManualCodeWait(flow, settle, fail);
+      return;
+    }
+
+    try {
+      await flow.options.openBrowser(authorizationUrl);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      notice(flow, `Could not open a browser: ${reason}`);
+      beginManualCodeWait(flow, settle, fail);
+      return;
+    }
+
+    armCallbackTimeout(flow, fail);
+  } catch (err) {
+    fail(err instanceof Error ? err : new Error(String(err)));
+  }
 }

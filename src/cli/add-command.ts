@@ -44,6 +44,12 @@ export interface AddOptions {
    * runs reuse it.
    */
   port?: number;
+  /**
+   * Set by `--no-browser`: print the authorization URL and read a
+   * pasted redirect URL or authorization code during the automatic
+   * login for OAuth servers instead of opening a browser.
+   */
+  noBrowser?: boolean;
 }
 
 /**
@@ -192,7 +198,12 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
   // the user is not left with an unauthenticated server.
   if (type === 'http') {
     try {
-      const loginResult = await tryAutoLogin(configPath, opts.name, opts.commandOrUrl);
+      const loginResult = await tryAutoLogin(
+        configPath,
+        opts.name,
+        opts.commandOrUrl,
+        opts.noBrowser,
+      );
       if (loginResult) {
         result += `\n${loginResult}`;
       }
@@ -216,6 +227,8 @@ export async function handleAdd(configPath: string, opts: AddOptions): Promise<s
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name just added.
  * @param url - Server URL to probe for OAuth metadata.
+ * @param noBrowser - Skip the browser during the automatic login and
+ * accept a pasted redirect URL or authorization code instead.
  * @returns The login confirmation message, or undefined if the server
  * does not advertise OAuth (or the probe failed).
  */
@@ -223,6 +236,7 @@ async function tryAutoLogin(
   configPath: string,
   name: string,
   url: string,
+  noBrowser?: boolean,
 ): Promise<string | undefined> {
   // Use the spec-compliant two-step discovery (RFC 9728 PRM, then RFC 8414
   // AS metadata at each advertised authorization server). A one-step
@@ -252,7 +266,7 @@ async function tryAutoLogin(
   }
 
   const { handleLogin } = await import('./login-command.js');
-  return handleLogin(configPath, name);
+  return handleLogin(configPath, name, { noBrowser });
 }
 
 /**

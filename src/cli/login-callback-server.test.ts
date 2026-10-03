@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { OAuthCredentialManager } from '../services/oauth.js';
 import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
+import type { PasteReader } from './login-paste.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 const server: DownstreamServerConfig = {
@@ -18,21 +19,31 @@ interface Captured {
 
 /**
  * Starts a flow whose hook captures the redirect URL and state, and whose
- * browser is a no-op (the test delivers the callback itself).
+ * browser is a no-op (the test delivers the callback itself). Tests can
+ * override the browser, the manual reader, and the output callbacks.
  */
 function startFlow(input: {
   captured: Partial<Captured>;
   expectedIssuer?: string;
   requireIssuer?: boolean;
   codeVerifier?: string;
+  noBrowser?: boolean;
+  openBrowser?: (url: string) => Promise<void>;
+  onAuthorizationUrl?: (url: string) => void;
+  onNotice?: (message: string) => void;
+  getManualReader?: () => Pick<PasteReader, 'readLine'> | undefined;
 }): Promise<{ authorizationCode: string; authResult: AuthResult }> {
   const mgr = new OAuthCredentialManager('/nonexistent/mcp.json', server);
   return acquireAuthorizationCode({
     mgr,
     callbackPort: 0,
-    openBrowser: async () => {},
+    openBrowser: input.openBrowser ?? (async () => {}),
     expectedIssuer: input.expectedIssuer ?? 'https://as.example',
     requireIssuer: input.requireIssuer ?? false,
+    noBrowser: input.noBrowser,
+    onAuthorizationUrl: input.onAuthorizationUrl ?? (() => {}),
+    onNotice: input.onNotice ?? (() => {}),
+    getManualReader: input.getManualReader,
     beginAuthorization: async (state) => {
       input.captured.state = state;
       input.captured.redirectUrl = mgr.redirectUrl as string;
@@ -270,5 +281,151 @@ describe('acquireAuthorizationCode', () => {
     await waitForSetup(captured);
 
     await expect(pending).rejects.toThrow(/timed out/);
+  });
+
+  it('prints the authorization URL before opening the browser', async () => {
+    const captured: Partial<Captured> = {};
+    const onAuthorizationUrl = vi.fn();
+    const openBrowser = vi.fn(async () => {});
+    const pending = startFlow({ captured, onAuthorizationUrl, openBrowser });
+    const setup = await waitForSetup(captured);
+
+    await vi.waitFor(() => {
+      expect(onAuthorizationUrl).toHaveBeenCalledWith('https://as.example/authorize');
+      expect(openBrowser).toHaveBeenCalledWith('https://as.example/authorize');
+    });
+    expect(onAuthorizationUrl.mock.invocationCallOrder[0]).toBeLessThan(
+      openBrowser.mock.invocationCallOrder[0]!,
+    );
+
+    await fetch(callbackUrl(setup, { code: 'code-print', state: setup.state }));
+    await expect(pending).resolves.toMatchObject({ authorizationCode: 'code-print' });
+  });
+
+  it('skips the browser and settles with a pasted code when noBrowser is set', async () => {
+    const captured: Partial<Captured> = {};
+    const openBrowser = vi.fn(async () => {});
+    const pending = startFlow({
+      captured,
+      noBrowser: true,
+      openBrowser,
+      getManualReader: () => ({ readLine: async () => 'pasted-code' }),
+    });
+    await waitForSetup(captured);
+
+    await expect(pending).resolves.toMatchObject({ authorizationCode: 'pasted-code' });
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the paste prompt when the browser fails to launch', async () => {
+    const captured: Partial<Captured> = {};
+    const onNotice = vi.fn();
+    const pending = startFlow({
+      captured,
+      openBrowser: async () => {
+        throw new Error('spawn xdg-open ENOENT');
+      },
+      onNotice,
+      getManualReader: () => ({
+        readLine: async () => {
+          const url = new URL(captured.redirectUrl!);
+          url.searchParams.set('code', 'pasted-after-failure');
+          url.searchParams.set('state', captured.state!);
+          return url.toString();
+        },
+      }),
+    });
+    await waitForSetup(captured);
+
+    await expect(pending).resolves.toMatchObject({ authorizationCode: 'pasted-after-failure' });
+    expect(onNotice).toHaveBeenCalledWith(expect.stringContaining('Could not open a browser'));
+  });
+
+  it('re-prompts when a pasted redirect URL fails state validation', async () => {
+    const captured: Partial<Captured> = {};
+    const onNotice = vi.fn();
+    const inputs = [
+      () => {
+        const url = new URL(captured.redirectUrl!);
+        url.searchParams.set('code', 'stale-code');
+        url.searchParams.set('state', 'wrong-state');
+        return url.toString();
+      },
+      () => {
+        const url = new URL(captured.redirectUrl!);
+        url.searchParams.set('code', 'good-code');
+        url.searchParams.set('state', captured.state!);
+        return url.toString();
+      },
+    ];
+    const readLine = vi.fn(async () => inputs.shift()!());
+    const pending = startFlow({
+      captured,
+      noBrowser: true,
+      onNotice,
+      getManualReader: () => ({ readLine }),
+    });
+    await waitForSetup(captured);
+
+    await expect(pending).resolves.toMatchObject({ authorizationCode: 'good-code' });
+    expect(readLine).toHaveBeenCalledTimes(2);
+    expect(onNotice).toHaveBeenCalledWith(expect.stringContaining('state mismatch'));
+  });
+
+  it('rejects a pasted error response whose state matches', async () => {
+    const captured: Partial<Captured> = {};
+    const pending = startFlow({
+      captured,
+      noBrowser: true,
+      getManualReader: () => ({
+        readLine: async () => {
+          const url = new URL(captured.redirectUrl!);
+          url.searchParams.set('error', 'access_denied');
+          url.searchParams.set('error_description', 'The user denied the request');
+          url.searchParams.set('state', captured.state!);
+          return url.toString();
+        },
+      }),
+    });
+    const rejection = expect(pending).rejects.toThrow(/Authorization failed: access_denied/);
+    await waitForSetup(captured);
+
+    await rejection;
+  });
+
+  it('cancels the login when the paste reader reports end-of-input', async () => {
+    const captured: Partial<Captured> = {};
+    const pending = startFlow({
+      captured,
+      noBrowser: true,
+      getManualReader: () => ({ readLine: async () => undefined }),
+    });
+    const rejection = expect(pending).rejects.toThrow(/cancelled/);
+    await waitForSetup(captured);
+
+    await rejection;
+  });
+
+  it('accepts the loopback callback while the paste prompt is still open', async () => {
+    const captured: Partial<Captured> = {};
+    const pending = startFlow({
+      captured,
+      noBrowser: true,
+      getManualReader: () => ({ readLine: () => new Promise<string | undefined>(() => {}) }),
+    });
+    const setup = await waitForSetup(captured);
+
+    await fetch(callbackUrl(setup, { code: 'callback-code', state: setup.state }));
+    await expect(pending).resolves.toMatchObject({ authorizationCode: 'callback-code' });
+  });
+
+  it('falls back to the callback timeout without an interactive reader', async () => {
+    process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS = '100';
+    const captured: Partial<Captured> = {};
+    const pending = startFlow({ captured, noBrowser: true });
+    const rejection = expect(pending).rejects.toThrow(/timed out/);
+    await waitForSetup(captured);
+
+    await rejection;
   });
 });

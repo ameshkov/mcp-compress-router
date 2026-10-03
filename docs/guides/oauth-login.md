@@ -16,7 +16,11 @@ can also trigger it manually:
 npx mcp-compress-router@latest login my-http
 ```
 
-This opens your browser to complete the authorization-code flow.
+This opens your browser to complete the authorization-code flow. The
+authorization URL is always printed, so you can copy it to another
+device if needed; on headless machines use `--no-browser` and paste the
+redirect URL back (see
+[Containers and headless machines](#containers-and-headless-machines)).
 Tokens are stored in a separate `credentials.json` in the same
 directory as `mcp.json` (with `0600` permissions on Unix), so you can
 safely share or version-control `mcp.json` without exposing tokens.
@@ -118,7 +122,90 @@ npx mcp-compress-router@latest logout my-http
 
 This removes the stored credentials for the server.
 
-## Headless and CI environments
+## Containers and headless machines
+
+The authorization URL is always printed, so you can open it on any
+device with a browser. The flow still waits for the loopback redirect;
+when no browser can complete it, use the paste fallback instead.
+
+### Paste the redirect URL back
+
+Pass `--no-browser` to skip the browser. The router prints the
+authorization URL and waits for you to paste either the full redirect
+URL from the browser's address bar or the authorization code:
+
+```bash
+npx mcp-compress-router@latest login my-http --no-browser
+```
+
+Open the printed URL on any device and approve the request, then copy
+the address the browser was redirected to. The redirect page does not
+need to load — the URL itself contains the code. Paste it at the
+prompt. `add` accepts the same flag and passes it to its automatic
+login:
+
+```bash
+npx mcp-compress-router@latest add my-http --no-browser \
+  --description "Internal API tools" https://example.com/mcp
+```
+
+If the browser command fails to start, the login falls back to the same
+prompt automatically. Without an interactive terminal (for example, in
+CI), there is nothing to paste: the flow keeps waiting for the callback
+and fails after `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` (120 seconds by
+default).
+
+### Docker
+
+A loopback callback inside a container is not reachable from a browser
+on the host, and publishing the callback port does not help: the
+listener binds `127.0.0.1` inside the container, while published ports
+are forwarded to the container's network interface. Use one of these
+approaches instead.
+
+Run the login inside the container with `--no-browser`:
+
+```bash
+docker exec -it my-container \
+  npx mcp-compress-router@latest login my-http --no-browser
+```
+
+The pasted redirect URL needs no inbound connectivity, so this works in
+any container. The container must be able to reach the authorization
+server and its token endpoint.
+
+Alternatively, configure and log in on the host in a dedicated router
+home, then mount that home into the container so it reuses
+`credentials.json`:
+
+```bash
+MCP_COMPRESS_ROUTER_HOME=~/.mcp-compress-router-host \
+  npx mcp-compress-router@latest add my-http \
+  --description "Internal API tools" https://example.com/mcp
+
+docker run -v ~/.mcp-compress-router-host:/data/router-home \
+  -e MCP_COMPRESS_ROUTER_HOME=/data/router-home my-image
+```
+
+On Linux, `--network host` lets the container share the host's loopback,
+so a normal browser login works:
+
+```bash
+docker run --network host my-image
+```
+
+### SSH sessions
+
+Over SSH, either use `--no-browser` and paste the redirect URL back, or
+forward the callback port so a browser on your machine can reach the
+callback server on the remote host:
+
+```bash
+ssh -L 127.0.0.1:8765:127.0.0.1:8765 user@remote
+npx mcp-compress-router@latest login my-http --port 8765
+```
+
+### CI and automated logins
 
 Override the browser with the `MCP_COMPRESS_ROUTER_BROWSER` environment
 variable. The authorization URL is appended as a single final argument

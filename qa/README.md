@@ -137,7 +137,10 @@ and using it re-introduces the port-conflict risk by choice.
 The image also installs `qa-browser`, a curl-based "browser" the router
 uses for OAuth (`MCP_COMPRESS_ROUTER_BROWSER=qa-browser`). It fetches
 the authorization URL and follows the redirect to the router's loopback
-callback, so `add` and `login` complete headlessly.
+callback, so `add` and `login` complete headlessly. The `--no-browser`
+plan bypasses this helper: it captures the printed authorization URL,
+resolves its redirect target with curl without following it, and pastes
+the URL back at the prompt.
 
 ## Preparing the QA home
 
@@ -378,7 +381,7 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
-| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the RFC 9207 issuer, and the RFC 8707 resource indicator |
+| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the RFC 9207 issuer, the RFC 8707 resource indicator, and the `--no-browser` paste-back login |
 | `opencode.feature` | `OPENCODE` | Discovery, compact catalog, descriptions through the schema result, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
 | `claude.feature` | `CLAUDE` | Discovery, compact catalog, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |
