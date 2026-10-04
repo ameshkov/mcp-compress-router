@@ -118,9 +118,17 @@ function authorizationServerMetadata(state: OAuthMockState): Record<string, unkn
  */
 function handleRegister(res: ServerResponse, body: string, state: OAuthMockState): void {
   let redirectUris: string[] = [];
+  let clientName: string | undefined;
+  let clientUri: string | undefined;
   try {
-    const parsed = JSON.parse(body) as { redirect_uris?: string[] };
+    const parsed = JSON.parse(body) as {
+      redirect_uris?: string[];
+      client_name?: string;
+      client_uri?: string;
+    };
     redirectUris = parsed.redirect_uris ?? [];
+    clientName = parsed.client_name;
+    clientUri = parsed.client_uri;
   } catch {
     redirectUris = [];
   }
@@ -130,11 +138,19 @@ function handleRegister(res: ServerResponse, body: string, state: OAuthMockState
   console.log(
     `[mock-mcp-http-oauth] registered client ${clientId} redirect_uris=[${redirectUris.join(', ')}]`,
   );
+  // The client identity the router sent (oauth.clientName / oauth.clientUri
+  // or the --client-name / --client-uri overrides). A strict provider
+  // allowlists this identity, so the QA plans assert it in the log.
+  console.log(
+    `[mock-mcp-http-oauth] registration client_name=${clientName ?? ''} client_uri=${clientUri ?? ''}`,
+  );
   sendJson(res, 201, {
     client_id: clientId,
     client_secret: clientSecret,
     redirect_uris: redirectUris,
     token_endpoint_auth_method: 'client_secret_post',
+    ...(clientName !== undefined ? { client_name: clientName } : {}),
+    ...(clientUri !== undefined ? { client_uri: clientUri } : {}),
   });
 }
 

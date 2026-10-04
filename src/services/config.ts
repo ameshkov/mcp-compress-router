@@ -7,6 +7,8 @@ import {
   normalizeDescription,
   parseJsonc,
   validateGlobPattern,
+  validateOAuthClientName,
+  validateOAuthClientUri,
 } from '../utils/index.js';
 
 /** Recognized MCP transport types. */
@@ -214,14 +216,52 @@ function buildServerFields(
 }
 
 /**
+ * Parses and validates the optional `oauth.clientName` and
+ * `oauth.clientUri` overrides with env expansion.
+ *
+ * @param oauthRaw - The raw oauth block object.
+ * @param name - Server name for error messages.
+ * @param entryContext - Human-readable context for env var expansion.
+ * @returns The validated client identity overrides (both optional).
+ * @throws If a value is empty or not an absolute http(s) URL.
+ */
+function parseClientIdentity(
+  oauthRaw: Record<string, unknown>,
+  name: string,
+  entryContext: string,
+): { clientName?: string; clientUri?: string } {
+  const rawClientName = typeof oauthRaw.clientName === 'string' ? oauthRaw.clientName : undefined;
+  const rawClientUri = typeof oauthRaw.clientUri === 'string' ? oauthRaw.clientUri : undefined;
+  const serverLabel = `Server "${name}"`;
+
+  const clientName =
+    rawClientName !== undefined
+      ? validateOAuthClientName(
+          expandEnvField(rawClientName, `${entryContext} oauth.clientName`),
+          `${serverLabel} oauth.clientName`,
+        )
+      : undefined;
+  const clientUri =
+    rawClientUri !== undefined
+      ? validateOAuthClientUri(
+          expandEnvField(rawClientUri, `${entryContext} oauth.clientUri`),
+          `${serverLabel} oauth.clientUri`,
+        )
+      : undefined;
+  return { clientName, clientUri };
+}
+
+/**
  * Parses the optional `oauth` block from a server entry with env expansion.
  *
+ * @param name - Server name for error messages.
  * @param entryContext - Human-readable context string for env var expansion.
  * @param server - The server entry object from mcp.json.
  * @returns The parsed OAuth config, or undefined if absent.
  * @throws If the oauth block is not an object.
  */
 function parseOauthBlock(
+  name: string,
   entryContext: string,
   server: Record<string, unknown>,
 ): OAuthConfig | undefined {
@@ -229,7 +269,7 @@ function parseOauthBlock(
     return undefined;
   }
   if (typeof server.oauth !== 'object') {
-    throw new Error(`Server "${entryContext.slice(8)}" oauth block must be an object`);
+    throw new Error(`Server "${name}" oauth block must be an object`);
   }
 
   const oauthRaw = server.oauth as Record<string, unknown>;
@@ -237,6 +277,7 @@ function parseOauthBlock(
   const rawClientSecret =
     typeof oauthRaw.clientSecret === 'string' ? oauthRaw.clientSecret : undefined;
   const rawScope = typeof oauthRaw.scope === 'string' ? oauthRaw.scope : undefined;
+  const { clientName, clientUri } = parseClientIdentity(oauthRaw, name, entryContext);
 
   const clientId =
     rawClientId !== undefined
@@ -248,12 +289,14 @@ function parseOauthBlock(
       : undefined;
   const scope =
     rawScope !== undefined ? expandEnvField(rawScope, `${entryContext} oauth.scope`) : undefined;
-  const callbackPort = parseCallbackPort(oauthRaw.callbackPort, entryContext);
+  const callbackPort = parseCallbackPort(oauthRaw.callbackPort, name);
 
   const oauth: OAuthConfig = {};
   if (clientId !== undefined) oauth.clientId = clientId;
   if (clientSecret !== undefined) oauth.clientSecret = clientSecret;
   if (scope !== undefined) oauth.scope = scope;
+  if (clientName !== undefined) oauth.clientName = clientName;
+  if (clientUri !== undefined) oauth.clientUri = clientUri;
   if (callbackPort !== undefined) oauth.callbackPort = callbackPort;
   return oauth;
 }
@@ -265,19 +308,17 @@ function parseOauthBlock(
  * 1 and 65535. No env expansion is applied (ports are not secrets).
  *
  * @param value - The raw `callbackPort` value from the oauth block.
- * @param entryContext - Human-readable context string for error messages.
+ * @param name - Server name for error messages.
  * @returns The validated port number, or undefined when absent.
  * @throws If the value is present but not a valid port number.
  */
-function parseCallbackPort(value: unknown, entryContext: string): number | undefined {
+function parseCallbackPort(value: unknown, name: string): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
   const port = typeof value === 'number' ? value : Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(
-      `Server "${entryContext.slice(8)}" oauth.callbackPort must be an integer between 1 and 65535`,
-    );
+    throw new Error(`Server "${name}" oauth.callbackPort must be an integer between 1 and 65535`);
   }
   return port;
 }
@@ -377,7 +418,7 @@ function parseServerEntry(
   const entryContext = `server "${name}"`;
   const fields = buildServerFields(entryContext, server);
   const description = normalizeDescription(server.description);
-  const oauth = parseOauthBlock(entryContext, server);
+  const oauth = parseOauthBlock(name, entryContext, server);
   const enabled = validateEnabled(name, server);
   const allowedTools = validateToolList(name, 'allowedTools', server.allowedTools);
   const disabledTools = validateToolList(name, 'disabledTools', server.disabledTools);

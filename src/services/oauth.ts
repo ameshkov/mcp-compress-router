@@ -134,6 +134,13 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    * loopback redirect matching, so the registration stays valid across
    * logins regardless of the port the callback server binds.
    *
+   * `client_name` defaults to `mcp-compress-router` and can be overridden
+   * per server with `oauth.clientName`; `client_uri` is omitted unless
+   * `oauth.clientUri` is configured. Providers that allowlist client
+   * identities (e.g. Figma) gate dynamic client registration on these
+   * fields, so both the CLI login flow and the SDK's runtime `auth()`
+   * flow read the effective values here.
+   *
    * `application_type` is required for native clients by the MCP
    * authorization specification (and by OIDC-aware registration
    * endpoints, which otherwise default to "web"). The SDK's
@@ -142,11 +149,15 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    * registration body unchanged, so the field reaches the server.
    */
   get clientMetadata(): OAuthClientMetadata & { application_type: 'native' } {
-    return {
+    const metadata: OAuthClientMetadata & { application_type: 'native' } = {
       redirect_uris: [OAUTH_LOOPBACK_URI],
-      client_name: 'mcp-compress-router',
+      client_name: this._server.oauth?.clientName ?? 'mcp-compress-router',
       application_type: 'native',
     };
+    if (this._server.oauth?.clientUri !== undefined) {
+      metadata.client_uri = this._server.oauth.clientUri;
+    }
+    return metadata;
   }
 
   /**

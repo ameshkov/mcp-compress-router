@@ -4,6 +4,22 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { createTimeoutFetch, getAuthDiscoveryTimeoutMs } from '../utils/index.js';
 
+// Cached lazy import for the SDK OAuth discovery helpers, so the heavy
+// SDK auth module is only loaded when discovery actually runs.
+let _sdkAuth: typeof import('@modelcontextprotocol/sdk/client/auth.js') | undefined;
+
+/**
+ * Returns the SDK auth module, loading it on first use.
+ *
+ * @returns The SDK `client/auth.js` module.
+ */
+async function _getSdkAuth(): Promise<typeof import('@modelcontextprotocol/sdk/client/auth.js')> {
+  if (!_sdkAuth) {
+    _sdkAuth = await import('@modelcontextprotocol/sdk/client/auth.js');
+  }
+  return _sdkAuth;
+}
+
 /**
  * Result of OAuth discovery for a downstream MCP server.
  */
@@ -253,7 +269,7 @@ function toDiscoveredAuth(
  */
 export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
   const { discoverOAuthProtectedResourceMetadata, discoverAuthorizationServerMetadata } =
-    await import('@modelcontextprotocol/sdk/client/auth.js');
+    await _getSdkAuth();
 
   // The SDK discovery helpers use a raw fetch with no timeout; a server
   // that hangs its well-known endpoint would trap discovery forever. Pass

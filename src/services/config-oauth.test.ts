@@ -61,6 +61,101 @@ describe('loadConfig — oauth block', () => {
     await expect(loadConfig(configPath)).rejects.toThrow('MISSING_VAR');
   });
 
+  it('parses oauth.clientName and oauth.clientUri with ${VAR} expansion', async () => {
+    process.env.TEST_CLIENT_NAME = 'My Approved Client';
+    process.env.TEST_CLIENT_URI = 'https://example.com/app';
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        figma: {
+          type: 'http',
+          url: 'https://mcp.figma.com/mcp',
+          description: 'Figma MCP',
+          oauth: {
+            clientName: '${TEST_CLIENT_NAME}',
+            clientUri: '${TEST_CLIENT_URI}',
+            scope: 'mcp:connect',
+          },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    const servers = await loadConfig(configPath);
+    expect(servers[0].oauth).toEqual({
+      clientName: 'My Approved Client',
+      clientUri: 'https://example.com/app',
+      scope: 'mcp:connect',
+    });
+    delete process.env.TEST_CLIENT_NAME;
+    delete process.env.TEST_CLIENT_URI;
+  });
+
+  it('trims oauth.clientName', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        figma: {
+          type: 'http',
+          url: 'https://mcp.figma.com/mcp',
+          description: 'Figma MCP',
+          oauth: { clientName: '  Padded Client  ' },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    const servers = await loadConfig(configPath);
+    expect(servers[0].oauth?.clientName).toBe('Padded Client');
+  });
+
+  it('trims oauth.clientUri', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        figma: {
+          type: 'http',
+          url: 'https://mcp.figma.com/mcp',
+          description: 'Figma MCP',
+          oauth: { clientUri: '  https://example.com/app  ' },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    const servers = await loadConfig(configPath);
+    expect(servers[0].oauth?.clientUri).toBe('https://example.com/app');
+  });
+
+  it('rejects an empty oauth.clientName with the server and field in the message', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        figma: {
+          type: 'http',
+          url: 'https://mcp.figma.com/mcp',
+          description: 'Figma MCP',
+          oauth: { clientName: '   ' },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    await expect(loadConfig(configPath)).rejects.toThrow(/Server "figma" oauth\.clientName/);
+  });
+
+  it('rejects a non-absolute oauth.clientUri with the server and field in the message', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        figma: {
+          type: 'http',
+          url: 'https://mcp.figma.com/mcp',
+          description: 'Figma MCP',
+          oauth: { clientUri: 'not-a-url' },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    await expect(loadConfig(configPath)).rejects.toThrow(/Server "figma" oauth\.clientUri/);
+  });
+
   it('allows oauth block with only clientId (public client)', async () => {
     process.env.CLIENT_ID = 'pub-client';
     const configPath = path.join(tempDir, 'mcp.json');

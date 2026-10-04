@@ -30,7 +30,7 @@ directory. Add both files to your `.gitignore`.
 By default the router uses
 [Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591).
 If your server requires a pre-registered client, add an `oauth` block
-to the server entry in `mcp.json`:
+with `clientId` to the server entry in `mcp.json`:
 
 ```jsonc
 "my-http": {
@@ -45,10 +45,15 @@ to the server entry in `mcp.json`:
 }
 ```
 
-Only `clientId` is required; `clientSecret` and `scope` are optional.
-See the
+If the provider allowlists client identities and rejects registration
+from unknown clients, set `oauth.clientName` (and `oauth.clientUri` when
+the provider requires it) to an approved identity instead; `login` then
+registers the router itself. See
+[Connect the Figma MCP server](./oauth-figma.md) for a worked example.
+
+All `oauth` fields are optional; see the
 [OAuth configuration reference](../reference/configuration.md#oauth-configuration)
-for every `oauth` field.
+for every one.
 
 ## Resource indicator
 

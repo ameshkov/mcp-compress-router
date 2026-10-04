@@ -80,3 +80,9 @@ Scenario: Login without a browser accepts a pasted redirect URL
   Then the output reports "Successfully authenticated server "oauth-mock""
   And the output shows an "oauth-mock" row with auth "authenticated"
   And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows an "issued tokens (authorization_code" line
+
+@TC-OAUTH-8
+Scenario: The login registers with the configured DCR client identity
+  When I add the OAuth mock server with "pnpm qa:router add --client-name 'QA Override Client' --client-uri 'https://qa.example.com/app' oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  Then the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "registration client_name=QA Override Client client_uri=https://qa.example.com/app" line
+  And the same output shows an "auto-approved, redirecting to http://127.0.0.1:" line

@@ -363,9 +363,9 @@ provider enforces. Like a strict provider, it also requires the RFC 8707
 login plans exercise resource-bound token issuance. The OAuth container
 advertises itself as `http://mock-mcp-http-oauth:3101`, the in-network
 name the router can resolve. Its container log shows the registered
-redirect URIs, each authorization redirect with its issuer and resource,
-each token issuance with its resource, and the authenticated tool
-calls:
+client identity (`client_name` / `client_uri`), the registered redirect
+URIs, each authorization redirect with its issuer and resource, each
+token issuance with its resource, and the authenticated tool calls:
 
 ```bash
 docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth
@@ -381,7 +381,7 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
-| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the RFC 9207 issuer, the RFC 8707 resource indicator, and the `--no-browser` paste-back login |
+| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the DCR client identity, the RFC 9207 issuer, the RFC 8707 resource indicator, and the `--no-browser` paste-back login |
 | `opencode.feature` | `OPENCODE` | Discovery, compact catalog, descriptions through the schema result, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
 | `claude.feature` | `CLAUDE` | Discovery, compact catalog, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |

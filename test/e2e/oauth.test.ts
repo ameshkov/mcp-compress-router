@@ -260,6 +260,42 @@ describe('MCP Compress Router E2E — OAuth', () => {
     expect(creds.authsrv.tokens.token_type).toBe('Bearer');
   }, 25000);
 
+  it('login sends oauth.clientName / oauth.clientUri and flag overrides to DCR', async () => {
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          figma: {
+            type: 'http',
+            url: authFixture.url + '/mcp',
+            description: 'OAuth fixture server',
+            oauth: {
+              clientName: 'My Approved Client',
+              clientUri: 'https://example.com/app',
+            },
+          },
+        },
+      }),
+    );
+
+    const result = await runCliAsync(
+      ['login', 'figma', '--client-name', 'Flag Client', '--config', configPath],
+      {
+        extraEnv: { MCP_COMPRESS_ROUTER_BROWSER: `node "${browserMockPath}"` },
+        timeout: 20000,
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Successfully authenticated');
+
+    // The --client-name flag overrides the configured name for this
+    // login only; client_uri still comes from the config, and the
+    // registration carries both so an allowlisting provider accepts it.
+    expect(authFixture.getLastRegisteredClientName()).toBe('Flag Client');
+    expect(authFixture.getLastRegisteredClientUri()).toBe('https://example.com/app');
+  }, 25000);
+
   it('login --port binds the callback server to the exact port', async () => {
     const port = await getFreePort();
     await fs.writeFile(

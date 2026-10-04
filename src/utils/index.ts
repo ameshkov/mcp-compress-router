@@ -18,6 +18,7 @@ export { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
 export { SERVER_DESCRIPTION_GUIDANCE, normalizeDescription } from './description-guidance.js';
 export { validateArguments } from './validate-arguments.js';
 export { validateGlobPattern } from './validate-glob.js';
+export { validateOAuthClientName, validateOAuthClientUri } from './validate-oauth-client.js';
 export { expandEnvField } from './expand-env.js';
 export { Logger } from './logger.js';
 export { parseJsonc } from './parse-jsonc.js';

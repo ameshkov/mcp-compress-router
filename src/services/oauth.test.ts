@@ -52,6 +52,19 @@ describe('OAuthCredentialManager', () => {
     // Native clients must declare application_type so OIDC-aware
     // registration endpoints do not default to "web".
     expect(mgr.clientMetadata.application_type).toBe('native');
+    // client_uri is omitted unless the server overrides it.
+    expect(mgr.clientMetadata.client_uri).toBeUndefined();
+  });
+
+  it('clientMetadata applies the oauth.clientName and oauth.clientUri overrides', () => {
+    const mgr = new OAuthCredentialManager(configPath, {
+      ...server,
+      oauth: { clientName: 'Visual Studio Code', clientUri: 'https://code.visualstudio.com' },
+    });
+    expect(mgr.clientMetadata.client_name).toBe('Visual Studio Code');
+    expect(mgr.clientMetadata.client_uri).toBe('https://code.visualstudio.com');
+    expect(mgr.clientMetadata.redirect_uris).toEqual([OAUTH_LOOPBACK_URI]);
+    expect(mgr.clientMetadata.application_type).toBe('native');
   });
 
   it('clientInformation returns undefined when no credentials stored', async () => {

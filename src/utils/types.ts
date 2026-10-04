@@ -57,6 +57,21 @@ export interface OAuthConfig {
   clientId?: string;
   /** Pre-registered OAuth client secret. ${VAR} expanded during config load. */
   clientSecret?: string;
+  /**
+   * Dynamic client registration `client_name`. Overrides the
+   * `mcp-compress-router` default so a provider that allowlists client
+   * identities (e.g. Figma) can accept the registration. Ignored when
+   * {@link clientId} is configured (registration is skipped). Must be
+   * a non-empty string; ${VAR} expanded during config load.
+   */
+  clientName?: string;
+  /**
+   * Dynamic client registration `client_uri`. Omitted from the
+   * registration body unless set. Ignored when {@link clientId} is
+   * configured (registration is skipped). Must be an absolute http(s)
+   * URL; ${VAR} expanded during config load.
+   */
+  clientUri?: string;
   /** Space-delimited scope string. ${VAR} expanded during config load. */
   scope?: string;
   /**

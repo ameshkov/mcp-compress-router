@@ -10,8 +10,12 @@ import {
   normalizeDescription,
   SERVER_DESCRIPTION_GUIDANCE,
   validateGlobPattern,
+  validateOAuthClientName,
+  validateOAuthClientUri,
   type AuthRequirement,
 } from '../utils/index.js';
+import { discoverAuth } from '../services/index.js';
+import { handleLogin } from './login-command.js';
 
 /**
  * Options for the add subcommand, parsed from CLI flags.
@@ -44,6 +48,17 @@ export interface AddOptions {
    * runs reuse it.
    */
   port?: number;
+  /**
+   * Dynamic client registration `client_name` from `--client-name`.
+   * Only applies to HTTP servers; persisted as `oauth.clientName` so
+   * the automatic login registers with this identity.
+   */
+  clientName?: string;
+  /**
+   * Dynamic client registration `client_uri` from `--client-uri`. Only
+   * applies to HTTP servers; persisted as `oauth.clientUri`.
+   */
+  clientUri?: string;
   /**
    * Set by `--no-browser`: print the authorization URL and read a
    * pasted redirect URL or authorization code during the automatic
@@ -140,19 +155,58 @@ function buildServerEntry(
     entry.disabledTools = opts.disabledTools;
   }
 
-  // A fixed callback port only applies to HTTP servers (OAuth). Persist
-  // it on the `oauth` block so `login` reuses the same redirect URI.
-  if (opts.port !== undefined) {
-    if (type !== 'http') {
-      throw new Error('--port is only supported for HTTP servers (OAuth callback).');
-    }
-    if (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535) {
-      throw new Error(`--port must be an integer between 1 and 65535 (got ${opts.port}).`);
-    }
-    entry.oauth = { callbackPort: opts.port };
+  // OAuth overrides only apply to HTTP servers (there is no callback or
+  // dynamic registration for stdio). Persist them on the `oauth` block so
+  // `login` reuses the same identity and redirect URI.
+  const oauth = buildOAuthBlock(opts, type);
+  if (oauth) {
+    entry.oauth = oauth;
   }
 
   return { entry, type };
+}
+
+/**
+ * Builds the optional `oauth` block from `--port`, `--client-name`, and
+ * `--client-uri`.
+ *
+ * Each flag is HTTP-only and validated before it is written: the port
+ * must be an integer in 1-65535, the client name non-empty, and the
+ * client URI an absolute http(s) URL.
+ *
+ * @param opts - Parsed CLI options.
+ * @param type - The resolved transport type.
+ * @returns The raw oauth block, or undefined when no flag was passed.
+ * @throws If a flag is used for a stdio server or carries an invalid value.
+ */
+function buildOAuthBlock(opts: AddOptions, type: string): Record<string, unknown> | undefined {
+  if (opts.port !== undefined && type !== 'http') {
+    throw new Error('--port is only supported for HTTP servers (OAuth callback).');
+  }
+  if (opts.clientName !== undefined && type !== 'http') {
+    throw new Error('--client-name is only supported for HTTP servers (OAuth).');
+  }
+  if (opts.clientUri !== undefined && type !== 'http') {
+    throw new Error('--client-uri is only supported for HTTP servers (OAuth).');
+  }
+  if (
+    opts.port !== undefined &&
+    (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535)
+  ) {
+    throw new Error(`--port must be an integer between 1 and 65535 (got ${opts.port}).`);
+  }
+
+  const oauth: Record<string, unknown> = {};
+  if (opts.clientName !== undefined) {
+    oauth.clientName = validateOAuthClientName(opts.clientName, '--client-name');
+  }
+  if (opts.clientUri !== undefined) {
+    oauth.clientUri = validateOAuthClientUri(opts.clientUri, '--client-uri');
+  }
+  if (opts.port !== undefined) {
+    oauth.callbackPort = opts.port;
+  }
+  return Object.keys(oauth).length > 0 ? oauth : undefined;
 }
 
 /**
@@ -244,8 +298,6 @@ async function tryAutoLogin(
   // publish their AS only via PRM `authorization_servers` (e.g. Notion,
   // whose AS metadata lives at the origin root, not the path-qualified
   // well-known URL).
-  const { discoverAuth } = await import('../services/oauth-discovery.js');
-
   let requirement: AuthRequirement;
   let hasOAuth: boolean;
   try {
@@ -265,7 +317,6 @@ async function tryAutoLogin(
     return undefined;
   }
 
-  const { handleLogin } = await import('./login-command.js');
   return handleLogin(configPath, name, { noBrowser });
 }
 

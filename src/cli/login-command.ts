@@ -1,9 +1,9 @@
 import type { DownstreamServerConfig } from '../utils/index.js';
-import { Logger } from '../utils/index.js';
+import { Logger, validateOAuthClientName, validateOAuthClientUri } from '../utils/index.js';
 import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
 import { loadConfig } from '../services/config.js';
 import { discoverAuth, discoverSingleServer, saveToolCache } from '../services/index.js';
-import { OAUTH_LOOPBACK_URI, type OAuthCredentialManager } from '../services/oauth.js';
+import { OAUTH_LOOPBACK_URI, OAuthCredentialManager } from '../services/oauth.js';
 import type {
   OAuthClientInformationMixed,
   OAuthProtectedResourceMetadata,
@@ -151,16 +151,50 @@ function _registrationCoversLoopback(client: OAuthClientInformationMixed): boole
 }
 
 /**
+ * Whether a stored client registration can be reused for this login.
+ *
+ * The registered redirect URIs must cover the portless loopback callback
+ * URI (see {@link _registrationCoversLoopback}). When the server
+ * configures a `client_name` or `client_uri` override, the stored
+ * registration must carry the same value for that field. Identity fields
+ * the stored registration does not contain are ignored: legacy
+ * registrations (and providers that do not echo the metadata) stay
+ * reusable instead of being re-registered on every login.
+ *
+ * @param client - The stored client registration.
+ * @param server - The effective downstream server configuration.
+ * @returns True when the stored registration can be reused as-is.
+ */
+function _registrationMatches(
+  client: OAuthClientInformationMixed,
+  server: DownstreamServerConfig,
+): boolean {
+  if (!_registrationCoversLoopback(client)) {
+    return false;
+  }
+  const { clientName, clientUri } = server.oauth ?? {};
+  if (clientName !== undefined && 'client_name' in client && client.client_name !== clientName) {
+    return false;
+  }
+  if (clientUri !== undefined && 'client_uri' in client && client.client_uri !== clientUri) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Registers a client through dynamic client registration (RFC 7591) unless
  * a static `oauth.clientId` override is configured or a stored registration
- * already covers the loopback redirect URI. Registration does not depend on
- * the callback port: the registered URI is the portless
- * {@link OAUTH_LOOPBACK_URI}, and RFC 8252 §8.4 excludes the port from
- * loopback redirect matching.
+ * matches the loopback redirect URI and the configured client identity.
+ * Registration does not depend on the callback port: the registered URI is
+ * the portless {@link OAUTH_LOOPBACK_URI}, and RFC 8252 §8.4 excludes the
+ * port from loopback redirect matching.
  *
  * @param mgr - OAuth credential manager for the target server.
  * @param metadata - Discovered OAuth metadata.
  * @param name - Server name (for error messages).
+ * @param server - The effective downstream server configuration (config
+ *   plus any `login` overrides), used for the identity comparison.
  * @throws If the server does not support dynamic client registration and no
  *   reusable registration or static client is available.
  */
@@ -168,12 +202,13 @@ async function registerClientIfNeeded(
   mgr: OAuthCredentialManager,
   metadata: OAuthMetadata,
   name: string,
+  server: DownstreamServerConfig,
 ): Promise<void> {
   if (mgr.hasStaticClient()) {
     return;
   }
   const stored = await mgr.clientInformation();
-  if (stored && _registrationCoversLoopback(stored)) {
+  if (stored && _registrationMatches(stored, server)) {
     return;
   }
   if (!metadata.registration_endpoint) {
@@ -212,7 +247,7 @@ async function beginAuthorization(
   state: string,
   resource: URL | undefined,
 ): Promise<AuthResult> {
-  await registerClientIfNeeded(mgr, metadata, name);
+  await registerClientIfNeeded(mgr, metadata, name, targetServer);
   const { startAuthorization } = await _getSdkAuth();
   return startAuthorization(new URL(metadata.authorization_endpoint!), {
     metadata,
@@ -265,6 +300,42 @@ function _resolveCallbackPort(
 }
 
 /**
+ * Applies the `--client-name` / `--client-uri` overrides on top of the
+ * server's configured `oauth` block. The returned configuration is used
+ * for this login only; the flags are not persisted (matching `--port`).
+ * Each override is validated before any network activity.
+ *
+ * @param server - The typed downstream server configuration.
+ * @param options - Login options carrying the overrides.
+ * @returns The effective server configuration.
+ * @throws If an override is invalid (empty name or non-http(s) URI).
+ */
+function _applyOAuthOverrides(
+  server: DownstreamServerConfig,
+  options: LoginOptions | undefined,
+): DownstreamServerConfig {
+  const clientName =
+    options?.clientNameOverride !== undefined
+      ? validateOAuthClientName(options.clientNameOverride, '--client-name')
+      : undefined;
+  const clientUri =
+    options?.clientUriOverride !== undefined
+      ? validateOAuthClientUri(options.clientUriOverride, '--client-uri')
+      : undefined;
+  if (clientName === undefined && clientUri === undefined) {
+    return server;
+  }
+  return {
+    ...server,
+    oauth: {
+      ...server.oauth,
+      ...(clientName !== undefined ? { clientName } : {}),
+      ...(clientUri !== undefined ? { clientUri } : {}),
+    },
+  };
+}
+
+/**
  * Options for the `login` subcommand.
  */
 export interface LoginOptions {
@@ -276,6 +347,18 @@ export interface LoginOptions {
    * OS-assigned port.
    */
   portOverride?: number;
+  /**
+   * Optional `--client-name` override for dynamic client registration.
+   * Overrides `oauth.clientName` for this login only; not persisted.
+   * Must be a non-empty string.
+   */
+  clientNameOverride?: string;
+  /**
+   * Optional `--client-uri` override for dynamic client registration.
+   * Overrides `oauth.clientUri` for this login only; not persisted.
+   * Must be an absolute http(s) URL.
+   */
+  clientUriOverride?: string;
   /**
    * Set by `--no-browser`: print the authorization URL and read a
    * pasted redirect URL or authorization code from stdin instead of
@@ -321,7 +404,9 @@ function _createManualReader(): {
  * authorization code, exchanges the code for tokens, and persists them
  * in credentials.json. The authorization and token requests carry the
  * RFC 8707 `resource` indicator derived from the server's Protected
- * Resource Metadata when it publishes one.
+ * Resource Metadata when it publishes one. The `--client-name` and
+ * `--client-uri` overrides replace the configured `oauth.clientName` /
+ * `oauth.clientUri` for this login only and are not persisted.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
@@ -335,17 +420,17 @@ export async function handleLogin(
   options?: LoginOptions,
 ): Promise<string> {
   const { targetServer } = await validateServerForLogin(configPath, name);
+  const effectiveServer = _applyOAuthOverrides(targetServer, options);
 
   const callbackPort = _resolveCallbackPort(
     _validatePortOverride(options?.portOverride),
-    targetServer,
+    effectiveServer,
   );
 
-  const { OAuthCredentialManager } = await import('../services/oauth.js');
-  const mgr = new OAuthCredentialManager(configPath, targetServer);
+  const mgr = new OAuthCredentialManager(configPath, effectiveServer);
 
   const { metadata, requireIssuer, resourceMetadata } = await discoverOAuthMetadata(
-    targetServer,
+    effectiveServer,
     name,
   );
 
@@ -355,7 +440,7 @@ export async function handleLogin(
   // Resource Metadata the same way the SDK's auth() flow selects it.
   // Undefined when the server publishes no such metadata: the SDK then
   // omits the parameter, matching the runtime transport path.
-  const resource = await selectResourceURL(new URL(targetServer.url!), mgr, resourceMetadata);
+  const resource = await selectResourceURL(new URL(effectiveServer.url!), mgr, resourceMetadata);
 
   const manualReader = _createManualReader();
   const { authorizationCode, authResult } = await acquireAuthorizationCode({
@@ -367,7 +452,7 @@ export async function handleLogin(
     noBrowser: options?.noBrowser,
     getManualReader: manualReader.getManualReader,
     beginAuthorization: (state) =>
-      beginAuthorization(mgr, metadata, targetServer, name, state, resource),
+      beginAuthorization(mgr, metadata, effectiveServer, name, state, resource),
   }).finally(manualReader.close);
 
   const realRedirectUrl = mgr.redirectUrl as string;
@@ -381,17 +466,34 @@ export async function handleLogin(
   });
 
   await mgr.saveTokens(tokens);
+  await _cacheToolsAfterLogin(configPath, name, effectiveServer, mgr);
 
-  // Best-effort: discover tools and save to cache so the next router
-  // startup (or self-recovery) has an up-to-date cache.
+  return `Successfully authenticated server "${name}". Tokens stored in credentials.json.`;
+}
+
+/**
+ * Best-effort tool discovery after a successful login: saves the fresh
+ * tool list to the cache so the next router startup (or self-recovery)
+ * has an up-to-date cache. Failures are ignored — the tokens are already
+ * stored, and the cache refreshes on the next router startup.
+ *
+ * @param configPath - Absolute path to the mcp.json file.
+ * @param name - Server name.
+ * @param server - The effective downstream server configuration.
+ * @param mgr - OAuth credential manager holding the fresh tokens.
+ */
+async function _cacheToolsAfterLogin(
+  configPath: string,
+  name: string,
+  server: DownstreamServerConfig,
+  mgr: OAuthCredentialManager,
+): Promise<void> {
   try {
     const logger = new Logger('error');
-    const discovered = await discoverSingleServer(targetServer, logger, () => mgr);
+    const discovered = await discoverSingleServer(server, logger, () => mgr);
     await saveToolCache(configPath, name, discovered.tools);
   } catch {
     // Best-effort — tokens are saved, cache will refresh on next
     // router startup.
   }
-
-  return `Successfully authenticated server "${name}". Tokens stored in credentials.json.`;
 }

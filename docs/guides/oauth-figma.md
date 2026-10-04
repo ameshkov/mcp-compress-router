@@ -1,12 +1,74 @@
 # Connect the Figma MCP server
 
-The official Figma MCP server at `https://mcp.figma.com/mcp` does
-**not** support Dynamic Client Registration through the standard MCP
-flow. Instead you register an OAuth client via Figma's REST API using a
-Personal Access Token, then pass the resulting credentials through the
-`oauth` block. Figma also requires the redirect URI to use a **fixed
-port** — the port you register is reused on every `login`, so you must
-pin it with `oauth.callbackPort`.
+The official Figma MCP server at `https://mcp.figma.com/mcp` only
+accepts OAuth dynamic client registration from clients Figma has
+approved in its MCP Catalog. Registration requests from any other client
+are rejected with `403 Forbidden`, and unapproved clients get
+`400 Invalid scopes for app`. There are two ways to connect the router:
+
+- **Dynamic client registration with an allowlisted identity** — set
+  `oauth.clientName` (and, when required, `oauth.clientUri`) to an
+  identity Figma already accepts, and the router registers itself.
+- **A pre-registered client** — register a client through Figma's REST
+  API with a Personal Access Token and pass its credentials through the
+  `oauth` block.
+
+## Option 1: dynamic client registration
+
+Figma currently accepts the client identities of the MCP clients it has
+approved. Setting one of those identities makes Figma's registration
+endpoint accept the router, after which the normal `login` flow works:
+
+```jsonc
+"figma": {
+  "type": "http",
+  "url": "https://mcp.figma.com/mcp",
+  "description": "Figma design tools for inspecting files, components, and variables.",
+  "oauth": {
+    "clientName": "Visual Studio Code",
+    "clientUri": "https://code.visualstudio.com",
+    "scope": "mcp:connect"
+  }
+}
+```
+
+The `add` command writes the same fields with flags (and then starts the
+login automatically):
+
+```bash
+npx mcp-compress-router@latest add --transport http figma \
+  --client-name "Visual Studio Code" \
+  --client-uri "https://code.visualstudio.com" \
+  --description "Figma design tools for inspecting files, components, and variables." \
+  https://mcp.figma.com/mcp
+```
+
+If the server is already configured, `login` accepts the same values as
+one-run overrides:
+
+```bash
+npx mcp-compress-router@latest login figma \
+  --client-name "Visual Studio Code" \
+  --client-uri "https://code.visualstudio.com"
+```
+
+**This is unsanctioned.** The identity is not yours: Figma's consent
+screen will name the client whose identity you copied, Figma may tighten
+or enforce the allowlist at any time, and the fields are sent to Figma
+during registration. Use this only if you understand that. The
+pre-registered-client path below is the supported route.
+
+Figma accepts any loopback callback port for dynamically registered
+clients, so no fixed `callbackPort` is needed here. `login` registers
+the portless loopback redirect URI
+(`http://127.0.0.1/mcp-compress-router/oauth-callback`) and uses the
+port the OS assigns.
+
+## Option 2: a pre-registered client
+
+Register the client yourself via Figma's REST API. Figma also requires
+the redirect URI to use a **fixed port** — the port you register is
+reused on every `login`, so you must pin it with `oauth.callbackPort`.
 
 1. **Create a Figma Personal Access Token.**
    Follow

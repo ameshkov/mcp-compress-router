@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added the `oauth.clientName` and `oauth.clientUri` server fields, and
+  the `--client-name` / `--client-uri` flags on `add` (persisted to the
+  config) and `login` (one-run override), so the router can present a
+  specific client identity during OAuth dynamic client registration.
+  Providers that allowlist client identities, such as Figma, now accept
+  the registration when it uses an approved identity. `login`
+  re-registers automatically when a stored registration echoes an
+  identity that no longer matches the configured value.
+- The Figma guide now documents dynamic client registration with an
+  allowlisted identity next to the pre-registered-client path.
+
+### Fixed
+
+- Fixed OAuth configuration error messages to name the server without a
+  stray double quote (for example, `Server "figma" oauth.callbackPort`
+  instead of `Server "figma"" oauth.callbackPort`).
+
 ## [v3.1.0] - 2026-10-03
 
 ### Added

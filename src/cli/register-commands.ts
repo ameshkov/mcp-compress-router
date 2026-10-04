@@ -13,63 +13,15 @@ import {
   type AddOptions,
   type LoginOptions,
 } from './index.js';
+import {
+  collectEnv,
+  collectHeaders,
+  collectStringArray,
+  parseClientName,
+  parseClientUri,
+  parsePort,
+} from './option-parsers.js';
 import { runRouter } from './router-runner.js';
-
-/**
- * Collects repeated `--header "K: V"` flags into a headers record.
- * @internal Exported for tests only; not part of the public module API.
- */
-export function collectHeaders(
-  value: string,
-  previous: Record<string, string>,
-): Record<string, string> {
-  const colonIdx = value.indexOf(':');
-  if (colonIdx === -1) {
-    throw new Error(`Invalid header format: "${value}". Expected "Key: Value".`);
-  }
-  const key = value.slice(0, colonIdx).trim();
-  const val = value.slice(colonIdx + 1).trim();
-  return { ...previous, [key]: val };
-}
-
-/**
- * Collects repeated `-e KEY=value` flags into an env record.
- * @internal Exported for tests only; not part of the public module API.
- */
-export function collectEnv(
-  value: string,
-  previous: Record<string, string>,
-): Record<string, string> {
-  const eqIdx = value.indexOf('=');
-  if (eqIdx === -1) {
-    throw new Error(`Invalid env format: "${value}". Expected "KEY=value".`);
-  }
-  const key = value.slice(0, eqIdx);
-  const val = value.slice(eqIdx + 1);
-  return { ...previous, [key]: val };
-}
-
-/**
- * Collects repeated `--flag <value>` flags into an ordered string array.
- * @internal Exported for tests only; not part of the public module API.
- */
-export function collectStringArray(value: string, previous: string[]): string[] {
-  return [...previous, value];
-}
-
-/**
- * Coerces a `--port` flag value into an integer. Throws on non-numeric
- * values so the user gets a clear error before any network activity.
- * Range validation is deferred to the command handlers.
- * @internal Exported for tests only; not part of the public module API.
- */
-export function parsePort(value: string): number {
-  const port = Number(value);
-  if (!Number.isInteger(port)) {
-    throw new Error(`--port must be an integer (got "${value}").`);
-  }
-  return port;
-}
 
 /**
  * Wraps a CLI action handler with error handling.
@@ -105,6 +57,8 @@ interface AddCommandOptions {
   allowedTools: string[];
   disabledTools: string[];
   port?: number;
+  clientName?: string;
+  clientUri?: string;
   browser?: boolean;
 }
 
@@ -114,6 +68,8 @@ interface AddCommandOptions {
 interface LoginCommandOptions {
   config?: string;
   port?: number;
+  clientName?: string;
+  clientUri?: string;
   browser?: boolean;
 }
 
@@ -141,8 +97,30 @@ function buildAddOptions(
     disabledTools:
       options.disabledTools && options.disabledTools.length > 0 ? options.disabledTools : undefined,
     port: options.port,
+    clientName: options.clientName,
+    clientUri: options.clientUri,
     noBrowser: options.browser === false ? true : undefined,
   };
+}
+
+/**
+ * Resolves the config path and runs the `add` handler with the parsed
+ * commander options.
+ *
+ * @param name - Server name.
+ * @param commandOrUrl - Command (stdio) or URL (HTTP).
+ * @param rest - Additional positional arguments after commandOrUrl.
+ * @param options - Parsed commander options.
+ * @returns The handler's confirmation message.
+ */
+async function runAddCommand(
+  name: string,
+  commandOrUrl: string,
+  rest: string[],
+  options: AddCommandOptions,
+): Promise<string> {
+  const configPath = await resolveConfigPath(options.config);
+  return handleAdd(configPath, buildAddOptions(name, commandOrUrl, rest, options));
 }
 
 function registerAddCommand(program: Command): void {
@@ -177,15 +155,20 @@ function registerAddCommand(program: Command): void {
       parsePort,
     )
     .option(
+      '--client-name <name>',
+      'dynamic client registration client_name (HTTP only; written to oauth.clientName)',
+      parseClientName,
+    )
+    .option(
+      '--client-uri <uri>',
+      'dynamic client registration client_uri (HTTP only; written to oauth.clientUri)',
+      parseClientUri,
+    )
+    .option(
       '--no-browser',
       'print the authorization URL and paste the redirect URL or code instead of opening a browser',
     )
-    .action(
-      guardedAction(async (name, commandOrUrl, rest, options: AddCommandOptions) => {
-        const configPath = await resolveConfigPath(options.config);
-        return handleAdd(configPath, buildAddOptions(name, commandOrUrl, rest, options));
-      }),
-    );
+    .action(guardedAction(runAddCommand));
 }
 
 function registerRemoveCommand(program: Command): void {
@@ -238,6 +221,16 @@ function registerLoginCommand(program: Command): void {
       parsePort,
     )
     .option(
+      '--client-name <name>',
+      'override the dynamic client registration client_name for this login',
+      parseClientName,
+    )
+    .option(
+      '--client-uri <uri>',
+      'override the dynamic client registration client_uri for this login',
+      parseClientUri,
+    )
+    .option(
       '--no-browser',
       'print the authorization URL and paste the redirect URL or code instead of opening a browser',
     )
@@ -246,6 +239,8 @@ function registerLoginCommand(program: Command): void {
         const configPath = await resolveConfigPath(options.config);
         const loginOptions: LoginOptions = {
           portOverride: options.port,
+          clientNameOverride: options.clientName,
+          clientUriOverride: options.clientUri,
           noBrowser: options.browser === false,
         };
         return handleLogin(configPath, name, loginOptions);

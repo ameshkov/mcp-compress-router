@@ -15,6 +15,10 @@ export interface AuthFixtureServer {
   getLastRedirectUri: () => string | undefined;
   /** Get the last `redirect_uris` received on the /register endpoint. */
   getLastRegisteredRedirectUris: () => string[] | undefined;
+  /** Get the last `client_name` received on the /register endpoint. */
+  getLastRegisteredClientName: () => string | undefined;
+  /** Get the last `client_uri` received on the /register endpoint. */
+  getLastRegisteredClientUri: () => string | undefined;
   /** Get the last RFC 8707 `resource` received on the /authorize endpoint. */
   getLastAuthorizeResource: () => string | undefined;
   /** Get the last RFC 8707 `resource` received on the /token endpoint. */
@@ -39,6 +43,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   let lastRefreshToken: string | undefined;
   let lastRedirectUri: string | undefined;
   let lastRegisteredRedirectUris: string[] | undefined;
+  let lastRegisteredClientName: string | undefined;
+  let lastRegisteredClientUri: string | undefined;
   let lastAuthorizeResource: string | undefined;
   let lastTokenResource: string | undefined;
   let refreshTokensValid = true;
@@ -153,6 +159,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
       const body = await readBody(req);
       const parsed = JSON.parse(body);
       lastRegisteredRedirectUris = parsed.redirect_uris;
+      lastRegisteredClientName = parsed.client_name;
+      lastRegisteredClientUri = parsed.client_uri;
       const clientId = `client-${randomBytes(4).toString('hex')}`;
       const clientSecret = `secret-${randomBytes(8).toString('hex')}`;
       registeredClients.set(clientId, {
@@ -341,6 +349,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         getLastRefreshToken: () => lastRefreshToken,
         getLastRedirectUri: () => lastRedirectUri,
         getLastRegisteredRedirectUris: () => lastRegisteredRedirectUris,
+        getLastRegisteredClientName: () => lastRegisteredClientName,
+        getLastRegisteredClientUri: () => lastRegisteredClientUri,
         getLastAuthorizeResource: () => lastAuthorizeResource,
         getLastTokenResource: () => lastTokenResource,
         invalidateRefreshToken: () => {

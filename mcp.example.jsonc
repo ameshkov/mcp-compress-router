@@ -22,6 +22,20 @@
       },
       "description": "My custom MCP server for internal project data."
     },
+    // OAuth example — dynamic client registration with a client identity
+    // the provider allowlists (e.g. Figma). The router registers itself
+    // during `login`; for a pre-registered client use oauth.clientId and
+    // oauth.clientSecret instead, which skips registration entirely.
+    "oauth-server": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientName": "My Approved Client",
+        "clientUri": "https://example.com/app",
+        "scope": "mcp:connect"
+      },
+      "description": "Remote MCP server that only accepts approved OAuth clients."
+    },
     // Tool selection example — only these two tools are exposed; all
     // others the server advertises are hidden and hard-rejected by
     // invoke_tool. Glob patterns (*, ?, {a,b}, [abc]) are matched

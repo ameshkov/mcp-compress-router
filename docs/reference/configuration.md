@@ -298,7 +298,9 @@ router uses [Dynamic Client Registration](https://datatracker.ietf.org/doc/html/
 against the server's OAuth endpoints when you run `login <name>`.
 
 When a downstream server does not support dynamic registration, or you
-want to use a pre-registered client, provide an `oauth` block:
+want to use a pre-registered client, provide an `oauth` block. The same
+block also controls the client identity the router presents during
+dynamic client registration:
 
 ```json
 "oauth": {
@@ -310,15 +312,37 @@ want to use a pre-registered client, provide an `oauth` block:
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clientId` | Yes | Pre-registered OAuth client ID |
+| `clientId` | No | Pre-registered OAuth client ID. When present, dynamic client registration is skipped and the static client is used |
 | `clientSecret` | No | Pre-registered OAuth client secret |
+| `clientName` | No | RFC 7591 `client_name` sent during dynamic client registration. Defaults to `mcp-compress-router`. Set it when the provider allowlists client identities |
+| `clientUri` | No | RFC 7591 `client_uri` sent during dynamic client registration. Omitted from the registration unless set |
 | `scope` | No | Space-delimited scope string requested during authorization |
 | `callbackPort` | No | Fixed TCP port for the local OAuth callback server (integer 1-65535). When set, `login` binds the callback server to this exact port so the redirect URI is stable. Omit to let the OS assign a port. |
 
 When `clientId` is present, dynamic client registration is skipped and
 the static client information is used instead. `clientId`, `clientSecret`,
-and `scope` support [Variable Expansion](#variable-expansion);
-`callbackPort` does not (ports are not secrets).
+`clientName`, `clientUri`, and `scope` support
+[Variable Expansion](#variable-expansion); `callbackPort` does not
+(ports are not secrets).
+
+`clientName` and `clientUri` matter for providers that allowlist client
+identities: they reject dynamic registration from any client they do not
+know (Figma, for example, only accepts clients from its MCP catalog).
+Set them to an identity the provider has approved for your client:
+
+```json
+"oauth": {
+  "clientName": "My Approved Client",
+  "clientUri": "https://example.com/app",
+  "scope": "mcp:connect"
+}
+```
+
+`login` re-registers automatically when the stored registration echoes a
+`client_name` or `client_uri` that no longer matches the configured
+value. A stored registration that carries neither field is reused as-is,
+so existing registrations keep working. Both fields are ignored when
+`clientId` is set, because no registration is performed.
 
 The `login` command starts a temporary local HTTP server and uses a
 loopback redirect URI (per RFC 8252):
@@ -647,6 +671,8 @@ probe is best-effort and never blocks the command; see
 | `--allowed-tools <pattern>` | Glob pattern allowlisting tool names (picomatch). Repeatable; collected in order into `allowedTools`. Validated at write time |
 | `--disabled-tools <pattern>` | Glob pattern denylisting tool names (picomatch). Repeatable; collected in order into `disabledTools`. Validated at write time |
 | `-p, --port <number>` | Fixed local OAuth callback port (HTTP only). Written to `oauth.callbackPort` so subsequent `login` runs reuse it. Integer 1-65535 |
+| `--client-name <name>` | Dynamic client registration `client_name` (HTTP only). Written to `oauth.clientName` so the automatic login registers with this identity. Non-empty |
+| `--client-uri <uri>` | Dynamic client registration `client_uri` (HTTP only). Written to `oauth.clientUri`. Absolute http(s) URL |
 | `--no-browser` | Do not launch a browser during the automatic login: print the authorization URL and read a pasted redirect URL or authorization code from stdin (HTTP only) |
 
 ```bash
@@ -796,7 +822,14 @@ interactive paste prompt is not subject to the login timeout.
 | Flag | Description |
 | --- | --- |
 | `-p, --port <number>` | Fixed local OAuth callback port. Overrides `oauth.callbackPort`; `0` forces an OS-assigned port. |
+| `--client-name <name>` | Override the dynamic client registration `client_name` for this run. Overrides `oauth.clientName`; not persisted. Non-empty |
+| `--client-uri <uri>` | Override the dynamic client registration `client_uri` for this run. Overrides `oauth.clientUri`; not persisted. Absolute http(s) URL |
 | `--no-browser` | Do not launch a browser: print the authorization URL and read a pasted redirect URL or authorization code from stdin |
+
+The `--client-name` and `--client-uri` overrides are not written to
+`mcp.json`, but the client registration they produce is stored in
+`credentials.json` and reused by later logins until `logout`, unless a
+later login enforces a different configured identity.
 
 ### `logout <name>`
 
