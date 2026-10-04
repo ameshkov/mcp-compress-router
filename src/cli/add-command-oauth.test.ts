@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { handleAdd } from './add-command.js';
+import { readCredentials, writeCredentials } from './config-io.js';
 
 const { discoverAuthMock, handleLoginMock } = vi.hoisted(() => ({
   discoverAuthMock: vi.fn<(url: URL) => Promise<{ serverMetadata?: Record<string, unknown> }>>(),
@@ -125,5 +126,64 @@ describe('handleAdd — OAuth client identity flags', () => {
         clientUri: 'not-a-url',
       }),
     ).rejects.toThrow(/--client-uri must be an absolute http\(s\) URL/);
+  });
+
+  it('records the server URL binding on the probed credentials entry', async () => {
+    discoverAuthMock.mockResolvedValue({ serverMetadata: { issuer: 'https://as.example.com' } });
+    handleLoginMock.mockResolvedValue('Logged in.');
+    const configPath = path.join(tempDir, 'mcp.json');
+
+    await handleAdd(configPath, {
+      description: 'Test server',
+      name: 'test',
+      transport: 'http',
+      commandOrUrl: 'https://example.org/mcp',
+    });
+
+    const creds = await readCredentials(configPath);
+    expect(creds['test']?.serverUrl).toBe('https://example.org/mcp');
+    expect(creds['test']?.authRequirement).toBe('oauth');
+  });
+
+  it('backfills the binding on a legacy entry and preserves its credentials', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await writeCredentials(configPath, 'test', {
+      clientRegistration: { client_id: 'legacy-client' },
+      tokens: { access_token: 'at', token_type: 'Bearer' },
+    });
+
+    await handleAdd(configPath, {
+      description: 'Test server',
+      name: 'test',
+      transport: 'http',
+      commandOrUrl: 'https://example.org/mcp',
+    });
+
+    const creds = await readCredentials(configPath);
+    expect(creds['test']?.serverUrl).toBe('https://example.org/mcp');
+    expect(creds['test']?.clientRegistration).toEqual({ client_id: 'legacy-client' });
+    expect(creds['test']?.tokens?.access_token).toBe('at');
+    expect(creds['test']?.authRequirement).toBe('none');
+  });
+
+  it('does not re-bind credentials from a different server URL on probe', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await writeCredentials(configPath, 'test', {
+      serverUrl: 'https://old.example.org/mcp',
+      tokens: { access_token: 'at', token_type: 'Bearer' },
+    });
+
+    await handleAdd(configPath, {
+      description: 'Test server',
+      name: 'test',
+      transport: 'http',
+      commandOrUrl: 'https://example.org/mcp',
+    });
+
+    const creds = await readCredentials(configPath);
+    // The old binding survives so the leftover tokens stay unusable
+    // until a login replaces them.
+    expect(creds['test']?.serverUrl).toBe('https://old.example.org/mcp');
+    expect(creds['test']?.tokens?.access_token).toBe('at');
   });
 });

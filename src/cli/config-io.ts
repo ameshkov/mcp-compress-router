@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Logger } from '../utils/logger.js';
 import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
-import { atomicWriteFile, parseJsonc } from '../utils/index.js';
+import { atomicWriteFile, parseJsonc, withFileLock, type FileLockOptions } from '../utils/index.js';
 
 /**
  * Type guard for Node.js system errors that carry a `code` property.
@@ -22,6 +22,65 @@ function isNodeError(err: unknown): err is NodeJS.ErrnoException {
  */
 function getCredentialsPath(configPath: string): string {
   return path.join(path.dirname(configPath), 'credentials.json');
+}
+
+/**
+ * Lock options for credentials.json mutations. A critical section is a
+ * few file operations long, so a short stale window is safe: a crashed
+ * holder is reclaimed quickly and a live one is never stolen (the holder
+ * renews the lock file's mtime while it works). The timeout exceeds the
+ * stale window so a crashed holder's lock is reclaimed before waiters
+ * give up.
+ */
+const CREDENTIALS_LOCK_OPTIONS: FileLockOptions = {
+  timeoutMs: 15_000,
+  staleMs: 5_000,
+  retryDelayMs: 25,
+};
+
+/**
+ * Lock options for the cross-process OAuth refresh lock. Its critical
+ * section includes authorization-server discovery and the token request,
+ * both bounded by the downstream timeout, so waiters get a larger window
+ * than for plain file mutations.
+ */
+const REFRESH_LOCK_OPTIONS: FileLockOptions = {
+  timeoutMs: 30_000,
+  staleMs: 15_000,
+  retryDelayMs: 25,
+};
+
+/**
+ * Runs `task` while holding the cross-process lock that serializes
+ * mutations of this config's credentials.json. Every writer of the shared
+ * file goes through this lock so concurrent router instances, CLI
+ * commands, and login flows cannot lose each other's updates.
+ *
+ * @param configPath - Absolute path to the mcp.json file.
+ * @param task - The mutation to run while holding the lock.
+ * @returns The task's result.
+ * @throws When the lock cannot be acquired before its timeout.
+ */
+async function withCredentialsLock<T>(configPath: string, task: () => Promise<T>): Promise<T> {
+  const credPath = getCredentialsPath(configPath);
+  return withFileLock(`${credPath}.lock`, task, CREDENTIALS_LOCK_OPTIONS);
+}
+
+/**
+ * Runs `task` while holding the cross-process OAuth refresh lock for this
+ * config's credentials.json. Token refreshes take this lock before
+ * re-reading the stored tokens, so concurrent router instances refresh a
+ * rotating refresh token exactly once instead of racing each other into
+ * `invalid_grant`.
+ *
+ * @param configPath - Absolute path to the mcp.json file.
+ * @param task - The refresh operation to run while holding the lock.
+ * @returns The task's result.
+ * @throws When the lock cannot be acquired before its timeout.
+ */
+export async function withRefreshLock<T>(configPath: string, task: () => Promise<T>): Promise<T> {
+  const credPath = getCredentialsPath(configPath);
+  return withFileLock(`${credPath}.refresh.lock`, task, REFRESH_LOCK_OPTIONS);
 }
 
 /**
@@ -164,12 +223,67 @@ export async function readCredentials(configPath: string): Promise<CredentialsSt
 }
 
 /**
- * Writes (or overwrites) credentials for a single server.
- * Preserves existing mcpServers and credentials for other servers.
+ * Mutates a single server's credentials entry through a fresh
+ * read-modify-write executed under the cross-process credentials lock.
+ *
+ * `mutate` receives the entry currently on disk (or `undefined` when the
+ * server has none) and returns:
+ * - a replacement entry, written to the store;
+ * - `undefined` to delete the entry (and the file when it becomes empty);
+ * - the same reference it received to leave the store untouched.
+ *
+ * Reading inside the lock is what makes concurrent writers safe: a token
+ * refresh or auth-requirement update that lands between the caller's
+ * earlier read and this call is seen by `mutate` instead of being
+ * overwritten by a stale snapshot.
+ *
+ * @param configPath - Absolute path to the mcp.json file.
+ * @param name - Server name.
+ * @param mutate - Computes the next entry from the current on-disk one.
+ * @param logger - Optional logger for permission warnings.
+ * @throws If the lock cannot be acquired, the store is unreadable or
+ *   invalid, or the write fails.
+ */
+export async function mutateCredentials(
+  configPath: string,
+  name: string,
+  mutate: (current: StoredCredentials | undefined) => StoredCredentials | undefined,
+  logger?: Logger,
+): Promise<void> {
+  await withCredentialsLock(configPath, async () => {
+    const credPath = getCredentialsPath(configPath);
+    const store = (await readCredentialsStore(credPath)) ?? {};
+    const current = store[name];
+    const next = mutate(current);
+
+    if (next === current) {
+      // No change requested: skip the write entirely.
+      return;
+    }
+    if (next === undefined) {
+      delete store[name];
+    } else {
+      store[name] = next;
+    }
+
+    await writeCredentialsStore(credPath, store, logger);
+  });
+}
+
+/**
+ * Writes (or overwrites) credentials for a single server under the
+ * cross-process credentials lock. Preserves credentials for other
+ * servers.
+ *
+ * @internal Exported for tests and the cross-process concurrency
+ *   fixture only; production code writes through
+ *   {@link mutateCredentials} so it merges against the latest on-disk
+ *   entry.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name.
  * @param credentials - The credentials to store.
+ * @param logger - Optional logger for permission warnings.
  */
 export async function writeCredentials(
   configPath: string,
@@ -177,10 +291,36 @@ export async function writeCredentials(
   credentials: StoredCredentials,
   logger?: Logger,
 ): Promise<void> {
-  const credPath = getCredentialsPath(configPath);
+  await mutateCredentials(configPath, name, () => credentials, logger);
+}
 
-  const store = (await readCredentialsStore(credPath, 'writing')) ?? {};
-  store[name] = credentials;
+/**
+ * Replaces the whole credentials store atomically. Deletes the file when
+ * the store becomes empty. An existing file keeps its permissions; a new
+ * file is restricted to the owner.
+ *
+ * @param credPath - Absolute path to credentials.json.
+ * @param store - The complete store to persist.
+ * @param logger - Optional logger for permission warnings.
+ */
+async function writeCredentialsStore(
+  credPath: string,
+  store: CredentialsStore,
+  logger?: Logger,
+): Promise<void> {
+  if (Object.keys(store).length === 0) {
+    // No entries remain — delete the file entirely. A real failure
+    // (e.g. permission denied) must surface: silently leaving removed
+    // credentials on disk would defeat logout and `remove`.
+    try {
+      await fs.unlink(credPath);
+    } catch (err) {
+      if (!isNodeError(err) || err.code !== 'ENOENT') {
+        throw err;
+      }
+    }
+    return;
+  }
 
   const { isNewFile, mode } = await resolveCredentialsMode(credPath);
 
@@ -201,25 +341,21 @@ export async function writeCredentials(
  * JSON) is fatal so a damaged store is never silently overwritten.
  *
  * @param credPath - Absolute path to credentials.json.
- * @param action - Action named in the error message.
  * @returns The stored credentials, or undefined when no file exists.
  */
-async function readCredentialsStore(
-  credPath: string,
-  action: 'writing' | 'removal',
-): Promise<CredentialsStore | undefined> {
+async function readCredentialsStore(credPath: string): Promise<CredentialsStore | undefined> {
   try {
     const raw = await fs.readFile(credPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed === 'object' && parsed !== null) {
-      return parsed as CredentialsStore;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`Credentials file must contain a JSON object: ${credPath}`);
     }
-    return {};
+    return parsed as CredentialsStore;
   } catch (err) {
     if (isNodeError(err) && err.code === 'ENOENT') {
       return undefined;
     }
-    throw new Error(`Failed to read credentials file for ${action}: ${credPath}`, { cause: err });
+    throw new Error(`Failed to read credentials file for update: ${credPath}`, { cause: err });
   }
 }
 
@@ -270,29 +406,13 @@ async function restrictNewCredentialsFile(credPath: string, logger?: Logger): Pr
 }
 
 /**
- * Removes credentials for a server from the config file.
- * No-op if the server has no stored credentials.
- * Deletes the credentials file when the last entry is removed.
+ * Removes credentials for a server under the cross-process credentials
+ * lock. No-op if the server has no stored credentials. Deletes the
+ * credentials file when the last entry is removed.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name.
  */
 export async function removeCredentials(configPath: string, name: string): Promise<void> {
-  const credPath = getCredentialsPath(configPath);
-
-  const store = await readCredentialsStore(credPath, 'removal');
-  if (store === undefined) {
-    // File does not exist — nothing to remove
-    return;
-  }
-
-  delete store[name];
-
-  if (Object.keys(store).length === 0) {
-    // No remaining entries — delete the file entirely
-    await fs.unlink(credPath);
-  } else {
-    const { mode } = await resolveCredentialsMode(credPath);
-    await atomicWriteFile(credPath, JSON.stringify(store, null, 2) + '\n', mode);
-  }
+  await mutateCredentials(configPath, name, () => undefined);
 }

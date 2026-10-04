@@ -45,6 +45,15 @@ interface DiscoveredAuth {
    * `false` when no metadata was discovered.
    */
   authorizationResponseIssParameterSupported: boolean;
+  /**
+   * True only when the RFC 9728 Protected Resource Metadata probe failed
+   * transiently (network error, timeout, non-404 HTTP status, or a
+   * schema-invalid body). False when a PRM was published and for clean
+   * misses (404/absent, or a non-JSON body). A transient failure means
+   * the server may bind tokens to a resource, so a refresh must not
+   * proceed without the RFC 8707 `resource` indicator.
+   */
+  resourceMetadataDiscoveryFailed: boolean;
 }
 
 /**
@@ -64,6 +73,34 @@ interface DiscoveredAuth {
  */
 function isNonJsonResponse(err: unknown): boolean {
   return err instanceof SyntaxError;
+}
+
+/**
+ * Returns true when the thrown error from the RFC 9728 Protected Resource
+ * Metadata probe means the server cleanly published no PRM — the normal
+ * legacy-server path, not a probe failure. The SDK reports both a 404 and
+ * a non-JSON body as errors:
+ *
+ * - `SyntaxError` — `response.json()` hit an HTML page or another non-JSON
+ *   body: the endpoint answered, it just is not a PRM endpoint.
+ * - The SDK's "does not implement" message — a 404 (or an absent response)
+ *   for the well-known endpoint.
+ *
+ * Everything else (5xx, network, timeout, schema-invalid body) is a
+ * transient probe failure.
+ *
+ * @param err - The thrown value from the SDK PRM discovery helper.
+ * @returns True when the error is a clean miss.
+ */
+function isResourceMetadataCleanMiss(err: unknown): boolean {
+  if (err instanceof SyntaxError) {
+    return true;
+  }
+  return (
+    err instanceof Error &&
+    (err.message === 'Resource server does not implement OAuth 2.0 Protected Resource Metadata.' ||
+      err.message.startsWith('HTTP 404 '))
+  );
 }
 
 /**
@@ -121,6 +158,40 @@ function createRawMetadataFetch(base: typeof fetch, capture: RawMetadataCapture)
       }
     }
     return response;
+  };
+}
+
+/**
+ * Mutable flag set by {@link createFetchFailureCapture} when a wrapped
+ * fetch rejects.
+ */
+interface FetchFailureCapture {
+  /** True once the wrapped fetch rejected at least once. */
+  failed: boolean;
+}
+
+/**
+ * Wraps a fetch function so any rejection is recorded in `capture` and
+ * rethrown. The SDK's PRM discovery helper wraps its fetch calls in
+ * `fetchWithCorsRetry`, which catches a connection `TypeError`, retries
+ * without headers, and then returns `undefined`; the helper turns that
+ * into the same "does not implement" error a real 404 produces (SDK
+ * 1.30.0). The error text alone therefore cannot classify a network
+ * failure, so the fetch-level rejection is captured before the SDK
+ * swallows it.
+ *
+ * @param base - The fetch function to wrap.
+ * @param capture - Sink for the failure flag.
+ * @returns A fetch function that records rejections before rethrowing.
+ */
+function createFetchFailureCapture(base: typeof fetch, capture: FetchFailureCapture): typeof fetch {
+  return async (input, init) => {
+    try {
+      return await base(input, init);
+    } catch (err) {
+      capture.failed = true;
+      throw err;
+    }
   };
 }
 
@@ -207,12 +278,15 @@ function buildCandidateUrls(
  * @param resourceMetadata - Discovered Protected Resource Metadata, if any.
  * @param hit - The winning AS candidate, or `undefined` on a full miss.
  * @param serverUrl - The downstream MCP server URL (fallback AS URL).
+ * @param resourceMetadataDiscoveryFailed - Whether the PRM probe failed
+ *   transiently (as opposed to a clean miss or a published PRM).
  * @returns The discovery result.
  */
 function toDiscoveredAuth(
   resourceMetadata: OAuthProtectedResourceMetadata | undefined,
   hit: CandidateResult | undefined,
   serverUrl: URL,
+  resourceMetadataDiscoveryFailed: boolean,
 ): DiscoveredAuth {
   if (!hit) {
     return {
@@ -220,6 +294,7 @@ function toDiscoveredAuth(
       serverMetadata: undefined,
       authorizationServerUrl: serverUrl,
       authorizationResponseIssParameterSupported: false,
+      resourceMetadataDiscoveryFailed,
     };
   }
   return {
@@ -227,7 +302,115 @@ function toDiscoveredAuth(
     serverMetadata: hit.metadata,
     authorizationServerUrl: hit.url,
     authorizationResponseIssParameterSupported: hit.authorizationResponseIssParameterSupported,
+    resourceMetadataDiscoveryFailed,
   };
+}
+
+/**
+ * Probes RFC 9728 Protected Resource Metadata and classifies the outcome.
+ *
+ * A clean miss (404/absent or a non-JSON body) yields no metadata and no
+ * failure. Any other error — network, timeout, non-404 HTTP status, or a
+ * schema-invalid body — is a transient failure: the server may bind
+ * tokens to a resource, so a refresh must not proceed without the
+ * RFC 8707 `resource` indicator.
+ *
+ * The SDK's `fetchWithCorsRetry` swallows a connection `TypeError`, retries
+ * without headers, and reports "no PRM" exactly like a real 404 (SDK
+ * 1.30.0), so the fetch-level failure capture is what keeps a dropped
+ * connection classified as transient.
+ *
+ * @param serverUrl - The downstream MCP server URL.
+ * @param fetchFn - The bounded fetch function to probe with.
+ * @returns The discovered metadata (if any) and whether the probe failed
+ *   transiently.
+ */
+async function probeResourceMetadata(
+  serverUrl: URL,
+  fetchFn: typeof fetch,
+): Promise<{ resourceMetadata?: OAuthProtectedResourceMetadata; failed: boolean }> {
+  const { discoverOAuthProtectedResourceMetadata } = await _getSdkAuth();
+  const capture: FetchFailureCapture = { failed: false };
+  try {
+    const resourceMetadata = await discoverOAuthProtectedResourceMetadata(
+      serverUrl,
+      {},
+      createFetchFailureCapture(fetchFn, capture),
+    );
+    return { resourceMetadata, failed: false };
+  } catch (err) {
+    return { failed: capture.failed || !isResourceMetadataCleanMiss(err) };
+  }
+}
+
+/**
+ * Probes the authorization-server candidate URL groups and returns the
+ * first hit. Advertised AS URLs (from PRM) are probed first; the legacy
+ * fallback group is only probed when no advertised AS yields metadata.
+ *
+ * Any per-candidate error (5xx, network, timeout) is swallowed and treated
+ * as "not found" so a single flaky endpoint never aborts the flow. A
+ * non-JSON response is a clean miss and is not recorded. When every
+ * candidate misses and at least one threw a genuine error, the last such
+ * error is returned so the caller can surface it.
+ *
+ * @param serverUrl - The downstream MCP server URL.
+ * @param resourceMetadata - Discovered Protected Resource Metadata, if any.
+ * @param fetchFn - The bounded fetch function to probe with.
+ * @returns The first AS candidate hit, or the last genuine error when no
+ *   candidate yielded metadata.
+ */
+async function discoverServerMetadata(
+  serverUrl: URL,
+  resourceMetadata: OAuthProtectedResourceMetadata | undefined,
+  fetchFn: typeof fetch,
+): Promise<{ hit: CandidateResult | undefined; error: unknown }> {
+  const { discoverAuthorizationServerMetadata } = await _getSdkAuth();
+
+  // Tracks the last genuine error seen across all candidates so the caller
+  // can be notified when discovery failed entirely (vs. cleanly finding
+  // nothing). Non-JSON responses are excluded — they are clean misses.
+  let lastError: unknown;
+
+  // Tolerant AS discovery: any error (404-as-throw, 5xx, network) is
+  // recorded and treated as "not found" so the other candidates are tried.
+  // The raw metadata document is captured alongside the SDK's parsed
+  // result so RFC 9207 fields stripped by the OIDC schema stay visible.
+  const safeDiscoverAs = async (url: URL): Promise<CandidateResult | undefined> => {
+    const capture: RawMetadataCapture = {};
+    try {
+      const metadata = await discoverAuthorizationServerMetadata(url, {
+        fetchFn: createRawMetadataFetch(fetchFn, capture),
+      });
+      if (!metadata) {
+        return undefined;
+      }
+      return {
+        url,
+        metadata,
+        authorizationResponseIssParameterSupported: readIssParameterSupported(capture),
+      };
+    } catch (err) {
+      if (!isNonJsonResponse(err)) {
+        lastError = err;
+      }
+      return undefined;
+    }
+  };
+
+  const { advertised, fallback } = buildCandidateUrls(serverUrl, resourceMetadata);
+
+  const advertisedHit = await raceCandidates(advertised, safeDiscoverAs);
+  if (advertisedHit) {
+    return { hit: advertisedHit, error: undefined };
+  }
+
+  const fallbackHit = await raceCandidates(fallback, safeDiscoverAs);
+  if (fallbackHit) {
+    return { hit: fallbackHit, error: undefined };
+  }
+
+  return { hit: undefined, error: lastError };
 }
 
 /**
@@ -268,75 +451,32 @@ function toDiscoveredAuth(
  *   non-JSON responses) does not throw.
  */
 export async function discoverAuth(serverUrl: URL): Promise<DiscoveredAuth> {
-  const { discoverOAuthProtectedResourceMetadata, discoverAuthorizationServerMetadata } =
-    await _getSdkAuth();
-
   // The SDK discovery helpers use a raw fetch with no timeout; a server
   // that hangs its well-known endpoint would trap discovery forever. Pass
   // a fetch that aborts after a short, configurable budget.
   const fetchFn = createTimeoutFetch(getAuthDiscoveryTimeoutMs());
 
-  // Tracks the last genuine error seen across all candidates so the caller
-  // can be notified when discovery failed entirely (vs. cleanly finding
-  // nothing). Non-JSON responses are excluded — they are clean misses.
-  let lastError: unknown;
+  // Step 1: RFC 9728 Protected Resource Metadata. A clean miss (404 or a
+  // non-JSON body) falls through to AS discovery below; a transient probe
+  // failure is flagged so callers can fail a refresh that would otherwise
+  // issue an unbound token.
+  const { resourceMetadata, failed: resourceMetadataDiscoveryFailed } = await probeResourceMetadata(
+    serverUrl,
+    fetchFn,
+  );
 
-  // Tolerant AS discovery: any error (404-as-throw, 5xx, network) is
-  // recorded and treated as "not found" so the other candidates are tried.
-  // The raw metadata document is captured alongside the SDK's parsed
-  // result so RFC 9207 fields stripped by the OIDC schema stay visible.
-  const safeDiscoverAs = async (url: URL): Promise<CandidateResult | undefined> => {
-    const capture: RawMetadataCapture = {};
-    try {
-      const metadata = await discoverAuthorizationServerMetadata(url, {
-        fetchFn: createRawMetadataFetch(fetchFn, capture),
-      });
-      if (!metadata) {
-        return undefined;
-      }
-      return {
-        url,
-        metadata,
-        authorizationResponseIssParameterSupported: readIssParameterSupported(capture),
-      };
-    } catch (err) {
-      if (!isNonJsonResponse(err)) {
-        lastError = err;
-      }
-      return undefined;
-    }
-  };
-
-  // Step 1: RFC 9728 Protected Resource Metadata. This SDK function throws
-  // when no PRM is published (treated as "no PRM, fall through"), so its
-  // error is intentionally NOT recorded — absence of PRM is the normal
-  // legacy-server path, not a probe failure.
-  let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
-  try {
-    resourceMetadata = await discoverOAuthProtectedResourceMetadata(serverUrl, {}, fetchFn);
-  } catch {
-    // No PRM published; fall through to direct AS discovery below.
-  }
-
-  // Step 2: probe the candidates in parallel, first hit wins.
-  const { advertised, fallback } = buildCandidateUrls(serverUrl, resourceMetadata);
-
-  const advertisedHit = await raceCandidates(advertised, safeDiscoverAs);
-  if (advertisedHit) {
-    return toDiscoveredAuth(resourceMetadata, advertisedHit, serverUrl);
-  }
-
-  const fallbackHit = await raceCandidates(fallback, safeDiscoverAs);
-  if (fallbackHit) {
-    return toDiscoveredAuth(resourceMetadata, fallbackHit, serverUrl);
+  // Step 2: probe the AS candidates in parallel, first hit wins.
+  const { hit, error } = await discoverServerMetadata(serverUrl, resourceMetadata, fetchFn);
+  if (hit) {
+    return toDiscoveredAuth(resourceMetadata, hit, serverUrl, resourceMetadataDiscoveryFailed);
   }
 
   // No metadata found anywhere. If any candidate actually errored (vs. a
   // clean 404 or a non-JSON response), surface that so callers can report
   // a probe failure rather than a misleading "no OAuth supported".
-  if (lastError !== undefined) {
-    throw lastError;
+  if (error !== undefined) {
+    throw error;
   }
 
-  return toDiscoveredAuth(resourceMetadata, undefined, serverUrl);
+  return toDiscoveredAuth(resourceMetadata, undefined, serverUrl, resourceMetadataDiscoveryFailed);
 }

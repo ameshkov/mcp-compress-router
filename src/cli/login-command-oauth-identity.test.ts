@@ -275,4 +275,92 @@ describe('handleLogin — dynamic client registration identity', () => {
       handleLogin(configPath, 'figma', { clientUriOverride: 'not-a-url' }),
     ).rejects.toThrow(/--client-uri must be an absolute http\(s\) URL/);
   });
+
+  it('re-registers when the stored registration is bound to a different server URL', async () => {
+    const { server, url, registrations } = await startDiscoveryServer();
+
+    try {
+      await writeConfig(url);
+      await writeCredentials(configPath, 'figma', {
+        serverUrl: 'https://other.example.org/mcp',
+        clientRegistration: {
+          client_id: 'old-client',
+          client_secret: 'old-secret',
+          redirect_uris: [`http://127.0.0.1:54321${OAUTH_CALLBACK_PATH}`],
+        },
+      });
+      await loginUntilCallbackTimeout();
+    } finally {
+      server.close();
+    }
+
+    // The stored registration belongs to a different server: it is
+    // replaced with a fresh registration for this URL.
+    expect(registrations).toHaveLength(1);
+  }, 10_000);
+
+  it('reuses a stored registration bound to the same server URL', async () => {
+    const { server, url, registrations } = await startDiscoveryServer();
+
+    try {
+      await writeConfig(url);
+      await writeCredentials(configPath, 'figma', {
+        serverUrl: `${url}/mcp`,
+        clientRegistration: {
+          client_id: 'stored-client',
+          client_secret: 'stored-secret',
+          redirect_uris: [`http://127.0.0.1:54321${OAUTH_CALLBACK_PATH}`],
+        },
+      });
+      await loginUntilCallbackTimeout();
+    } finally {
+      server.close();
+    }
+
+    expect(registrations).toHaveLength(0);
+  }, 10_000);
+
+  it('re-registers when a probe-only entry records a different server URL', async () => {
+    const { server, url, registrations } = await startDiscoveryServer();
+
+    try {
+      await writeConfig(url);
+      // A server probed at an older URL but never logged in: the stale
+      // URL must not be stamped onto the fresh registration, or the
+      // authorization step would have no client information to use.
+      await writeCredentials(configPath, 'figma', {
+        serverUrl: 'https://other.example.org/mcp',
+        authRequirement: 'oauth',
+      });
+      await loginUntilCallbackTimeout();
+    } finally {
+      server.close();
+    }
+
+    expect(registrations).toHaveLength(1);
+  }, 10_000);
+
+  it('re-registers when the stored registration is from a different issuer', async () => {
+    const { server, url, registrations } = await startDiscoveryServer();
+
+    try {
+      await writeConfig(url);
+      await writeCredentials(configPath, 'figma', {
+        serverUrl: `${url}/mcp`,
+        issuer: 'https://old-auth.example.com/',
+        clientRegistration: {
+          client_id: 'old-client',
+          client_secret: 'old-secret',
+          redirect_uris: [`http://127.0.0.1:54321${OAUTH_CALLBACK_PATH}`],
+        },
+      });
+      await loginUntilCallbackTimeout();
+    } finally {
+      server.close();
+    }
+
+    // The stored registration was obtained from a different
+    // authorization server: it is not reused.
+    expect(registrations).toHaveLength(1);
+  }, 10_000);
 });

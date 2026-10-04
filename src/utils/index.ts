@@ -23,6 +23,7 @@ export { expandEnvField } from './expand-env.js';
 export { Logger } from './logger.js';
 export { parseJsonc } from './parse-jsonc.js';
 export { atomicWriteFile } from './atomic-write.js';
+export { withFileLock, type FileLockOptions } from './file-lock.js';
 export { killProcessTree } from './process-tree.js';
 export {
   getDownstreamTimeoutMs,

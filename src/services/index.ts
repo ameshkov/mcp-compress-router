@@ -9,6 +9,7 @@ export { installShutdownTriggers } from './shutdown-triggers.js';
 export { invokeWithRecovery } from './invoke-with-recovery.js';
 export { saveToolCache } from './tool-cache.js';
 export { OAuthCredentialManager } from './oauth.js';
+export { resolveBindingUrl } from './credential-binding.js';
 export { computeAuthStatus, persistAuthRequirements } from './auth-status.js';
 export { discoverAuth } from './oauth-discovery.js';
 export { GuidedAuthError, isAuthError } from './auth-errors.js';

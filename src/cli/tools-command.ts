@@ -1,4 +1,3 @@
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { DownstreamServerConfig } from '../utils/index.js';
 import { Logger } from '../utils/index.js';
 import {
@@ -81,7 +80,7 @@ function renderToolsTable(serverName: string, entries: ToolExposureEntry[]): str
 async function buildSingleAuthProvider(
   configPath: string,
   server: DownstreamServerConfig,
-): Promise<(s: DownstreamServerConfig) => OAuthClientProvider | undefined> {
+): Promise<(s: DownstreamServerConfig) => OAuthCredentialManager | undefined> {
   if (server.type !== 'http' && server.type !== 'streamable-http') {
     return () => undefined;
   }
@@ -127,8 +126,8 @@ export async function handleTools(configPath: string, name: string): Promise<str
 
   const logger = new Logger(process.env.MCP_COMPRESS_ROUTER_VERBOSE === 'true' ? 'debug' : 'info');
 
-  // Refresh cached auth requirement for HTTP servers (Open Question 1:
-  // yes, for consistency with `add`). stdio servers short-circuit inside
+  // Refresh cached auth requirement for HTTP servers, for consistency
+  // with `add`. stdio servers short-circuit inside
   // persistAuthRequirements and do no network access.
   if (target.type !== 'stdio') {
     await persistAuthRequirements(configPath, [target], logger);

@@ -434,6 +434,11 @@ export async function handleLogin(
     name,
   );
 
+  // Bind any stored credentials to the authorization server that
+  // actually serves this login: a registration or token obtained from a
+  // different issuer must not be reused.
+  mgr.setIssuer(metadata.issuer);
+
   const { selectResourceURL, exchangeAuthorization } = await _getSdkAuth();
 
   // RFC 8707 resource indicator, selected from the server's Protected

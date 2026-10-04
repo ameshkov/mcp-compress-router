@@ -40,6 +40,7 @@
     "qa:long-description": "tsx qa/scripts/qa-long-description.ts",
     "qa:router": "tsx qa/scripts/qa-router.ts",
     "qa:probe": "tsx qa/scripts/qa-probe.ts",
+    "qa:reject-token": "tsx qa/scripts/qa-reject-token.ts",
     "qa:llm": "tsx qa/scripts/qa-llm.ts",
     "qa:agent": "tsx qa/scripts/qa-agent.ts",
     "qa:run": "tsx qa/scripts/bdd/run-tests.ts",

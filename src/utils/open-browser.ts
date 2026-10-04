@@ -1,4 +1,4 @@
-import { spawn, type SpawnOptions } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 /**
  * Splits a command line into executable + arguments, honoring shell-style
@@ -61,9 +61,11 @@ export async function openBrowser(url: string): Promise<void> {
     return spawnBrowser('open', [url]);
   }
   if (platform === 'win32') {
-    // `start` is a shell built-in, so shell: true is unavoidable on Windows.
-    // No user-controlled string is interpolated into the command template.
-    return spawnBrowser('start', ['""', url], { shell: true });
+    // `start` is a cmd.exe built-in, so using it would require a shell, and
+    // cmd.exe treats the `&` separators of an authorization URL as command
+    // separators, truncating the URL. Hand the URL to the protocol handler
+    // directly instead: no shell is involved and the URL arrives intact.
+    return spawnBrowser('rundll32.exe', ['url.dll,FileProtocolHandler', url]);
   }
   return spawnBrowser('xdg-open', [url]);
 }
@@ -72,16 +74,16 @@ export async function openBrowser(url: string): Promise<void> {
  * Spawns a browser command and resolves once it has spawned.
  *
  * The browser process is fire-and-forget; this only waits for a successful
- * spawn, not for the process to exit.
+ * spawn, not for the process to exit. The command is spawned directly, with
+ * no shell in between, so shell metacharacters in the arguments stay literal.
  *
  * @param command - The executable to run.
  * @param args - Arguments to pass to the executable (including the URL).
- * @param options - Optional spawn options (e.g. `shell: true` on Windows).
  * @throws If the process fails to spawn.
  */
-function spawnBrowser(command: string, args: string[], options?: SpawnOptions): Promise<void> {
+function spawnBrowser(command: string, args: string[]): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const child = options ? spawn(command, args, options) : spawn(command, args);
+    const child = spawn(command, args);
     child.on('error', reject);
     child.on('spawn', () => resolve());
   });

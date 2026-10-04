@@ -7,7 +7,12 @@ import { Logger } from '../utils/logger.js';
 import type { StoredCredentials } from '../utils/types.js';
 
 // Re-import for credential tests
-import { readCredentials, writeCredentials, removeCredentials } from './config-io.js';
+import {
+  readCredentials,
+  writeCredentials,
+  removeCredentials,
+  mutateCredentials,
+} from './config-io.js';
 
 describe('ensureConfigDir', () => {
   let tempDir: string;
@@ -413,6 +418,72 @@ describe('credentials', () => {
         stderrSpy.mockRestore();
         originalWrite('');
       }
+    });
+  });
+
+  describe('concurrent writes', () => {
+    it('preserves every server entry when many writes run in parallel', async () => {
+      const names = Array.from({ length: 12 }, (_, index) => `server-${index}`);
+
+      // Every writer reads the store before any of them writes, so an
+      // unsynchronized read-modify-write loses all but the last entry.
+      await Promise.all(
+        names.map((name) =>
+          writeCredentials(configPath, name, {
+            tokens: { access_token: `at-${name}`, token_type: 'Bearer' },
+          }),
+        ),
+      );
+
+      const store = await readCredentials(configPath);
+      for (const name of names) {
+        expect(store[name]?.tokens?.access_token).toBe(`at-${name}`);
+      }
+    });
+
+    it('leaves no lock files behind after writes', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+
+      const entries = await fs.readdir(tempDir);
+      expect(entries.filter((entry) => entry.endsWith('.lock'))).toEqual([]);
+    });
+  });
+
+  describe('mutateCredentials', () => {
+    it('merges into the entry read fresh under the lock', async () => {
+      await writeCredentials(configPath, 'github', { authRequirement: 'oauth' });
+
+      await mutateCredentials(configPath, 'github', (current) => ({
+        ...current,
+        tokens: { access_token: 'at-1', token_type: 'Bearer' },
+      }));
+
+      const store = await readCredentials(configPath);
+      expect(store.github?.authRequirement).toBe('oauth');
+      expect(store.github?.tokens?.access_token).toBe('at-1');
+    });
+
+    it('deletes the entry and the file when the mutation returns undefined', async () => {
+      await writeCredentials(configPath, 'github', sampleCredentials);
+
+      await mutateCredentials(configPath, 'github', () => undefined);
+
+      expect(await readCredentials(configPath)).toEqual({});
+      await expect(fs.access(credPath)).rejects.toThrow();
+    });
+
+    it('throws when the credentials file is an array instead of an object', async () => {
+      await fs.writeFile(credPath, '[1, 2, 3]');
+
+      await expect(
+        mutateCredentials(configPath, 'github', () => ({
+          tokens: { access_token: 'at-1', token_type: 'Bearer' },
+        })),
+      ).rejects.toThrow(/Failed to read credentials file for update/);
+
+      // The damaged store is left untouched for inspection instead of
+      // being silently overwritten.
+      expect(JSON.parse(await fs.readFile(credPath, 'utf-8'))).toEqual([1, 2, 3]);
     });
   });
 

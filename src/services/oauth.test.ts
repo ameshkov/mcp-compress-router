@@ -273,6 +273,64 @@ describe('OAuthCredentialManager', () => {
     expect(await readCredentials(configPath)).toEqual({});
   });
 
+  it('invalidateCredentials("tokens") does not clear tokens another process refreshed', async () => {
+    // This manager's refresh attempt was based on the expired tokens
+    // below; while it was failing with invalid_grant, another router
+    // instance refreshed the same entry successfully.
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: {
+        access_token: 'stale-at',
+        refresh_token: 'stale-rt',
+        token_type: 'Bearer',
+        expires_at: new Date(Date.now() - 60_000).toISOString(),
+      },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: {
+        access_token: 'fresh-at',
+        refresh_token: 'fresh-rt',
+        token_type: 'Bearer',
+        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      },
+      authRequirement: 'oauth',
+      checkedAt: new Date().toISOString(),
+    });
+
+    // The SDK calls invalidateCredentials('tokens') after an
+    // InvalidGrantError. The fresh tokens belong to the instance that
+    // won the refresh and must survive.
+    await mgr.invalidateCredentials('tokens');
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.tokens?.access_token).toBe('fresh-at');
+    expect(store[server.name]?.tokens?.refresh_token).toBe('fresh-rt');
+  });
+
+  it('invalidateCredentials("tokens") still clears stale tokens after a failed refresh', async () => {
+    await writeCredentials(configPath, server.name, {
+      tokens: {
+        access_token: 'stale-at',
+        refresh_token: 'stale-rt',
+        token_type: 'Bearer',
+        expires_at: new Date(Date.now() - 60_000).toISOString(),
+      },
+      authRequirement: 'oauth',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.invalidateCredentials('tokens');
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.tokens).toBeUndefined();
+    expect(store[server.name]?.authRequirement).toBe('oauth');
+  });
+
   it('redirectToAuthorization throws GuidedAuthError with the server name', async () => {
     // The router is a headless stdio server with no callback server
     // running; opening a browser would point at a non-existent
@@ -303,5 +361,167 @@ describe('OAuthCredentialManager', () => {
     };
     const mgr = new OAuthCredentialManager(configPath, oauthServer);
     expect(mgr.hasStaticClient()).toBe(true);
+  });
+
+  it('saveTokens records the server URL binding', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveTokens({ access_token: 'at-123', token_type: 'Bearer' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+  });
+
+  it('saveClientInformation records the server URL binding', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveClientInformation({ client_id: 'client-1' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+  });
+
+  it('records the authorization server issuer when it is known', async () => {
+    const mgr = new OAuthCredentialManager(configPath, server);
+    mgr.setIssuer('https://auth.example.com/');
+    await mgr.saveTokens({ access_token: 'at-123', token_type: 'Bearer' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.issuer).toBe('https://auth.example.com/');
+  });
+
+  it('ignores credentials bound to a different server URL', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://different.example.org/mcp',
+      clientRegistration: { client_id: 'old-client' },
+      tokens: { access_token: 'old-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    expect(await mgr.clientInformation()).toBeUndefined();
+    expect(await mgr.tokens()).toBeUndefined();
+  });
+
+  it('ignores credentials from a different issuer once the issuer is known', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://example.com/mcp',
+      issuer: 'https://old-auth.example.com/',
+      clientRegistration: { client_id: 'old-client' },
+      tokens: { access_token: 'old-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    mgr.setIssuer('https://auth.example.com/');
+    expect(await mgr.clientInformation()).toBeUndefined();
+    expect(await mgr.tokens()).toBeUndefined();
+  });
+
+  it('adopts legacy credentials without a serverUrl and binds them on save', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'legacy-client' },
+      tokens: { access_token: 'legacy-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    expect((await mgr.tokens())?.access_token).toBe('legacy-at');
+
+    await mgr.saveTokens({ access_token: 'new-at', token_type: 'Bearer' });
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    // The adopted registration survives the token write.
+    expect(store[server.name]?.clientRegistration).toEqual({ client_id: 'legacy-client' });
+    expect(store[server.name]?.tokens?.access_token).toBe('new-at');
+  });
+
+  it('replaces credentials bound to a different URL instead of preserving them', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://different.example.org/mcp',
+      clientRegistration: { client_id: 'old-client' },
+      tokens: { access_token: 'old-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveClientInformation({ client_id: 'fresh-client' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    expect(store[server.name]?.clientRegistration).toEqual({ client_id: 'fresh-client' });
+    // The old server's tokens are not carried over.
+    expect(store[server.name]?.tokens).toBeUndefined();
+  });
+
+  it('does not inherit a stale binding from a probe-only entry', async () => {
+    // A server probed at an older URL but never logged in: the probe
+    // entry carries no credentials, so its recorded URL must not be
+    // stamped onto the fresh registration.
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://old.example.com/mcp',
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveClientInformation({ client_id: 'fresh-client' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    // The fresh registration must be readable immediately.
+    expect(await mgr.clientInformation()).toEqual({ client_id: 'fresh-client' });
+  });
+
+  it('does not inherit a stale binding from a probe-only entry on token save', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://old.example.com/mcp',
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.saveTokens({ access_token: 'fresh-at', token_type: 'Bearer' });
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    expect((await mgr.tokens())?.access_token).toBe('fresh-at');
+  });
+
+  it('invalidateCredentials preserves the server URL binding', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://example.com/mcp',
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: { access_token: 'at-123', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.invalidateCredentials('tokens');
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    expect(store[server.name]?.clientRegistration).toEqual({ client_id: 'reg-id' });
+  });
+
+  it('clearTokens removes a mismatched entry entirely', async () => {
+    // The entry belongs to another server URL: nothing in it is worth
+    // preserving, so the whole entry is dropped (the next probe
+    // refreshes the auth requirement for the current URL).
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://different.example.org/mcp',
+      tokens: { access_token: 'old-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.clearTokens();
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]).toBeUndefined();
   });
 });

@@ -121,6 +121,23 @@ export type AuthStatus =
  */
 export interface StoredCredentials {
   /**
+   * Normalized URL of the downstream server this entry was created for.
+   * Credentials are only reused while the configured server URL matches,
+   * so a leftover entry from a removed or renamed server is never
+   * presented to a different domain. Absent on entries written before
+   * this field existed; such entries are adopted once and bound on the
+   * next write.
+   */
+  serverUrl?: string;
+  /**
+   * Authorization server issuer recorded alongside the credentials when
+   * it was known (from discovered RFC 8414 / OIDC metadata). Adds a
+   * second binding check on top of {@link serverUrl}: credentials are
+   * not reused when the issuer they were obtained from differs from the
+   * currently discovered one.
+   */
+  issuer?: string;
+  /**
    * The full dynamic client registration response.
    * undefined when oauth overrides are used (clientId/clientSecret
    * provided in config).

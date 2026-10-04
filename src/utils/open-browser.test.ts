@@ -35,17 +35,18 @@ describe('openBrowser', () => {
     expect(spawn).toHaveBeenCalledWith('open', ['https://example.com']);
   });
 
-  it('Windows: spawns "start" with shell:true', async () => {
+  it('Windows: spawns the protocol handler directly, with no shell', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
+    // A real authorization URL contains `&`; through cmd.exe it would be
+    // treated as a command separator and truncate everything after it.
+    const url = 'https://example.com/authorize?response_type=code&client_id=abc&state=xyz';
 
-    const promise = openBrowser('https://example.com');
+    const promise = openBrowser(url);
     mockChild.emit('spawn');
     await promise;
 
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith('start', ['""', 'https://example.com'], {
-      shell: true,
-    });
+    expect(spawn).toHaveBeenCalledWith('rundll32.exe', ['url.dll,FileProtocolHandler', url]);
   });
 
   it('Linux: spawns "xdg-open" with the URL as argument', async () => {

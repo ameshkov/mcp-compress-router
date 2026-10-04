@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import * as http from 'node:http';
-import { probeAuthRequirement, computeAuthStatus } from './auth-status.js';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { probeAuthRequirement, computeAuthStatus, persistAuthRequirements } from './auth-status.js';
 import { createAuthFixtureServer } from '../../test/fixture-auth-server.js';
 import { createHttpFixtureServer } from '../../test/fixture-http-server.js';
+import { readCredentials, writeCredentials } from '../cli/config-io.js';
+import { Logger } from '../utils/index.js';
 import type { DownstreamServerConfig, StoredCredentials } from '../utils/index.js';
 
 /** Resolves once the given HTTP server has fully closed. */
@@ -158,11 +163,21 @@ describe('computeAuthStatus', () => {
   });
 
   it('returns "authenticated" when OAuth is advertised and tokens are present', () => {
+    // No serverUrl: a legacy entry is adopted rather than rejected.
     const stored: StoredCredentials = {
       authRequirement: 'oauth',
       tokens: { access_token: 'at', token_type: 'Bearer' },
     };
     expect(computeAuthStatus(httpServer, stored)).toBe('authenticated');
+  });
+
+  it('returns "requires login" when tokens are bound to a different server URL', () => {
+    const stored: StoredCredentials = {
+      serverUrl: 'https://old.example.com/mcp',
+      authRequirement: 'oauth',
+      tokens: { access_token: 'at', token_type: 'Bearer' },
+    };
+    expect(computeAuthStatus(httpServer, stored)).toBe('requires login');
   });
 
   it('returns "requires login" when OAuth is advertised but no tokens', () => {
@@ -182,5 +197,91 @@ describe('computeAuthStatus', () => {
   it('returns "unknown" when the requirement is unknown', () => {
     const stored: StoredCredentials = { authRequirement: 'unknown' };
     expect(computeAuthStatus(httpServer, stored)).toBe('unknown');
+  });
+});
+
+describe('persistAuthRequirements', () => {
+  let authFixture: Awaited<ReturnType<typeof createAuthFixtureServer>>;
+  let tmpDir: string;
+  let configPath: string;
+
+  beforeAll(async () => {
+    authFixture = await createAuthFixtureServer();
+  });
+
+  afterAll(async () => {
+    await closeServer(authFixture.server);
+  });
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-auth-status-test-'));
+    configPath = path.join(tmpDir, 'mcp.json');
+    await fs.writeFile(configPath, JSON.stringify({ mcpServers: {} }));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true });
+  });
+
+  /** The fixture server as a typed downstream config. */
+  function fixtureServer(): DownstreamServerConfig {
+    return {
+      name: 'auth-fixture',
+      description: 'OAuth auth fixture server',
+      type: 'http',
+      url: authFixture.url,
+    };
+  }
+
+  it('records the server URL on a fresh probe entry', async () => {
+    await persistAuthRequirements(configPath, [fixtureServer()], new Logger('error'));
+
+    const store = await readCredentials(configPath);
+    expect(store['auth-fixture']?.serverUrl).toBe(authFixture.url + '/');
+    expect(store['auth-fixture']?.authRequirement).toBe('oauth');
+  });
+
+  it('backfills the server URL on a legacy entry and preserves credentials', async () => {
+    await writeCredentials(configPath, 'auth-fixture', {
+      clientRegistration: { client_id: 'legacy-client' },
+      tokens: { access_token: 'at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+    });
+
+    await persistAuthRequirements(configPath, [fixtureServer()], new Logger('error'));
+
+    const store = await readCredentials(configPath);
+    expect(store['auth-fixture']?.serverUrl).toBe(authFixture.url + '/');
+    expect(store['auth-fixture']?.clientRegistration).toEqual({ client_id: 'legacy-client' });
+    expect(store['auth-fixture']?.tokens?.access_token).toBe('at');
+    expect(store['auth-fixture']?.authRequirement).toBe('oauth');
+  });
+
+  it('preserves an existing binding when the configured URL changed', async () => {
+    await writeCredentials(configPath, 'auth-fixture', {
+      serverUrl: 'https://old.example.com/mcp',
+      tokens: { access_token: 'at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+    });
+
+    await persistAuthRequirements(configPath, [fixtureServer()], new Logger('error'));
+
+    const store = await readCredentials(configPath);
+    expect(store['auth-fixture']?.serverUrl).toBe('https://old.example.com/mcp');
+    expect(store['auth-fixture']?.tokens?.access_token).toBe('at');
+  });
+
+  it('re-binds a probe-only entry to the configured URL', async () => {
+    // A probe-only entry carries no credentials, so its stale URL is
+    // replaced instead of being preserved.
+    await writeCredentials(configPath, 'auth-fixture', {
+      serverUrl: 'https://old.example.com/mcp',
+      authRequirement: 'none',
+    });
+
+    await persistAuthRequirements(configPath, [fixtureServer()], new Logger('error'));
+
+    const store = await readCredentials(configPath);
+    expect(store['auth-fixture']?.serverUrl).toBe(authFixture.url + '/');
   });
 });

@@ -2,8 +2,7 @@ import {
   ensureConfigDir,
   readConfigFile,
   writeConfigFile,
-  readCredentials,
-  writeCredentials,
+  mutateCredentials,
   type RawServerEntry,
 } from './config-io.js';
 import {
@@ -14,7 +13,7 @@ import {
   validateOAuthClientUri,
   type AuthRequirement,
 } from '../utils/index.js';
-import { discoverAuth } from '../services/index.js';
+import { discoverAuth, resolveBindingUrl } from '../services/index.js';
 import { handleLogin } from './login-command.js';
 
 /**
@@ -306,12 +305,12 @@ async function tryAutoLogin(
     requirement = hasOAuth ? 'oauth' : 'none';
   } catch {
     // Probe failed — cache 'unknown' and don't block the add.
-    await persistAuthRequirement(configPath, name, 'unknown');
+    await persistAuthRequirement(configPath, name, url, 'unknown');
     return undefined;
   }
 
   // Cache the requirement regardless of the login outcome.
-  await persistAuthRequirement(configPath, name, requirement);
+  await persistAuthRequirement(configPath, name, url, requirement);
 
   if (!hasOAuth) {
     return undefined;
@@ -324,19 +323,28 @@ async function tryAutoLogin(
  * Caches the probed auth requirement for a server in credentials.json,
  * preserving any previously stored tokens or client registration.
  *
+ * The entry's server-URL binding is backfilled from the probed URL when
+ * it has none yet; an existing binding is preserved so a URL change
+ * never re-binds old credentials to the new server.
+ *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name.
+ * @param url - The server URL the probe ran against.
  * @param requirement - The probed auth requirement to cache.
  */
 async function persistAuthRequirement(
   configPath: string,
   name: string,
+  url: string,
   requirement: AuthRequirement,
 ): Promise<void> {
-  const existing = await readCredentials(configPath);
-  await writeCredentials(configPath, name, {
-    ...existing[name],
-    authRequirement: requirement,
-    checkedAt: new Date().toISOString(),
+  await mutateCredentials(configPath, name, (current) => {
+    const serverUrl = resolveBindingUrl(current, url);
+    return {
+      ...current,
+      ...(serverUrl !== undefined ? { serverUrl } : {}),
+      authRequirement: requirement,
+      checkedAt: new Date().toISOString(),
+    };
   });
 }

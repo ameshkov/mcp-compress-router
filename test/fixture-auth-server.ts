@@ -25,6 +25,16 @@ export interface AuthFixtureServer {
   getLastTokenResource: () => string | undefined;
   /** Mark all refresh tokens as expired/unusable. */
   invalidateRefreshToken: () => void;
+  /**
+   * Enable a provider mode where a successful refresh grant drops every
+   * previously issued access token before storing the new one, so the
+   * old tokens stop working the moment the new one is issued.
+   */
+  invalidatePreviousAccessToken: () => void;
+  /** Count of requests received by the /token endpoint. */
+  getTokenRequestCount: () => number;
+  /** Whether the token is in the issued-token set the protected endpoint checks. */
+  isAccessTokenValid: (token: string) => boolean;
 }
 
 /**
@@ -48,6 +58,8 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
   let lastAuthorizeResource: string | undefined;
   let lastTokenResource: string | undefined;
   let refreshTokensValid = true;
+  let invalidatePreviousAccessTokens = false;
+  let tokenRequestCount = 0;
 
   // In-memory store: client_id -> registration (secret + redirect URIs)
   const registeredClients = new Map<string, { clientSecret: string; redirectUris: string[] }>();
@@ -217,6 +229,7 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
 
     // Token endpoint — code exchange and refresh
     if (req.method === 'POST' && url.pathname === '/token') {
+      tokenRequestCount += 1;
       const body = await readBody(req);
       const params = new URLSearchParams(body);
       const grantType = params.get('grant_type');
@@ -264,6 +277,12 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         }
         const accessToken = `at-${randomBytes(8).toString('hex')}`;
         const newRefreshToken = `rt-${randomBytes(8).toString('hex')}`;
+        if (invalidatePreviousAccessTokens) {
+          // A provider that invalidates the old access tokens when it
+          // rotates on refresh: any instance still holding one starts
+          // failing with 401 the moment the new token is stored.
+          issuedTokens.clear();
+        }
         lastRefreshToken = newRefreshToken;
         issuedTokens.set(accessToken, {
           refreshToken: newRefreshToken,
@@ -304,12 +323,12 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
 
     const token = authHeader.slice(7);
     if (!issuedTokens.has(token)) {
-      // Check for expired token test path
-      if (token === 'expired-token') {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized', error_description: 'Token expired' }));
-        return;
-      }
+      // Only tokens this fixture itself issued on /token are accepted:
+      // any other bearer value is rejected, like a provider that binds
+      // access tokens to its own token endpoint.
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
 
     // Delegate to MCP transport — collect body and pass parsed JSON.
@@ -356,6 +375,11 @@ export async function createAuthFixtureServer(): Promise<AuthFixtureServer> {
         invalidateRefreshToken: () => {
           refreshTokensValid = false;
         },
+        invalidatePreviousAccessToken: () => {
+          invalidatePreviousAccessTokens = true;
+        },
+        getTokenRequestCount: () => tokenRequestCount,
+        isAccessTokenValid: (token) => issuedTokens.has(token),
       });
     });
     server.on('error', reject);

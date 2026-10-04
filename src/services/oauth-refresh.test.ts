@@ -85,8 +85,9 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
   });
 
   /** Seeds stored tokens with the given absolute expiry. */
-  async function seedTokens(expiresAtIso: string): Promise<void> {
+  async function seedTokens(expiresAtIso: string, issuer?: string): Promise<void> {
     await writeCredentials(configPath, server.name, {
+      ...(issuer !== undefined ? { issuer } : {}),
       clientRegistration: { client_id: 'reg-id' },
       tokens: {
         access_token: 'stale-at',
@@ -252,6 +253,36 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     expect((await mgr.tokens())?.access_token).toBe('stale-at');
   });
 
+  it('logs and skips proactive refresh when Protected Resource Metadata discovery failed transiently', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString());
+    discoverAuthMock.mockResolvedValue({
+      serverMetadata: SERVER_METADATA,
+      authorizationServerUrl: AS_URL,
+      resourceMetadataDiscoveryFailed: true,
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    const logger = new Logger('debug');
+    const errorSpy = vi.spyOn(logger, 'error');
+
+    await expect(mgr.refreshIfNeeded(logger)).resolves.toBeUndefined();
+
+    // The server may bind tokens to a resource; refreshing without the
+    // RFC 8707 resource indicator would issue an unbound token, so the
+    // request is skipped entirely.
+    expect(refreshAuthorizationMock).not.toHaveBeenCalled();
+    expect((await mgr.tokens())?.access_token).toBe('stale-at');
+    // The skip is surfaced at error level so it is visible without
+    // waiting for the SDK's reactive 401 path.
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Proactive OAuth token refresh failed',
+      expect.objectContaining({
+        server: 'test-server',
+        error: expect.stringContaining('Protected Resource Metadata'),
+      }),
+    );
+  });
+
   it('deduplicates concurrent refresh calls into a single token request', async () => {
     await seedTokens(new Date(Date.now() - 1000).toISOString());
     // Slow the refresh so concurrent callers overlap.
@@ -266,5 +297,72 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     // Only one token request reached the authorization server.
     expect(refreshAuthorizationMock).toHaveBeenCalledTimes(1);
     expect((await mgr.tokens())?.access_token).toBe('fresh-at');
+  });
+
+  it('deduplicates refreshes across manager instances sharing the credentials file', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString());
+    refreshAuthorizationMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(FRESH_TOKENS), 50)),
+    );
+
+    // Two managers model two router processes sharing credentials.json:
+    // both see the same expired refresh token and race to refresh it.
+    const first = new OAuthCredentialManager(configPath, server);
+    const second = new OAuthCredentialManager(configPath, server);
+    await Promise.all([first.refreshIfNeeded(), second.refreshIfNeeded()]);
+
+    // The cross-process refresh lock lets only the first process refresh;
+    // the second re-reads the fresh tokens once it holds the lock and
+    // skips its own request, so a rotating provider never sees a stale
+    // refresh token presented twice.
+    expect(refreshAuthorizationMock).toHaveBeenCalledTimes(1);
+    expect((await first.tokens())?.access_token).toBe('fresh-at');
+    expect((await second.tokens())?.access_token).toBe('fresh-at');
+  });
+
+  it('does not refresh credentials bound to a different server URL', async () => {
+    await writeCredentials(configPath, server.name, {
+      serverUrl: 'https://different.example.org/mcp',
+      clientRegistration: { client_id: 'reg-id' },
+      tokens: {
+        access_token: 'stale-at',
+        token_type: 'Bearer',
+        refresh_token: 'stale-rt',
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    expect(discoverAuthMock).not.toHaveBeenCalled();
+    expect(refreshAuthorizationMock).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh credentials from a different authorization server issuer', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString(), 'https://old-as.example.com/');
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    // Discovery runs to learn the current issuer, but the refresh token
+    // is never presented to the new authorization server. Once the
+    // current issuer is known, the old issuer's tokens are unusable.
+    expect(discoverAuthMock).toHaveBeenCalledTimes(1);
+    expect(refreshAuthorizationMock).not.toHaveBeenCalled();
+    expect(await mgr.tokens()).toBeUndefined();
+  });
+
+  it('stamps refreshed credentials with the server URL and issuer', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString());
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.serverUrl).toBe('https://example.com/mcp');
+    expect(store[server.name]?.issuer).toBe('https://as.example.com/');
   });
 });

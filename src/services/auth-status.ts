@@ -5,7 +5,8 @@ import type {
   Logger,
   StoredCredentials,
 } from '../utils/index.js';
-import { readCredentials, writeCredentials } from '../cli/config-io.js';
+import { mutateCredentials } from '../cli/config-io.js';
+import { credentialsUsableFor, resolveBindingUrl } from './credential-binding.js';
 import { discoverAuth } from './oauth-discovery.js';
 
 /**
@@ -72,7 +73,10 @@ export function computeAuthStatus(
   }
 
   const requirement: AuthRequirement = stored?.authRequirement ?? 'unknown';
-  const hasTokens = Boolean(stored?.tokens?.access_token);
+  // Tokens bound to a different server URL do not count: the server
+  // needs a fresh login before it can be used.
+  const hasTokens =
+    Boolean(stored?.tokens?.access_token) && credentialsUsableFor(stored, server.url);
 
   switch (requirement) {
     case 'oauth':
@@ -104,8 +108,13 @@ function hasAuthorizationHeader(headers?: Record<string, string>): boolean {
  * never support OAuth). Probe errors are recorded as `'unknown'` so a
  * single flaky server never blocks startup.
  *
- * The network probes run in parallel for speed, but the credential file
- * writes are serialized to avoid concurrent read-modify-write races.
+ * The network probes run in parallel for speed; each credential entry is
+ * then updated through a cross-process-locked read-modify-write, so a
+ * token refresh that lands while the probes are in flight is merged into
+ * the entry instead of being overwritten by a stale snapshot. Each
+ * entry's server-URL binding is backfilled from the probed server when it
+ * has none yet; an existing binding is preserved so a URL change never
+ * re-binds old credentials to the new server.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param servers - Typed downstream server configs.
@@ -116,10 +125,6 @@ export async function persistAuthRequirements(
   servers: DownstreamServerConfig[],
   logger: Logger,
 ): Promise<void> {
-  // Read the existing store once so per-server tokens and client
-  // registration survive the auth-requirement update.
-  const existing = await readCredentials(configPath);
-
   const httpServers = servers.filter((server) => server.type !== 'stdio');
 
   // Network-bound: probe in parallel for speed.
@@ -127,18 +132,29 @@ export async function persistAuthRequirements(
     httpServers.map(async (server) => ({
       name: server.name,
       requirement: await probeAuthRequirement(server, logger),
+      serverUrl: server.url,
     })),
   );
 
   const checkedAt = new Date().toISOString();
 
-  // Serialize writes to avoid concurrent file read-modify-write races.
-  for (const { name, requirement } of results) {
-    await writeCredentials(configPath, name, {
-      ...existing[name],
-      authRequirement: requirement,
-      checkedAt,
-    });
+  // Each entry is updated from its current on-disk state under the
+  // credentials lock, preserving anything written in the meantime.
+  for (const { name, requirement, serverUrl } of results) {
+    await mutateCredentials(
+      configPath,
+      name,
+      (current) => {
+        const boundUrl = resolveBindingUrl(current, serverUrl);
+        return {
+          ...current,
+          ...(boundUrl !== undefined ? { serverUrl: boundUrl } : {}),
+          authRequirement: requirement,
+          checkedAt,
+        };
+      },
+      logger,
+    );
   }
 
   logger.debug('Cached auth requirements', {

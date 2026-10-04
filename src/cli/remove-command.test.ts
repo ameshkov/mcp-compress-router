@@ -104,4 +104,25 @@ describe('handleRemove', () => {
     creds = await readCredentials(configPath);
     expect(creds.oauthServer).toBeUndefined();
   });
+
+  it('leaves the server configured when credentials cleanup fails', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: { oauthServer: { type: 'http', url: 'https://example.com/mcp' } },
+      }),
+    );
+    // A corrupt credentials file makes cleanup fail. The config must
+    // stay untouched so the command can be retried, and the removed
+    // server can never leave credentials behind.
+    await fs.writeFile(path.join(tempDir, 'credentials.json'), '{ not json');
+
+    await expect(handleRemove(configPath, 'oauthServer')).rejects.toThrow(
+      'Failed to read credentials file for update',
+    );
+
+    const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'));
+    expect(parsed.mcpServers).toHaveProperty('oauthServer');
+  });
 });

@@ -3,9 +3,10 @@ import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { getDownstreamTimeoutMs, killProcessTree } from '../utils/index.js';
+import { createAuthRetryFetch } from './auth-retry-fetch.js';
 import { createDedicatedFetch, createConnectTimeoutFetch } from './dedicated-fetch.js';
+import type { OAuthCredentialManager } from './oauth.js';
 import type {
   DownstreamServerConfig,
   ToolDescriptor,
@@ -170,7 +171,7 @@ export interface DiscoveredServer {
 export async function discoverSingleServer(
   server: DownstreamServerConfig,
   logger: Logger,
-  getAuthProvider?: (s: DownstreamServerConfig) => OAuthClientProvider | undefined,
+  getAuthProvider?: (s: DownstreamServerConfig) => OAuthCredentialManager | undefined,
 ): Promise<DiscoveredServer> {
   const client = new Client(
     { name: 'mcp-compress-router', version: '1.0.0' },
@@ -182,7 +183,7 @@ export async function discoverSingleServer(
     type: server.type,
   });
 
-  const transport = createTransport(server, getAuthProvider);
+  const transport = createTransport(server, getAuthProvider, logger);
 
   // Cap the initialize handshake and tools/list call so a server that
   // accepts the connection but never replies surfaces a clear error
@@ -228,14 +229,21 @@ export async function discoverSingleServer(
 /**
  * Creates the appropriate transport for a downstream server config.
  *
+ * HTTP transports route their fetch through the auth-retry wrapper: a
+ * 401 that carried a bearer token is retried once with a token adopted
+ * from another process or freshly refreshed under the cross-process
+ * refresh lock.
+ *
  * @param server - Downstream server configuration.
  * @param getAuthProvider - Optional factory to provide OAuth credentials.
+ * @param logger - Optional structured logger for auth-retry diagnostics.
  * @returns A configured transport instance (stdio or HTTP).
  * @throws If required configuration (command or url) is missing.
  */
 export function createTransport(
   server: DownstreamServerConfig,
-  getAuthProvider?: (s: DownstreamServerConfig) => OAuthClientProvider | undefined,
+  getAuthProvider?: (s: DownstreamServerConfig) => OAuthCredentialManager | undefined,
+  logger?: Logger,
 ): StdioClientTransport | StreamableHTTPClientTransport {
   if (server.type === 'stdio') {
     if (!server.command) {
@@ -267,7 +275,13 @@ export function createTransport(
     // it uses a private connection pool instead of the shared default one,
     // and bound the connect/auth handshakes (SSE session GET, OAuth
     // metadata + token flows) so a silent server cannot stall startup —
-    // runtime message POSTs are deliberately left unbounded.
-    fetch: createConnectTimeoutFetch(createDedicatedFetch(), getDownstreamTimeoutMs()),
+    // runtime message POSTs are deliberately left unbounded. The auth
+    // retry wraps the timeout fetch so each retry gets a fresh connect
+    // timeout.
+    fetch: createAuthRetryFetch(
+      createConnectTimeoutFetch(createDedicatedFetch(), getDownstreamTimeoutMs()),
+      authProvider,
+      logger,
+    ),
   });
 }

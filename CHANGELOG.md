@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed the `remove` command documentation, which stated that stored
+  credentials are left intact; the command deletes them.
+- Changed the `remove` command to delete a server's stored OAuth
+  credentials before rewriting `mcp.json`: a failed credentials cleanup
+  now leaves the server configured and the command retryable instead
+  of removing the server while its credentials remain on disk.
+- Fixed concurrent router instances and CLI commands racing on the
+  shared `credentials.json`. Credential writes are now a locked,
+  fresh read-modify-write, so a token refresh that lands while an auth
+  probe is in flight is merged instead of being overwritten by the
+  probe's stale snapshot, and parallel writers no longer lose each
+  other's entries. Proactive token refresh is serialized across
+  processes (a rotating refresh token is redeemed once, not once per
+  instance), and a refresh that fails because another instance already
+  won no longer clears the winner's freshly stored tokens.
+- Fixed runtime 401 responses to adopt a token another process stored,
+  refresh at most once under the cross-process lock, and back off when
+  the token is rejected again or a coordinated refresh fails with no
+  concurrently stored token to adopt, so concurrent router instances no
+  longer invalidate each other's access tokens in a refresh storm.
+- Fixed OAuth `login` on Windows: the authorization URL is now handed
+  to the protocol handler directly instead of through `cmd.exe`, which
+  treated the URL's `&` separators as command separators and opened a
+  truncated URL.
+
+### Security
+
+- Bound stored OAuth client registrations and tokens to the downstream
+  server URL and, when known, the authorization server issuer. A
+  credentials entry left over from a removed or renamed server is no
+  longer reused for a different URL, and proactive refresh and `list`
+  treat such an entry as absent. Entries written before this release
+  carry no URL and are adopted once, then bound on the next write.
+
 ## [v3.2.0] - 2026-10-04
 
 ### Added

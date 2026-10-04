@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { createTransport, listToolsOrEmpty } from './discovery.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { saveToolCache, loadToolCache } from './tool-cache.js';
@@ -255,10 +254,12 @@ export class ServerConnection {
     );
 
     this.authProvider = await this.createAuthProvider();
-    const getAuthProvider = this.authProvider
-      ? (_s: DownstreamServerConfig) => this.authProvider as OAuthClientProvider
-      : undefined;
-    const transport = createTransport(this.server, getAuthProvider);
+    const authProvider = this.authProvider;
+    const transport = createTransport(
+      this.server,
+      authProvider ? () => authProvider : undefined,
+      this.logger,
+    );
 
     // Cap the initialize handshake and tools/list call so a hung
     // downstream server fails fast instead of stalling startup (or

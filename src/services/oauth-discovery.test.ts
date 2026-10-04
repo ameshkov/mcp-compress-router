@@ -233,6 +233,144 @@ function startParallelProbeServer(): Promise<{ server: http.Server; mcpUrl: stri
   });
 }
 
+/**
+ * Starts a server whose RFC 9728 PRM endpoint answers with a 500 while AS
+ * metadata is served at the origin root. A 5xx is a transient probe
+ * failure, not a "no PRM published" clean miss.
+ */
+function startPrmErrorServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const origin = `http://${req.headers.host}`;
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end('{"error":"boom"}');
+      return;
+    }
+
+    // RFC 8414 AS metadata at the origin root.
+    if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          response_types_supported: ['code'],
+          grant_types_supported: ['authorization_code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('{}');
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+    });
+  });
+}
+
+/**
+ * Starts a server that destroys the socket for every PRM probe while AS
+ * metadata is served at the origin root. The SDK's `fetchWithCorsRetry`
+ * swallows the connection `TypeError`, retries without headers, and
+ * reports "no PRM" exactly like a real 404, so the fetch-level failure
+ * capture is the only way to classify this as a transient failure.
+ */
+function startPrmDroppedServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const origin = `http://${req.headers.host}`;
+
+    if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) {
+      req.socket.destroy();
+      return;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // RFC 8414 AS metadata at the origin root.
+    if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          response_types_supported: ['code'],
+          grant_types_supported: ['authorization_code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('{}');
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+    });
+  });
+}
+
+/**
+ * Starts a server that never answers PRM probes while AS metadata is
+ * served at the origin root. With the discovery timeout in place the PRM
+ * probe must resolve as a transient failure instead of hanging discovery.
+ */
+function startPrmHangingServer(): Promise<{ server: http.Server; mcpUrl: string }> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const origin = `http://${req.headers.host}`;
+
+    if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      // Intentionally never end the response.
+      return;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // RFC 8414 AS metadata at the origin root.
+    if (req.method === 'GET' && url.pathname === '/.well-known/oauth-authorization-server') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          response_types_supported: ['code'],
+          grant_types_supported: ['authorization_code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('{}');
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address() as AddressInfo;
+      resolve({ server, mcpUrl: `http://localhost:${addr.port}/mcp` });
+    });
+  });
+}
+
 describe('discoverAuth', () => {
   let prm: Awaited<ReturnType<typeof startPrmServer>>;
   let legacy: Awaited<ReturnType<typeof startLegacyServer>>;
@@ -240,6 +378,8 @@ describe('discoverAuth', () => {
   let bare: Awaited<ReturnType<typeof startBareServer>>;
   let html: Awaited<ReturnType<typeof startHtmlServer>>;
   let parallelProbe: Awaited<ReturnType<typeof startParallelProbeServer>>;
+  let prmError: Awaited<ReturnType<typeof startPrmErrorServer>>;
+  let prmDropped: Awaited<ReturnType<typeof startPrmDroppedServer>>;
 
   beforeAll(async () => {
     prm = await startPrmServer();
@@ -248,6 +388,8 @@ describe('discoverAuth', () => {
     bare = await startBareServer();
     html = await startHtmlServer();
     parallelProbe = await startParallelProbeServer();
+    prmError = await startPrmErrorServer();
+    prmDropped = await startPrmDroppedServer();
   });
 
   afterAll(async () => {
@@ -258,6 +400,8 @@ describe('discoverAuth', () => {
       closeServer(bare.server),
       closeServer(html.server),
       closeServer(parallelProbe.server),
+      closeServer(prmError.server),
+      closeServer(prmDropped.server),
     ]);
   });
 
@@ -269,6 +413,7 @@ describe('discoverAuth', () => {
       new URL(prm.mcpUrl).origin,
     ]);
     expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.resourceMetadataDiscoveryFailed).toBe(false);
     // AS metadata was found at the PRM-advertised AS URL (the origin root),
     // not at the MCP /mcp path.
     expect(discovered.authorizationServerUrl.href).toBe(new URL(prm.mcpUrl).origin + '/');
@@ -282,6 +427,7 @@ describe('discoverAuth', () => {
     expect(discovered.resourceMetadata).toBeUndefined();
     // AS metadata still found via the origin-root fallback.
     expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.resourceMetadataDiscoveryFailed).toBe(false);
     expect(discovered.authorizationServerUrl.href).toBe(new URL(legacy.mcpUrl).origin + '/');
   });
 
@@ -317,6 +463,50 @@ describe('discoverAuth', () => {
 
     expect(discovered.resourceMetadata).toBeUndefined();
     expect(discovered.serverMetadata).toBeUndefined();
+    expect(discovered.resourceMetadataDiscoveryFailed).toBe(false);
+  });
+
+  it('marks a transient Protected Resource Metadata failure and still discovers the authorization server', async () => {
+    // The PRM endpoint answers 500: a transient probe failure, not a
+    // clean "no PRM published" miss. AS discovery must still proceed.
+    const discovered = await discoverAuth(new URL(prmError.mcpUrl));
+
+    expect(discovered.resourceMetadataDiscoveryFailed).toBe(true);
+    expect(discovered.resourceMetadata).toBeUndefined();
+    expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.authorizationServerUrl.href).toBe(new URL(prmError.mcpUrl).origin + '/');
+  });
+
+  it('treats a dropped Protected Resource Metadata connection as a transient failure', async () => {
+    // The SDK hides the connection TypeError behind its "does not
+    // implement" error, so only the fetch-level capture can tell this
+    // apart from a real 404.
+    const discovered = await discoverAuth(new URL(prmDropped.mcpUrl));
+
+    expect(discovered.resourceMetadataDiscoveryFailed).toBe(true);
+    expect(discovered.resourceMetadata).toBeUndefined();
+    expect(discovered.serverMetadata).toBeDefined();
+    expect(discovered.authorizationServerUrl.href).toBe(new URL(prmDropped.mcpUrl).origin + '/');
+  });
+
+  it('treats a hung Protected Resource Metadata probe as a transient failure', async () => {
+    const prev = process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+    process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = '150';
+    const hanging = await startPrmHangingServer();
+    try {
+      const discovered = await discoverAuth(new URL(hanging.mcpUrl));
+
+      expect(discovered.resourceMetadataDiscoveryFailed).toBe(true);
+      expect(discovered.resourceMetadata).toBeUndefined();
+      expect(discovered.serverMetadata).toBeDefined();
+      expect(discovered.authorizationServerUrl.href).toBe(new URL(hanging.mcpUrl).origin + '/');
+    } finally {
+      if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+      else process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = prev;
+      // Force-close the hung PRM connections so the test process can exit.
+      hanging.server.closeAllConnections();
+      await closeServer(hanging.server);
+    }
   });
 
   it('probes fallback candidates in parallel so a hung candidate does not delay discovery', async () => {

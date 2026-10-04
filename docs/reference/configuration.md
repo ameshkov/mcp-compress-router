@@ -403,6 +403,8 @@ automatically — you do not edit it by hand.
 ```json
 {
   "my-server": {
+    "serverUrl": "https://example.com/mcp",
+    "issuer": "https://auth.example.com",
     "clientRegistration": {
       "client_id": "..."
     },
@@ -417,12 +419,23 @@ automatically — you do not edit it by hand.
     }
   },
   "public-api": {
+    "serverUrl": "https://public.example.com/mcp",
     "authRequirement": "none",
     "checkedAt": "2026-06-22T12:00:01Z"
   }
 }
 ```
 
+- `serverUrl` — normalized URL of the downstream server the entry was
+  created for. Credentials are only reused while the configured URL
+  matches, so an entry left over from a removed or renamed server is
+  never presented to a different domain. Entries written before this
+  field existed are adopted once and bound on the next write.
+- `issuer` — authorization server issuer recorded when it was known.
+  Credentials are not reused when both the stored and the currently
+  discovered issuers are known and differ. Until the issuer has been
+  discovered (for example, on the SDK's reactive 401 path), only
+  `serverUrl` is checked.
 - `authRequirement` — cached result of the OAuth metadata probe
   (`"oauth"`, `"none"`, or `"unknown"`). Set at router startup and on
   `add`.
@@ -435,6 +448,12 @@ automatically — you do not edit it by hand.
   permissions (owner read/write only).
 - On Windows, file permissions cannot be restricted; the router logs a
   warning and stores the file in the same directory.
+- Every running router instance and CLI command shares this file. Writes
+  are serialized through lock files next to it (`credentials.json.lock`,
+  and `credentials.json.refresh.lock` for token refreshes), so
+  concurrent instances merge their updates instead of clobbering each
+  other and a rotating refresh token is redeemed once. The lock files
+  are transient and removed when the operation finishes.
 - When the last entry is removed entirely, the file is deleted.
 - The `clientRegistration` field is omitted when OAuth overrides
   (`oauth.clientId`) are used.
@@ -570,8 +589,9 @@ MCP_COMPRESS_ROUTER_BROWSER="node /path/to/headless-browser.js" \
   mcp-compress-router login my-http
 ```
 
-When unset, the platform default is used: `open` on macOS, `start` on
-Windows, and `xdg-open` on Linux.
+When unset, the platform default is used: `open` on macOS,
+`rundll32 url.dll,FileProtocolHandler` on Windows, and `xdg-open` on
+Linux.
 
 ### `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS`
 
@@ -724,8 +744,8 @@ mcp-compress-router enable archive
 
 ### `remove <name>`
 
-Removes a server entry from `mcp.json`. Stored credentials are left
-intact; use `logout <name>` to remove them.
+Removes a server entry from `mcp.json` and deletes the server's stored
+OAuth credentials from `credentials.json`.
 
 ### `tools <name>`
 
@@ -828,8 +848,10 @@ interactive paste prompt is not subject to the login timeout.
 
 The `--client-name` and `--client-uri` overrides are not written to
 `mcp.json`, but the client registration they produce is stored in
-`credentials.json` and reused by later logins until `logout`, unless a
-later login enforces a different configured identity.
+`credentials.json` and reused by later logins until `logout` — unless a
+later login enforces a different configured identity, or the stored
+entry is bound to a different server URL or authorization server
+issuer.
 
 ### `logout <name>`
 

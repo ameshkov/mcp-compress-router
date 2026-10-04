@@ -1,58 +1,39 @@
-import {
-  refreshAuthorization,
-  selectResourceURL,
-  type OAuthClientProvider,
-} from '@modelcontextprotocol/sdk/client/auth.js';
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
   OAuthClientMetadata,
   OAuthClientInformationMixed,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { DownstreamServerConfig, Logger, StoredCredentials } from '../utils/index.js';
-import { readCredentials, writeCredentials, removeCredentials } from '../cli/config-io.js';
-import { discoverAuth } from './oauth-discovery.js';
+import { mutateCredentials, readCredentials, withRefreshLock } from '../cli/config-io.js';
+import { bindingFieldsFor, credentialsUsableFor } from './credential-binding.js';
+import {
+  computeExpiresAt,
+  dueRefreshToken,
+  requestTokenRefresh,
+  tokensNeedInvalidation,
+} from './oauth-token-refresh.js';
 import { GuidedAuthError } from './index.js';
 
 /**
- * How long before expiry a token is considered due for proactive
- * refresh, in milliseconds. A refresh is triggered when the token's
- * absolute `expires_at` is within this window of (or already past)
- * the current time. Keeps a small safety margin so the token does
- * not expire in the gap between the refresh check and the request.
+ * Base auth-failure backoff window, in milliseconds. After a 401
+ * survives an adopted or freshly refreshed access token, the provider
+ * refuses further refreshes for a jittered multiple of this window so
+ * a server that keeps rejecting tokens cannot drive a refresh loop.
+ *
+ * @internal Exported for tests only; not part of the public module API.
  */
-const REFRESH_BUFFER_MS = 60_000;
+export const AUTH_FAILURE_COOLDOWN_MS = 30_000;
 
 /**
- * Computes the absolute ISO-8601 expiry timestamp from a relative
- * `expires_in` (seconds from now). Returns `undefined` when the TTL
- * is absent or non-finite, so callers can skip proactive refresh for
- * tokens that never expire or carry no expiry information.
+ * Relative jitter applied to {@link AUTH_FAILURE_COOLDOWN_MS}, as a
+ * fraction of the base window (±20 %). The jitter spreads the backoff
+ * deadlines of concurrent router instances so they do not retry a
+ * failing server in lockstep.
  *
- * @param expiresIn - Token lifetime in seconds, or undefined.
- * @returns Absolute expiry timestamp, or undefined.
+ * @internal Exported for tests only; not part of the public module API.
  */
-function computeExpiresAt(expiresIn: number | undefined): string | undefined {
-  if (expiresIn === undefined || !Number.isFinite(expiresIn)) {
-    return undefined;
-  }
-  return new Date(Date.now() + expiresIn * 1000).toISOString();
-}
-
-/**
- * Determines whether a token with the given absolute expiry is due for
- * proactive refresh. Returns true when the token is already expired or
- * will expire within {@link REFRESH_BUFFER_MS}.
- *
- * @param expiresAtIso - ISO-8601 expiry timestamp.
- * @returns True when the token should be refreshed now.
- */
-function needsRefresh(expiresAtIso: string): boolean {
-  const expiresAtMs = Date.parse(expiresAtIso);
-  if (Number.isNaN(expiresAtMs)) {
-    return false;
-  }
-  return expiresAtMs - Date.now() <= REFRESH_BUFFER_MS;
-}
+export const AUTH_FAILURE_COOLDOWN_JITTER = 0.2;
 
 /**
  * The OAuth redirect callback path served by the temporary local HTTP
@@ -94,11 +75,29 @@ export class OAuthCredentialManager implements OAuthClientProvider {
   private _staticClientInfo?: OAuthClientInformationMixed;
   private _actualPort: number = 0;
   /**
+   * Authorization server issuer recorded for the current flow, when
+   * discovered. Stamped onto saved credentials and used to reject a
+   * stored entry obtained from a different authorization server.
+   */
+  private _issuer?: string;
+  /**
    * In-flight proactive refresh promise. When set, concurrent
    * callers of {@link refreshIfNeeded} await this shared promise
    * instead of triggering duplicate refresh requests.
    */
   private _refreshInFlight?: Promise<void>;
+  /**
+   * In-flight coordinated 401 refresh promise. When set, concurrent
+   * callers of {@link refreshAfterUnauthorized} await this shared
+   * attempt instead of racing duplicate adopt/refresh requests.
+   */
+  private _authRefreshInFlight?: Promise<OAuthTokens | undefined>;
+  /**
+   * Wall-clock deadline (epoch milliseconds) until which refreshes are
+   * refused after a 401 survived an adopted or freshly refreshed token.
+   * Zero means no backoff is active.
+   */
+  private _authFailureUntil = 0;
 
   constructor(configPath: string, server: DownstreamServerConfig) {
     this._configPath = configPath;
@@ -125,6 +124,14 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    */
   get redirectUrl(): string | URL | undefined {
     return `http://127.0.0.1:${this._actualPort}${OAUTH_CALLBACK_PATH}`;
+  }
+
+  /**
+   * The configured name of the downstream server this manager serves,
+   * used to attribute auth-retry and backoff log records.
+   */
+  get serverName(): string {
+    return this._server.name;
   }
 
   /**
@@ -181,6 +188,18 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     return this._staticClientInfo !== undefined;
   }
 
+  /**
+   * Records the discovered authorization server issuer for the current
+   * flow. Saved credentials are stamped with it, and a stored entry
+   * whose recorded issuer differs is not reused.
+   *
+   * @param issuer - The authorization server issuer from RFC 8414 /
+   *   OIDC metadata.
+   */
+  setIssuer(issuer: string): void {
+    this._issuer = issuer;
+  }
+
   async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
     // Static overrides take precedence
     if (this._staticClientInfo) {
@@ -195,17 +214,19 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       // Don't overwrite static overrides
       return;
     }
-    const creds = await this._loadCredentials();
-    const updated: StoredCredentials = {
-      clientRegistration: clientInformation as Record<string, unknown>,
-      // Preserve existing tokens; omit when none (tokens is optional).
-      ...(creds?.tokens ? { tokens: creds.tokens } : {}),
-      // Successful OAuth client registration proves the server supports
-      // OAuth. Override any stale cached requirement.
-      authRequirement: 'oauth',
-      checkedAt: new Date().toISOString(),
-    };
-    await writeCredentials(this._configPath, this._server.name, updated);
+    await mutateCredentials(this._configPath, this._server.name, (current) => {
+      const creds = this._usableEntry(current);
+      return {
+        ...bindingFieldsFor(creds, this._server.url, this._issuer),
+        clientRegistration: clientInformation as Record<string, unknown>,
+        // Preserve existing tokens; omit when none (tokens is optional).
+        ...(creds?.tokens ? { tokens: creds.tokens } : {}),
+        // Successful OAuth client registration proves the server supports
+        // OAuth. Override any stale cached requirement.
+        authRequirement: 'oauth',
+        checkedAt: new Date().toISOString(),
+      };
+    });
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
@@ -213,28 +234,39 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     if (!creds?.tokens?.access_token) {
       return undefined;
     }
+    if (this._isAuthFailureBackoffActive()) {
+      // The SDK's auth() refreshes unconditionally whenever the stored
+      // tokens carry a refresh token. During the backoff, hand it the
+      // access token without the refresh token so it skips its refresh
+      // branch and terminates through redirectToAuthorization instead
+      // of driving another doomed refresh.
+      const { refresh_token: _refreshToken, ...rest } = creds.tokens;
+      return rest;
+    }
     return creds.tokens as OAuthTokens;
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    const creds = await this._loadCredentials();
-    const updated: StoredCredentials = {
-      clientRegistration: creds?.clientRegistration,
-      tokens: {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_in: tokens.expires_in,
-        expires_at: computeExpiresAt(tokens.expires_in),
-        scope: tokens.scope,
-        token_type: tokens.token_type,
-      },
-      // A successful OAuth token exchange proves the server supports
-      // OAuth. Override any stale cached requirement (e.g. 'none' from
-      // a failed startup probe) with 'oauth'.
-      authRequirement: 'oauth',
-      checkedAt: new Date().toISOString(),
-    };
-    await writeCredentials(this._configPath, this._server.name, updated);
+    await mutateCredentials(this._configPath, this._server.name, (current) => {
+      const creds = this._usableEntry(current);
+      return {
+        ...bindingFieldsFor(creds, this._server.url, this._issuer),
+        clientRegistration: creds?.clientRegistration,
+        tokens: {
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+          expires_at: computeExpiresAt(tokens.expires_in),
+          scope: tokens.scope,
+          token_type: tokens.token_type,
+        },
+        // A successful OAuth token exchange proves the server supports
+        // OAuth. Override any stale cached requirement (e.g. 'none' from
+        // a failed startup probe) with 'oauth'.
+        authRequirement: 'oauth',
+        checkedAt: new Date().toISOString(),
+      };
+    });
   }
 
   /**
@@ -274,15 +306,16 @@ export class OAuthCredentialManager implements OAuthClientProvider {
    */
   async clearTokens(): Promise<void> {
     this._codeVerifier = undefined;
-    const creds = await this._loadCredentials();
-    if (creds?.authRequirement) {
-      await writeCredentials(this._configPath, this._server.name, {
-        authRequirement: creds.authRequirement,
-        checkedAt: creds.checkedAt,
-      });
-      return;
-    }
-    await removeCredentials(this._configPath, this._server.name);
+    await mutateCredentials(this._configPath, this._server.name, (current) => {
+      const creds = this._usableEntry(current);
+      if (creds?.authRequirement) {
+        return {
+          authRequirement: creds.authRequirement,
+          checkedAt: creds.checkedAt,
+        };
+      }
+      return undefined;
+    });
   }
 
   /**
@@ -315,27 +348,35 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       await this.clearTokens();
       return;
     }
-    const creds = await this._loadCredentials();
-    if (!creds) {
-      return;
-    }
-    const remaining: StoredCredentials = {
-      clientRegistration: scope === 'client' ? undefined : creds.clientRegistration,
-      tokens: scope === 'tokens' ? undefined : creds.tokens,
-      authRequirement: creds.authRequirement,
-      checkedAt: creds.checkedAt,
-    };
-    // Drop the entry entirely when nothing credential-like or
-    // probe-related remains, mirroring clearTokens' cleanup.
-    if (
-      remaining.clientRegistration === undefined &&
-      remaining.tokens === undefined &&
-      remaining.authRequirement === undefined
-    ) {
-      await removeCredentials(this._configPath, this._server.name);
-      return;
-    }
-    await writeCredentials(this._configPath, this._server.name, remaining);
+    await mutateCredentials(this._configPath, this._server.name, (current) => {
+      const creds = this._usableEntry(current);
+      if (!creds) {
+        return current;
+      }
+      if (scope === 'tokens' && !tokensNeedInvalidation(creds.tokens)) {
+        // The stored tokens are not the stale ones this invalidation
+        // refers to: another process refreshed them while this one was
+        // failing, and clearing them would discard valid credentials.
+        return current;
+      }
+      const remaining: StoredCredentials = {
+        ...bindingFieldsFor(creds, this._server.url, this._issuer),
+        clientRegistration: scope === 'client' ? undefined : creds.clientRegistration,
+        tokens: scope === 'tokens' ? undefined : creds.tokens,
+        authRequirement: creds.authRequirement,
+        checkedAt: creds.checkedAt,
+      };
+      // Drop the entry entirely when nothing credential-like or
+      // probe-related remains, mirroring clearTokens' cleanup.
+      if (
+        remaining.clientRegistration === undefined &&
+        remaining.tokens === undefined &&
+        remaining.authRequirement === undefined
+      ) {
+        return undefined;
+      }
+      return remaining;
+    });
   }
 
   /**
@@ -368,56 +409,95 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     await this._refreshInFlight;
   }
 
-  private async _runRefreshIfNeeded(logger?: Logger): Promise<void> {
-    const stored = await this._loadCredentials();
-    const tokens = stored?.tokens;
-    if (!tokens?.refresh_token || !tokens.expires_at) {
-      return;
+  /**
+   * Coordinates the reactive 401 path for an access token the server
+   * just rejected: adopts a token another process stored while the
+   * rejected request was in flight, or performs exactly one refresh
+   * under the cross-process refresh lock. Concurrent 401s in this
+   * process share a single attempt.
+   *
+   * Unlike {@link refreshIfNeeded}, a failure propagates to the caller
+   * so the reactive path can report it — except when the failed
+   * attempt finds that another process stored a different access token
+   * while it was running: that winner is adopted and returned, so a
+   * losing cross-process race does not surface as a failure.
+   *
+   * @param usedToken - The access token the rejected request carried.
+   * @returns The adopted or refreshed tokens, or undefined when no
+   *   adoption or refresh could be attempted (no stored tokens, no
+   *   refresh token, or an active auth-failure backoff).
+   * @throws When the token request or Protected Resource Metadata
+   *   discovery fails and no concurrently stored token can be adopted.
+   */
+  async refreshAfterUnauthorized(usedToken: string): Promise<OAuthTokens | undefined> {
+    if (this._authRefreshInFlight) {
+      return this._authRefreshInFlight;
     }
-    if (!needsRefresh(tokens.expires_at)) {
-      return;
-    }
-    await this._refreshTokens(tokens.refresh_token, logger);
+    // Claim the slot synchronously so concurrent callers await the same
+    // attempt rather than racing duplicate refreshes.
+    this._authRefreshInFlight = this._runRefreshAfterUnauthorized(usedToken).finally(() => {
+      this._authRefreshInFlight = undefined;
+    });
+    return this._authRefreshInFlight;
   }
 
   /**
-   * Performs the token refresh: discovers the authorization server
-   * metadata, calls the SDK's `refreshAuthorization`, and persists the
-   * refreshed tokens via {@link saveTokens} (which recomputes
-   * `expires_at`). The request carries the RFC 8707 `resource`
-   * indicator selected from the server's Protected Resource Metadata —
-   * the same indicator `login` sent — so a provider that binds tokens
-   * to a specific resource accepts the refresh. Errors are logged
-   * (when a logger is supplied) and swallowed — proactive refresh is
-   * best-effort; the SDK's 401 path handles terminal failures.
+   * Records that a 401 survived an adopted or freshly refreshed access
+   * token and starts the auth-failure backoff. During the backoff
+   * {@link tokens} hides the refresh token from the SDK's `auth()` flow
+   * and {@link refreshIfNeeded} skips proactive refreshes, so a server
+   * that keeps rejecting tokens cannot drive a refresh loop.
    */
-  private async _refreshTokens(refreshToken: string, logger?: Logger): Promise<void> {
+  noteAuthFailure(): void {
+    // Uniform jitter in [-1, 1) spreads the deadlines of concurrent
+    // router instances so they do not retry a failing server in
+    // lockstep.
+    const jitter = Math.random() * 2 - 1;
+    this._authFailureUntil =
+      Date.now() + AUTH_FAILURE_COOLDOWN_MS * (1 + jitter * AUTH_FAILURE_COOLDOWN_JITTER);
+  }
+
+  /**
+   * Clears the auth-failure backoff after a request with an adopted or
+   * refreshed token succeeded, restoring normal refresh behavior.
+   */
+  noteAuthSuccess(): void {
+    this._authFailureUntil = 0;
+  }
+
+  /**
+   * Whether the auth-failure backoff is currently active.
+   *
+   * @returns True while refreshes are refused after a repeated 401.
+   */
+  private _isAuthFailureBackoffActive(): boolean {
+    return Date.now() < this._authFailureUntil;
+  }
+
+  private async _runRefreshIfNeeded(logger?: Logger): Promise<void> {
+    if (this._isAuthFailureBackoffActive()) {
+      // A 401 just survived an adopted or freshly refreshed token;
+      // another proactive refresh would only burn a token request.
+      return;
+    }
+    // Cheap freshness check before taking the cross-process lock: the
+    // common case (token still valid) must not touch the lock file.
+    if (!dueRefreshToken((await this._loadCredentials())?.tokens)) {
+      return;
+    }
     try {
-      if (!this._server.url) {
-        return;
-      }
-      const serverUrl = new URL(this._server.url);
-      const discovered = await discoverAuth(serverUrl);
-      if (!discovered.serverMetadata) {
-        return;
-      }
-      const clientInformation = await this.clientInformation();
-      if (!clientInformation) {
-        return;
-      }
-      const resource = await selectResourceURL(serverUrl, this, discovered.resourceMetadata);
-      const newTokens = await refreshAuthorization(discovered.authorizationServerUrl, {
-        metadata: discovered.serverMetadata,
-        clientInformation,
-        refreshToken,
-        resource,
+      await withRefreshLock(this._configPath, async () => {
+        // Re-read under the lock: when another process refreshed while
+        // this one waited, its fresh tokens are used as-is.
+        const refreshToken = dueRefreshToken((await this._loadCredentials())?.tokens);
+        if (!refreshToken) {
+          return;
+        }
+        await this._refreshTokens(refreshToken);
       });
-      await this.saveTokens(newTokens);
     } catch (err) {
-      // Proactive refresh is best-effort; the SDK's reactive 401
-      // path (auth()) is the fallback for terminal failures. Log
-      // the error when a logger is available so the failure is
-      // visible without waiting for the 401.
+      // Proactive refresh is best-effort; a lock failure must not break
+      // the tool call. The SDK's reactive 401 path remains the fallback.
       if (logger) {
         logger.error('Proactive OAuth token refresh failed', {
           server: this._server.name,
@@ -427,8 +507,134 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     }
   }
 
+  /**
+   * The coordinated attempt behind {@link refreshAfterUnauthorized}.
+   *
+   * Reads the usable stored entry first: a stored access token that
+   * differs from `usedToken` is another process's fresh token and is
+   * adopted without taking the refresh lock — even during the
+   * auth-failure backoff. When the stored token is still the rejected
+   * one and the backoff is active, no refresh is attempted. Otherwise
+   * the cross-process refresh lock is taken and the entry re-read: a
+   * changed token is adopted, a missing refresh token yields undefined,
+   * and only a still-unchanged entry is refreshed once.
+   *
+   * When the coordinated attempt itself fails (refresh-lock timeout,
+   * network error, transient Protected Resource Metadata discovery
+   * failure, or a losing `invalid_grant` race), the entry is re-read
+   * once more: a changed access token is adopted and returned, because
+   * a peer has usually just stored a winner. Only when no adoptable
+   * token exists does the original error propagate.
+   *
+   * @param usedToken - The access token the rejected request carried.
+   * @returns The adopted or refreshed tokens, or undefined when no
+   *   adoption or refresh could be attempted.
+   * @throws When the token request or Protected Resource Metadata
+   *   discovery fails and no concurrently stored token can be adopted.
+   */
+  private async _runRefreshAfterUnauthorized(usedToken: string): Promise<OAuthTokens | undefined> {
+    const stored = await this._loadCredentials();
+    const adopted = this._adoptStoredToken(usedToken, stored);
+    if (adopted) {
+      return adopted;
+    }
+    if (this._isAuthFailureBackoffActive()) {
+      // A recent 401 survived an adopted or freshly refreshed token;
+      // another refresh would only burn a token request.
+      return undefined;
+    }
+    try {
+      return await withRefreshLock(this._configPath, async () => {
+        // Re-read under the lock: when another process refreshed while
+        // this one waited, adopt its token instead of refreshing again.
+        const current = await this._loadCredentials();
+        const adoptedUnderLock = this._adoptStoredToken(usedToken, current);
+        if (adoptedUnderLock) {
+          return adoptedUnderLock;
+        }
+        const refreshToken = current?.tokens?.refresh_token;
+        if (!refreshToken) {
+          return undefined;
+        }
+        return this._refreshTokens(refreshToken);
+      });
+    } catch (err) {
+      // The attempt failed. A peer may have stored a winner while it
+      // was running (the losing `invalid_grant` race, or a refresh that
+      // landed during a lock timeout or a transient failure): adopt it
+      // instead of surfacing the failure.
+      const storedAfterFailure = await this._loadCredentials();
+      const winner = this._adoptStoredToken(usedToken, storedAfterFailure);
+      if (winner) {
+        return winner;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Returns the tokens of a stored entry when its access token differs
+   * from the one a rejected request carried — a token another process
+   * stored while that request was in flight. Returns undefined when the
+   * stored token is still the rejected one or no usable entry exists.
+   *
+   * @param usedToken - The access token the rejected request carried.
+   * @param stored - The usable stored entry, if any.
+   * @returns The adopted tokens, or undefined when there is nothing to
+   *   adopt.
+   */
+  private _adoptStoredToken(
+    usedToken: string,
+    stored: StoredCredentials | undefined,
+  ): OAuthTokens | undefined {
+    if (stored?.tokens && stored.tokens.access_token !== usedToken) {
+      return stored.tokens;
+    }
+    return undefined;
+  }
+
+  /**
+   * Performs one token refresh through the shared refresh request:
+   * discovers the authorization server metadata, calls the SDK's
+   * `refreshAuthorization` with the RFC 8707 `resource` indicator
+   * selected from the server's Protected Resource Metadata, and persists
+   * the refreshed tokens via {@link saveTokens} (which recomputes
+   * `expires_at`). Errors propagate to the caller so the coordinated
+   * path can report the outcome; {@link refreshIfNeeded} keeps its
+   * swallow-and-log behavior.
+   *
+   * @param refreshToken - The refresh token to present.
+   * @returns The refreshed tokens, or undefined when no refresh could be
+   *   attempted.
+   * @throws When discovery or the token request fails, or when the
+   *   Protected Resource Metadata probe failed transiently.
+   */
+  private async _refreshTokens(refreshToken: string): Promise<OAuthTokens | undefined> {
+    return requestTokenRefresh(
+      {
+        serverUrl: this._server.url,
+        provider: this,
+        setIssuer: (issuer) => this.setIssuer(issuer),
+        saveTokens: (tokens) => this.saveTokens(tokens),
+      },
+      refreshToken,
+    );
+  }
+
+  /**
+   * Filters a raw stored entry down to the one this manager may use: an
+   * entry bound to a different server URL or authorization server is
+   * treated as absent so it is never sent anywhere.
+   *
+   * @param entry - The raw on-disk entry, if any.
+   * @returns The usable entry, or undefined when it does not belong here.
+   */
+  private _usableEntry(entry: StoredCredentials | undefined): StoredCredentials | undefined {
+    return credentialsUsableFor(entry, this._server.url, this._issuer) ? entry : undefined;
+  }
+
   private async _loadCredentials(): Promise<StoredCredentials | undefined> {
     const all = await readCredentials(this._configPath);
-    return all[this._server.name];
+    return this._usableEntry(all[this._server.name]);
   }
 }

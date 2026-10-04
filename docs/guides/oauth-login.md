@@ -192,6 +192,11 @@ docker run -v ~/.mcp-compress-router-host:/data/router-home \
   -e MCP_COMPRESS_ROUTER_HOME=/data/router-home my-image
 ```
 
+Credentials are bound to the server URL they were created for: if the
+container's config points `my-http` at a different URL than the login
+did, run `login` again inside the container instead of reusing the
+mounted home.
+
 On Linux, `--network host` lets the container share the host's loopback,
 so a normal browser login works:
 

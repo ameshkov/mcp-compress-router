@@ -66,7 +66,8 @@ mcp-compress-router/
 │   ├── tools/            # Router tool handlers: get_tool_schema, invoke_tool
 │   └── utils/            # Shared utility module: parsing, validation,
 │                         #   filtering, formatting, atomic file writes,
-│                         #   timeouts, logging, process-tree termination
+│                         #   cross-process file locking, timeouts,
+│                         #   logging, process-tree termination
 ├── test/                 # Test support: reusable fixture downstream MCP
 │                         #   servers (stdio, HTTP, auth) and browser mock
 │   └── e2e/              # End-to-end tests against the compiled router
@@ -86,6 +87,8 @@ mcp-compress-router/
 │                         #   tool surfaces, direct-vs-router runs, ccusage
 │                         #   token and cost reports
 ├── .agents/skills/       # Project skills: manual test run, QA planning
+├── .sdd/                 # Spec-driven development artifacts: design
+│                         #   documents and implementation plans
 ├── docs/                 # Documentation
 │   ├── reference/        # Configuration and CLI reference
 │   ├── explanation/      # Token overhead, architecture, process
@@ -316,6 +319,36 @@ All code MUST meet documentation and style requirements before merge:
   with a bare `fs.writeFile`, so a crash or a concurrent writer can
   never leave a torn or empty file behind. Pass the file's mode
   explicitly when permissions must survive the rewrite.
+- **Serialize shared credential state across processes**:
+  `credentials.json` is shared by every running router instance, CLI
+  command, and login flow. Every mutation MUST go through
+  `mutateCredentials` (or `writeCredentials`/`removeCredentials`, which
+  delegate to it), which performs a fresh read-modify-write under the
+  cross-process `withFileLock` lock — never a snapshot taken before an
+  await and never a direct `atomicWriteFile` on the store. Proactive
+  token refreshes MUST hold `withRefreshLock` and re-check token
+  freshness after acquiring it, and token invalidation MUST NOT clear
+  tokens that are no longer due for refresh (another process refreshed
+  them).
+- **Coordinate the reactive OAuth path across processes**: A 401-driven
+  token refresh MUST go through the auth-retry fetch wrapper
+  (`createAuthRetryFetch`) and
+  `OAuthCredentialManager.refreshAfterUnauthorized`, never an ad-hoc
+  retry: on a 401 the reactive path adopts a token another process
+  stored before refreshing and refreshes only under `withRefreshLock`
+  after a re-read of the stored entry. An attempt that itself fails
+  (refresh-lock timeout, network error, transient PRM discovery
+  failure, or a losing `invalid_grant` race) re-reads the entry once
+  more and adopts a concurrently stored token when one exists;
+  otherwise it records the failure with `noteAuthFailure`, as does an
+  adopted or refreshed token that is rejected again. While that backoff
+  is active, `tokens()` MUST omit `refresh_token` so the SDK's `auth()`
+  flow terminates instead of refreshing uncoordinated. A coordinated
+  refresh MUST keep the RFC 8707 `resource` guard: when Protected
+  Resource Metadata discovery failed transiently, the refresh fails
+  without writing tokens. The proactive path is separate:
+  `refreshIfNeeded` keeps `withRefreshLock` plus the post-lock freshness
+  re-read and does not go through the retry wrapper.
 - **Import style**: Use top-level static `import` statements exclusively.
   Do NOT scatter dynamic `await import()` calls inside function bodies
   ("inline imports"). Dynamic imports placed mid-function obscure

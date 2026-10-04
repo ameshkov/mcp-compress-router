@@ -16,10 +16,14 @@ Feature: Using an OAuth-protected streamable-http MCP server
   parameter on the authorization and token requests and logs the value:
   the router derives it from the mock's protected resource metadata, so
   a login completing proves the router sent the per-server resource
-  indicator a strict provider demands. One plan bypasses qa-browser:
-  `login --no-browser` prints the authorization URL, the tester resolves
-  its redirect target with curl without following it, and pastes the
-  resulting URL back at the prompt.
+  indicator a strict provider demands. Refresh tokens are single-use:
+  the mock invalidates one as soon as it is redeemed, so a stale refresh
+  token presented by a second router instance is rejected with
+  `invalid_grant` — the concurrent-instances plan proves such a rejection
+  never wipes the tokens the winning instance stored. One plan bypasses
+  qa-browser: `login --no-browser` prints the authorization URL, the
+  tester resolves its redirect target with curl without following it, and
+  pastes the resulting URL back at the prompt.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -86,3 +90,37 @@ Scenario: The login registers with the configured DCR client identity
   When I add the OAuth mock server with "pnpm qa:router add --client-name 'QA Override Client' --client-uri 'https://qa.example.com/app' oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
   Then the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "registration client_name=QA Override Client client_uri=https://qa.example.com/app" line
   And the same output shows an "auto-approved, redirecting to http://127.0.0.1:" line
+
+@TC-OAUTH-9
+Scenario: Changing the server URL invalidates stored credentials
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  When I note the stored "client_id" in "qa/home/credentials.json"
+  And I run "sed -i 's|http://mock-mcp-http-oauth:3101/mcp|http://mock-mcp-http-oauth:3101/mcp/|' qa/home/mcp.jsonc"
+  And I run "pnpm qa:router list"
+  Then the output shows an "oauth-mock" row with auth "requires login"
+  When I run "pnpm qa:router login oauth-mock"
+  And I run "pnpm qa:router list"
+  Then the output reports "Successfully authenticated server "oauth-mock""
+  And the output shows an "oauth-mock" row with auth "authenticated"
+  And the stored "serverUrl" in "qa/home/credentials.json" is "http://mock-mcp-http-oauth:3101/mcp/"
+  And the stored "client_id" in "qa/home/credentials.json" differs from the noted value
+
+@TC-OAUTH-10
+Scenario: Concurrent instances do not wipe each other's refreshed tokens
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  And I marked the stored access token as rejected with "pnpm qa:reject-token oauth-mock"
+  When I ran two router calls at once with "pnpm qa:probe --tool invoke_tool --args '{"server":"oauth-mock","tool":"echo","arguments":{"message":"race"}}' >/tmp/qa-race-a.log 2>&1 && echo ok >/tmp/qa-race-a.status || echo fail >/tmp/qa-race-a.status & pnpm qa:probe --tool invoke_tool --args '{"server":"oauth-mock","tool":"echo","arguments":{"message":"race"}}' >/tmp/qa-race-b.log 2>&1 && echo ok >/tmp/qa-race-b.status || echo fail >/tmp/qa-race-b.status & wait"
+  Then both "/tmp/qa-race-a.status" and "/tmp/qa-race-b.status" contain "ok"
+  And I run "pnpm qa:router list"
+  And the output shows an "oauth-mock" row with auth "authenticated"
+  And the stored "refresh_token" in "qa/home/credentials.json" is not empty
+
+@TC-OAUTH-11
+Scenario: A rejected access token recovers through a coordinated refresh
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  And I marked the stored access token as rejected while keeping its expiry with "pnpm qa:reject-token oauth-mock --keep-expiry"
+  When I run "pnpm qa:probe --tool invoke_tool --args '{"server":"oauth-mock","tool":"echo","arguments":{"message":"recover"}}'"
+  Then the call is not an error
+  And the result text is "echo: recover"
+  And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "rejected unauthenticated MCP request" line
+  And the same output shows an "issued tokens (refresh_token" line
