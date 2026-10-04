@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Bumped `undici` from 8.10.0 to 8.11.2, which clears the advisories
+  affecting every 8.x release below 8.10.2. The highest-severity ones
+  are a TLS certificate validation bypass in `BalancedPool`
+  (GHSA-w293-vg96-wgc3), cross-origin cache poisoning in the
+  interceptors (GHSA-vp8m-p9jh-q5pm) and a denial of service via an
+  unrequested WebSocket subprotocol (GHSA-rfgv-xxqx-mfg5).
+
 ## [v3.2.1] - 2026-10-04
 
 ### Fixed
