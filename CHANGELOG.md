@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v4.0.0] - 2026-10-10
+
 ### Added
 
 - Added a per-server `timeout` block to `mcp.json`
@@ -633,7 +635,8 @@ The changes below are based on
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v3.2.1...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.0...HEAD
+[v4.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.0
 [v3.2.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.1
 [v3.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.0
 [v3.1.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.1.0
