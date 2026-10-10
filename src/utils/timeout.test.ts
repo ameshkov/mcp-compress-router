@@ -2,54 +2,83 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
-  DEFAULT_DOWNSTREAM_TIMEOUT_MS,
+  DEFAULT_STARTUP_TIMEOUT_MS,
+  DEFAULT_EXECUTION_TIMEOUT_MS,
   DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS,
-  getDownstreamTimeoutMs,
+  getStartupTimeoutMs,
+  getExecutionTimeoutMs,
   getAuthDiscoveryTimeoutMs,
+  resolveServerTimeouts,
   createTimeoutFetch,
 } from './timeout.js';
 
+const ENV_STARTUP = 'MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS';
+const ENV_EXECUTION = 'MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS';
+const ENV_AUTH = 'MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS';
+
 describe('timeout — env defaults', () => {
-  const prevDown = process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
-  const prevAuth = process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
+  const prevStartup = process.env[ENV_STARTUP];
+  const prevExecution = process.env[ENV_EXECUTION];
+  const prevAuth = process.env[ENV_AUTH];
 
   afterEach(() => {
-    if (prevDown === undefined) delete process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
-    else process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = prevDown;
-    if (prevAuth === undefined) delete process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
-    else process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = prevAuth;
+    if (prevStartup === undefined) delete process.env[ENV_STARTUP];
+    else process.env[ENV_STARTUP] = prevStartup;
+    if (prevExecution === undefined) delete process.env[ENV_EXECUTION];
+    else process.env[ENV_EXECUTION] = prevExecution;
+    if (prevAuth === undefined) delete process.env[ENV_AUTH];
+    else process.env[ENV_AUTH] = prevAuth;
   });
 
   it('returns the documented defaults when the env vars are unset', () => {
-    delete process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
-    delete process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS;
-    expect(getDownstreamTimeoutMs()).toBe(DEFAULT_DOWNSTREAM_TIMEOUT_MS);
+    delete process.env[ENV_STARTUP];
+    delete process.env[ENV_EXECUTION];
+    delete process.env[ENV_AUTH];
+    expect(getStartupTimeoutMs()).toBe(30_000);
+    expect(getExecutionTimeoutMs()).toBe(3_600_000);
     expect(getAuthDiscoveryTimeoutMs()).toBe(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS);
+    // The auth discovery budget stays well under the startup default.
+    expect(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS).toBeLessThan(30_000);
   });
 
-  it('honors a positive-integer override', () => {
-    process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = '7000';
-    process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = '2500';
-    expect(getDownstreamTimeoutMs()).toBe(7000);
-    expect(getAuthDiscoveryTimeoutMs()).toBe(2500);
-  });
+  it('honors a positive-integer override and falls back to the default for invalid values', () => {
+    process.env[ENV_STARTUP] = '7000';
+    process.env[ENV_EXECUTION] = '120000';
+    expect(getStartupTimeoutMs()).toBe(7000);
+    expect(getExecutionTimeoutMs()).toBe(120000);
 
-  it('falls back to the default for invalid values', () => {
     for (const bad of ['not-a-number', '0', '-5', '3.5', '']) {
-      process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = bad;
-      process.env.MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS = bad;
-      expect(getDownstreamTimeoutMs()).toBe(DEFAULT_DOWNSTREAM_TIMEOUT_MS);
-      expect(getAuthDiscoveryTimeoutMs()).toBe(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS);
+      process.env[ENV_STARTUP] = bad;
+      process.env[ENV_EXECUTION] = bad;
+      expect(getStartupTimeoutMs()).toBe(DEFAULT_STARTUP_TIMEOUT_MS);
+      expect(getExecutionTimeoutMs()).toBe(DEFAULT_EXECUTION_TIMEOUT_MS);
     }
   });
 
-  it('keeps both defaults well under the 30 s host startup budget', () => {
-    // Most MCP hosts allow ~30 s for the router to initialize. Startup
-    // checks run in parallel (auth probes concurrently with connects),
-    // and a single timed-out downstream server costs at most one default
-    // timeout — so each default must stay far below the 30 s budget.
-    expect(DEFAULT_DOWNSTREAM_TIMEOUT_MS).toBeLessThan(30_000);
-    expect(DEFAULT_AUTH_DISCOVERY_TIMEOUT_MS).toBeLessThan(30_000);
+  it('resolves per-server values over the environment over the defaults', () => {
+    delete process.env[ENV_STARTUP];
+    delete process.env[ENV_EXECUTION];
+    expect(resolveServerTimeouts()).toEqual({
+      startup: DEFAULT_STARTUP_TIMEOUT_MS,
+      execution: DEFAULT_EXECUTION_TIMEOUT_MS,
+    });
+    expect(resolveServerTimeouts({})).toEqual({
+      startup: DEFAULT_STARTUP_TIMEOUT_MS,
+      execution: DEFAULT_EXECUTION_TIMEOUT_MS,
+    });
+
+    process.env[ENV_STARTUP] = '9000';
+    process.env[ENV_EXECUTION] = '900000';
+    expect(resolveServerTimeouts()).toEqual({ startup: 9000, execution: 900000 });
+
+    expect(resolveServerTimeouts({ startup: 1000 })).toEqual({
+      startup: 1000,
+      execution: 900000,
+    });
+    expect(resolveServerTimeouts({ startup: 1000, execution: 2000 })).toEqual({
+      startup: 1000,
+      execution: 2000,
+    });
   });
 });
 

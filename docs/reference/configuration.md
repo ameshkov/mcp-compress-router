@@ -12,6 +12,7 @@ quick-start guide, see the
 - [The mcp.json / mcp.jsonc File](#the-mcpjson--mcpjsonc-file)
     - [Server Entry Fields](#server-entry-fields)
     - [Server Types](#server-types)
+    - [Per-Server Timeouts](#per-server-timeouts)
     - [Tool Selection](#tool-selection)
     - [Compact Catalog](#compact-catalog)
     - [Variable Expansion](#variable-expansion)
@@ -25,7 +26,8 @@ quick-start guide, see the
     - [MCP_COMPRESS_ROUTER_VERBOSE](#mcp_compress_router_verbose)
     - [MCP_COMPRESS_ROUTER_BROWSER](#mcp_compress_router_browser)
     - [MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS](#mcp_compress_router_login_timeout_ms)
-    - [MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS](#mcp_compress_router_downstream_timeout_ms)
+    - [MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS](#mcp_compress_router_startup_timeout_ms)
+    - [MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS](#mcp_compress_router_execution_timeout_ms)
     - [MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS](#mcp_compress_router_auth_discovery_timeout_ms)
 - [CLI Flags](#cli-flags)
     - [add](#add-name-commandorurl-rest)
@@ -159,11 +161,12 @@ server.
 | `enabled` | No | All | Boolean. `false` skips the server entirely at startup (no spawn, no connection, no discovery). Defaults to `true` when omitted, so omitting it keeps `mcp.json` clean and is fully backward compatible |
 | `allowedTools` | No | All | Array of glob patterns matched against the server's bare tool names. When present, only matching tools are exposed; `[]` (empty array) means *no* tools are exposed. Patterns are compiled under picomatch (`*`, `?`, `{a,b}`, `[abc]`) with strict bracket handling |
 | `disabledTools` | No | All | Array of glob patterns removing matching tools from whatever would otherwise be exposed. Takes precedence on conflict: a tool matching both lists is blocked. Same glob semantics as `allowedTools` |
+| `timeout` | No | All | Per-server timeout overrides in milliseconds: `{ "startup": <ms>, "execution": <ms> }`. Both keys are optional positive integers; omitted keys fall back to the environment variables and built-in defaults. See [Per-Server Timeouts](#per-server-timeouts) |
 
 [Variable Expansion](#variable-expansion) applies to `command`, `args`,
 `env`, `url`, `headers`, and the `oauth` string fields. The remaining
-fields (`description`, `allowedTools`, `disabledTools`) are used
-literally.
+fields (`description`, `timeout`, `allowedTools`, `disabledTools`) are
+used literally.
 
 ### Server Types
 
@@ -177,6 +180,54 @@ literally.
 - **`streamable-http`** — Same requirements as `http`, but uses the
   streamable HTTP transport. Use this when the downstream server
   implements the streaming variant of the MCP protocol.
+
+### Per-Server Timeouts
+
+Each server entry MAY carry a `timeout` block that overrides the global
+budgets for that server only:
+
+```jsonc
+"slow-tools": {
+  "type": "http",
+  "url": "https://mcp.example.com/mcp",
+  // Wait up to 60 s for this server's cold start, and let each of its
+  // tool calls run for up to 2 hours.
+  "timeout": { "startup": 60000, "execution": 7200000 },
+  "description": "Remote server with a slow start and long-running tools"
+}
+```
+
+Both keys are optional positive integers in milliseconds and are used
+literally (no `${VAR}` expansion); unknown keys are ignored. A malformed
+block — `timeout` not an object, or `startup`/`execution` not a positive
+integer — fails config load with a server-named error such as
+`Server "x": timeout.startup must be a positive integer`, unlike the
+environment variables, which fall back to the defaults silently. Each
+key is resolved once at config load with the precedence per-server
+value > environment variable > built-in default:
+
+- `startup` (default `30000`, 30 s; env
+  `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS`) bounds every discovery-phase
+  await for the server: the stdio spawn, the HTTP connect fetch (SSE
+  session GET and OAuth metadata/token handshakes), the `initialize`
+  handshake, the `tools/list` call, and token refresh — during router
+  startup, self-recovery reconnects, `tools <name>`, and post-`login`
+  discovery.
+- `execution` (default `3600000`, 1 h; env
+  `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS`) caps each `invoke_tool`
+  call, passed as the SDK request timeout for `tools/call`. It replaces
+  the MCP SDK's 60 s default, so a long-running tool is not cut short.
+  A call that exceeds the budget fails with an error naming the tool,
+  the server, and the budget, and is never retried — a timed-out call
+  may already have had side effects.
+
+The transport-phase JSON message POSTs that carry tool calls stay
+unbounded; the execution cap lives at the SDK request layer and applies
+to `tools/call` only. Values above 2 147 483 647 ms (~24.8 days) exceed
+Node's timer range and fire immediately instead of waiting, so keep the
+budgets realistic. Raising `startup` above your MCP host's own catalog
+budget is a trade-off: the host may give up on the router before the
+router gives up on the server.
 
 ### Tool Selection
 
@@ -529,7 +580,8 @@ values.
 | `MCP_COMPRESS_ROUTER_VERBOSE` | unset | Set to `true` to enable debug-level logging to stderr. Same as `-v, --verbose` |
 | `MCP_COMPRESS_ROUTER_BROWSER` | unset | Override the browser command used to open OAuth URLs. The authorization URL is appended as a single final argument; no shell is used |
 | `MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS` | `120000` (120 s) | Time in milliseconds to wait for the OAuth callback during `login` |
-| `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` | `10000` (10 s) | Time in milliseconds to wait for a downstream server's `initialize` handshake and `tools/list` call before failing. Caps hangs on unresponsive servers (the MCP SDK's own default is 60 s). Stays well below the 30 s host startup budget: connects run in parallel, so one timed-out server costs at most this budget |
+| `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS` | `30000` (30 s) | Time in milliseconds to wait for a downstream server's connect phase before failing: the stdio spawn, the HTTP connect fetch (SSE session GET and OAuth metadata/token handshakes), the `initialize` handshake, the `tools/list` call, and token refresh. Caps hangs on unresponsive servers during router startup, self-recovery reconnects, `tools <name>`, and post-`login` discovery. A per-server `timeout.startup` overrides it. Renamed from `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS`, which is no longer read |
+| `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS` | `3600000` (1 h) | Time in milliseconds a single `invoke_tool` call may run before failing, applied as the SDK request timeout for `tools/call` only. Replaces the MCP SDK's 60 s default. A per-server `timeout.execution` overrides it |
 | `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS` | `5000` (5 s) | Per-request timeout in milliseconds for OAuth metadata (well-known) discovery probes |
 
 ### `.env` Auto-Loading
@@ -606,15 +658,23 @@ MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS=300000 \
   mcp-compress-router login my-http
 ```
 
-### `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS`
+### `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS`
 
-Time in milliseconds the router waits for a downstream server's
-`initialize` handshake and `tools/list` call before giving up. This caps
-the `tools <name>` command, router startup, and self-recovery reconnects
-so a server that accepts the connection but never replies (observed on
-some Streamable HTTP servers behind CDNs) surfaces a clear error instead
-of hanging indefinitely. Must be a positive integer; invalid values fall
-back to the default of 10 seconds.
+Time in milliseconds the router waits for a downstream server's connect
+phase before giving up: the stdio spawn, the HTTP connect fetch (SSE
+session GET and OAuth metadata/token handshakes), the `initialize`
+handshake, the `tools/list` call, and token refresh. This caps the
+`tools <name>` command, router startup, self-recovery reconnects, and
+post-`login` discovery so a server that accepts the connection but never
+replies (observed on some Streamable HTTP servers behind CDNs) surfaces
+a clear error instead of hanging indefinitely. Must be a positive
+integer; invalid values fall back to the default of 30 seconds. A
+per-server [`timeout.startup`](#per-server-timeouts) overrides it.
+
+> **Renamed:** this variable replaces
+> `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS`, which is no longer read
+> and whose default was 10 seconds. Rename it in any setup that still
+> uses the old name.
 
 The same budget also bounds the remaining unbounded points of the
 connect phase, so a silent server can never stall startup forever:
@@ -627,19 +687,49 @@ connect phase, so a silent server can never stall startup forever:
   session;
 - the OAuth **metadata GET / token POST** handshakes, bounded through
   the response body as well, so a server that sends headers and then
-  stalls its body cannot hold up startup either. Long-running message
-  POSTs (`tools/call`) keep their natural duration.
+  stalls its body cannot hold up startup either.
+
+The transport-phase JSON message POSTs are never capped; the SDK
+request-layer timeout for `tools/call` is governed by the execution
+budget below instead.
 
 At startup all downstream servers are connected **in parallel**, so a
 single server that times out costs at most this budget — and the default
-keeps worst-case startup well under the 30 seconds most MCP hosts allow
-for initialization. The router answers the host's own `initialize`
-immediately, so a slow downstream delays only `tools/list`, never the
-session handshake.
+stays within the 30 seconds most MCP hosts allow for initialization. The
+router answers the host's own `initialize` immediately, so a slow
+downstream delays only `tools/list`, never the session handshake.
+Raising this budget above the host's own catalog budget is the
+operator's trade-off: the host may give up on the router before the
+router gives up on the server.
 
 ```bash
-MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS=60000 \
+MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS=60000 \
   mcp-compress-router tools my-http
+```
+
+### `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS`
+
+Time in milliseconds a single `invoke_tool` call may run before failing,
+applied as the SDK request timeout for `tools/call` only. It replaces
+the MCP SDK's built-in 60 s default, so legitimate long-running tools
+(browser automation, large builds, media processing) are not cut short.
+Must be a positive integer; invalid values fall back to the default of
+1 hour. A per-server [`timeout.execution`](#per-server-timeouts)
+overrides it.
+
+A call that exceeds the budget fails with a descriptive error naming the
+tool, the server, and the budget
+(`Tool "<tool>" on server "<name>" timed out after <ms> ms (timeout.execution)`).
+The call is not retried and the connection is not reconnected — a
+timed-out call may already have had side effects. Other request types
+are unaffected, and the transport-phase JSON message POSTs stay
+unbounded: the cap lives at the SDK request layer. Values above
+2 147 483 647 ms (~24.8 days) exceed Node's timer range and fire
+immediately instead of waiting.
+
+```bash
+MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS=7200000 \
+  mcp-compress-router
 ```
 
 ### `MCP_COMPRESS_ROUTER_AUTH_DISCOVERY_TIMEOUT_MS`
@@ -783,7 +873,9 @@ with a clear error and prints no partial tool list.
 ### `get <name>`
 
 Prints the configuration for a single server: its type, description,
-command or URL, args, environment, and headers.
+command or URL, args, environment, headers, and per-server `timeout`
+values. Only explicitly configured `timeout` keys are shown — `startup`
+and/or `execution` — never the resolved environment or default values.
 
 ### `list`
 

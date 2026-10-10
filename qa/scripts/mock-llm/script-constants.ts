@@ -10,7 +10,7 @@ export const ROUTER_GET_SCHEMA = 'qa-router_get_tool_schema';
 export const ROUTER_INVOKE = 'qa-router_invoke_tool';
 
 /**
- * Signatures of the five standard mock tools, in registration order.
+ * Signatures of the six standard mock tools, in registration order.
  * The catalog never renders them; they arrive through list mode.
  */
 export const STDIO_TOOL_SIGNATURES = [
@@ -19,9 +19,10 @@ export const STDIO_TOOL_SIGNATURES = [
   'multi_block(prefix)',
   'failing_tool(message)',
   'documented_tool(input)',
+  'slow_tool(delay_ms)',
 ];
 
-/** The HTTP and OAuth mocks add `whoami()` to the standard five. */
+/** The HTTP and OAuth mocks add `whoami()` to the standard six. */
 export const HTTP_TOOL_SIGNATURES = [...STDIO_TOOL_SIGNATURES, 'whoami()'];
 
 /**
@@ -40,7 +41,7 @@ function signatureToolName(signature: string): string {
 export const DOWNSTREAM_TOOLS = STDIO_TOOL_SIGNATURES.map(signatureToolName);
 
 /**
- * Downstream tool names of the HTTP and OAuth mocks: the standard five
+ * Downstream tool names of the HTTP and OAuth mocks: the standard six
  * plus `whoami`, derived from {@link HTTP_TOOL_SIGNATURES} so the names
  * and the signatures cannot drift apart.
  */

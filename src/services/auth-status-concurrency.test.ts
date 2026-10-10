@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { persistAuthRequirements } from './auth-status.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 // The probe is mocked so the test can hold it open while another writer
@@ -35,6 +35,7 @@ describe('persistAuthRequirements concurrent refresh', () => {
     description: 'OAuth auth fixture server',
     type: 'http',
     url: 'https://example.com/mcp',
+    timeout: resolveServerTimeouts(),
   };
 
   it('does not clobber tokens refreshed while the probe was in flight', async () => {

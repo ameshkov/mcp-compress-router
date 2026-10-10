@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { StoredCredentials } from '../utils/index.js';
-import { createTimeoutFetch, getDownstreamTimeoutMs } from '../utils/index.js';
+import { createTimeoutFetch } from '../utils/index.js';
 import { discoverAuth } from './oauth-discovery.js';
 
 /**
@@ -96,6 +96,11 @@ interface TokenRefreshContext {
   serverUrl: string | undefined;
   /** The provider used to read the client registration and select the resource. */
   provider: OAuthClientProvider;
+  /**
+   * The server's resolved startup budget (ms), bounding the token
+   * request the same way the connect-time token exchange is bounded.
+   */
+  startupTimeoutMs: number;
   /** Records the discovered authorization server issuer for the flow. */
   setIssuer(issuer: string): void;
   /** Persists the refreshed tokens (recomputing `expires_at`). */
@@ -163,7 +168,7 @@ export async function requestTokenRefresh(
     // Bound the token request like the connect-time token exchange:
     // a hung token endpoint must not hold the cross-process refresh
     // lock (or the invoking tool call) indefinitely.
-    fetchFn: createTimeoutFetch(getDownstreamTimeoutMs()),
+    fetchFn: createTimeoutFetch(context.startupTimeoutMs),
   });
   await context.saveTokens(newTokens);
   return newTokens;

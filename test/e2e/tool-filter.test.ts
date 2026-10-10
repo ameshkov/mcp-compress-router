@@ -154,7 +154,7 @@ describe('MCP Compress Router E2E — tool filtering', () => {
         tools: Array<{ name: string; description?: string }>;
       }
     ).tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('- fixture (5 tools) - A test fixture server');
+    expect(gts.description).toContain('- fixture (6 tools) - A test fixture server');
     expect(gts.description).not.toContain('crash');
 
     const blocked = await client.sendRequest('tools/call', {

@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { OAuthCredentialManager } from './oauth.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 // Hoisted mocks for the OAuth discovery and SDK refresh functions.
@@ -58,6 +58,7 @@ const server: DownstreamServerConfig = {
   description: 'Test OAuth server',
   type: 'http',
   url: 'https://example.com/mcp',
+  timeout: resolveServerTimeouts(),
 };
 
 describe('OAuthCredentialManager.refreshIfNeeded', () => {

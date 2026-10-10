@@ -2,7 +2,7 @@
  * Shared tool definitions for the QA mock MCP servers.
  *
  * Both the stdio mock (`mock-mcp-stdio/`) and the streamable-http mock
- * (`mock-mcp-http/`) expose the same five tools so a scenario can run
+ * (`mock-mcp-http/`) expose the same six tools so a scenario can run
  * against either transport and verify the same catalog, round trips,
  * and error passthrough.
  *
@@ -15,6 +15,8 @@
  * - `failing_tool(message)` — returns an `isError` result.
  * - `documented_tool(input)` — a deliberately long description (see
  *   `mock-long-description.ts`) for the description-passthrough plans.
+ * - `slow_tool(delay_ms)` — waits for the given delay, then returns, so
+ *   the execution-timeout plan can exceed a short configured budget.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -148,6 +150,30 @@ function registerDocumentedTool(server: McpServer): void {
 }
 
 /**
+ * Registers the `slow_tool` tool.
+ *
+ * @param server - The mock MCP server.
+ */
+function registerSlowTool(server: McpServer): void {
+  server.registerTool(
+    'slow_tool',
+    {
+      title: 'Slow Tool',
+      description: 'Waits for the requested delay before returning.',
+      inputSchema: {
+        delay_ms: z.number().int().positive().describe('How long to wait, in milliseconds.'),
+      },
+    },
+    async (params) => {
+      await new Promise((resolve) => setTimeout(resolve, params.delay_ms));
+      return {
+        content: [{ type: 'text' as const, text: `slept ${params.delay_ms} ms` }],
+      };
+    },
+  );
+}
+
+/**
  * Creates a mock MCP server with the shared QA tools.
  *
  * @param name - The server name reported during initialize.
@@ -160,5 +186,6 @@ export function createMockMcpServer(name: string): McpServer {
   registerMultiBlock(server);
   registerFailingTool(server);
   registerDocumentedTool(server);
+  registerSlowTool(server);
   return server;
 }

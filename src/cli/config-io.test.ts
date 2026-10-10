@@ -229,6 +229,33 @@ describe('RawServerEntry field round-trip', () => {
     expect(readBack.srv.allowedTools).toEqual(['list_issues', 'get_pull_request']);
     expect(readBack.srv.disabledTools).toEqual(['delete_repo']);
   });
+
+  it('preserves a timeout block through a read-modify-write round-trip', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          srv: {
+            type: 'stdio',
+            command: 'node',
+            enabled: false,
+            timeout: { startup: 60000, execution: 900000 },
+          },
+        },
+      }),
+    );
+
+    // `enable`/`disable`/`remove` read the raw entry, edit one field,
+    // and write the whole object back; the block must survive intact.
+    const servers = await readConfigFile(configPath);
+    delete servers.srv.enabled;
+    await writeConfigFile(configPath, servers);
+
+    const readBack = await readConfigFile(configPath);
+    expect(readBack.srv.enabled).toBeUndefined();
+    expect(readBack.srv.timeout).toEqual({ startup: 60000, execution: 900000 });
+  });
 });
 
 describe('credentials', () => {

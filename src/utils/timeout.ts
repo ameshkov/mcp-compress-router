@@ -1,22 +1,38 @@
 import process from 'node:process';
+import type { ServerTimeoutConfig, ServerTimeoutInput } from './types.js';
 
 /**
- * Default timeout (ms) for a downstream server's `initialize` request and
- * `tools/list` call during discovery. The MCP SDK's own default is 60s;
- * we cap these fast handshake operations sooner so a server that accepts
- * the TCP/TLS connection but never replies (a real-world hang observed on
- * some Streamable HTTP servers behind CDNs) surfaces a clear error instead
- * of blocking the `tools` command or router startup indefinitely.
+ * Default startup-phase timeout (ms) for a downstream server: bounds the
+ * stdio spawn, the HTTP connect fetch (SSE session GET, OAuth
+ * metadata/token handshakes), the `initialize` request, the `tools/list`
+ * call, and token refresh — during router startup, self-recovery
+ * reconnects, CLI `tools`, and post-`login` discovery. The MCP SDK's own
+ * default is 60s; we cap these fast handshake operations sooner so a
+ * server that accepts the TCP/TLS connection but never replies (a
+ * real-world hang observed on some Streamable HTTP servers behind CDNs)
+ * surfaces a clear error instead of blocking the `tools` command or
+ * router startup indefinitely.
  *
- * The value is deliberately kept well below the 30 s startup budget most
- * MCP hosts allow: downstream connects run in parallel, so a single
- * timed-out server costs exactly this budget, and the OAuth metadata
- * probes run concurrently with the connects (see `runRouter`), keeping
- * worst-case startup around 10 s even when a server hangs.
+ * The value matches the ~30 s startup budget most MCP hosts allow:
+ * downstream connects run in parallel, so a single timed-out server
+ * costs exactly this budget, and the OAuth metadata probes run
+ * concurrently with the connects (see `runRouter`). A per-server
+ * `timeout.startup` raises or lowers it for one server.
  *
  * @internal Exported for tests only; not part of the public module API.
  */
-export const DEFAULT_DOWNSTREAM_TIMEOUT_MS = 10_000;
+export const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
+
+/**
+ * Default tool-execution timeout (ms) passed as the SDK request timeout
+ * for `tools/call`, replacing the SDK's 60 s default so a legitimate
+ * long-running tool (browser automation, large builds, media processing)
+ * is not cut short. It bounds the call only: transport-phase JSON
+ * message POSTs stay uncapped.
+ *
+ * @internal Exported for tests only; not part of the public module API.
+ */
+export const DEFAULT_EXECUTION_TIMEOUT_MS = 3_600_000;
 
 /**
  * Default timeout (ms) for OAuth metadata discovery probes (RFC 9728 /
@@ -54,15 +70,41 @@ function readPositiveIntEnv(name: string): number | undefined {
 }
 
 /**
- * Resolves the downstream connect/listTools timeout in milliseconds.
- * Override with `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS` (a positive
- * integer); invalid values fall back to
- * {@link DEFAULT_DOWNSTREAM_TIMEOUT_MS}.
+ * Resolves the startup-phase timeout in milliseconds. Override with
+ * `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS` (a positive integer); invalid
+ * values fall back to {@link DEFAULT_STARTUP_TIMEOUT_MS}.
+ *
+ * @internal Exported for tests only; not part of the public module API.
  */
-export function getDownstreamTimeoutMs(): number {
+export function getStartupTimeoutMs(): number {
+  return readPositiveIntEnv('MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS') ?? DEFAULT_STARTUP_TIMEOUT_MS;
+}
+
+/**
+ * Resolves the tool-execution timeout in milliseconds. Override with
+ * `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS` (a positive integer);
+ * invalid values fall back to {@link DEFAULT_EXECUTION_TIMEOUT_MS}.
+ *
+ * @internal Exported for tests only; not part of the public module API.
+ */
+export function getExecutionTimeoutMs(): number {
   return (
-    readPositiveIntEnv('MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS') ?? DEFAULT_DOWNSTREAM_TIMEOUT_MS
+    readPositiveIntEnv('MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS') ?? DEFAULT_EXECUTION_TIMEOUT_MS
   );
+}
+
+/**
+ * Resolves a server's effective timeouts with precedence per-server
+ * value > environment variable > built-in default.
+ *
+ * @param input - Optional per-server timeout overrides from config.
+ * @returns The resolved startup/execution pair, both always present.
+ */
+export function resolveServerTimeouts(input?: ServerTimeoutInput): ServerTimeoutConfig {
+  return {
+    startup: input?.startup ?? getStartupTimeoutMs(),
+    execution: input?.execution ?? getExecutionTimeoutMs(),
+  };
 }
 
 /**

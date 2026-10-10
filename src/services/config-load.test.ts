@@ -6,13 +6,23 @@ import { tmpdir } from 'node:os';
 
 describe('loadConfig', () => {
   let tempDir: string;
+  const originalStartup = process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
+  const originalExecution = process.env.MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS;
 
   beforeEach(async () => {
+    // Pin the resolved defaults unless a test sets the env vars itself.
+    delete process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
+    delete process.env.MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS;
     tempDir = path.join(tmpdir(), `mcp-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await fs.mkdir(tempDir, { recursive: true });
   });
 
   afterEach(async () => {
+    if (originalStartup === undefined) delete process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
+    else process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = originalStartup;
+    if (originalExecution === undefined)
+      delete process.env.MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS;
+    else process.env.MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS = originalExecution;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -51,6 +61,7 @@ describe('loadConfig', () => {
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
+      timeout: { startup: 30_000, execution: 3_600_000 },
     });
     expect(servers[1]).toEqual({
       name: 'server2',
@@ -64,6 +75,7 @@ describe('loadConfig', () => {
       enabled: undefined,
       allowedTools: undefined,
       disabledTools: undefined,
+      timeout: { startup: 30_000, execution: 3_600_000 },
     });
   });
 
@@ -158,6 +170,96 @@ describe('loadConfig', () => {
       headers: { Authorization: 'Bearer token' },
       description: 'An HTTP MCP',
     });
+  });
+
+  it('attaches the resolved defaults when a server has no timeout block', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        srv: { type: 'stdio', command: 'node', description: 'Test server' },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const servers = await loadConfig(configPath);
+    expect(servers[0].timeout).toEqual({ startup: 30_000, execution: 3_600_000 });
+  });
+
+  it('resolves a per-server timeout block and ignores unknown keys', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        srv: {
+          type: 'stdio',
+          command: 'node',
+          description: 'Test server',
+          timeout: { startup: 60000, execution: 120000, catalog: 5 },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const servers = await loadConfig(configPath);
+    expect(servers[0].timeout).toEqual({ startup: 60000, execution: 120000 });
+  });
+
+  it('rejects a non-object timeout block', async () => {
+    for (const bad of ['60000', null]) {
+      const configPath = path.join(tempDir, 'mcp.json');
+      const config = {
+        mcpServers: {
+          srv: { type: 'stdio', command: 'node', description: 'Test server', timeout: bad },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config));
+
+      await expect(loadConfig(configPath)).rejects.toThrow(
+        /Server "srv".*timeout must be an object/,
+      );
+    }
+  });
+
+  it('rejects invalid timeout values', async () => {
+    for (const key of ['startup', 'execution']) {
+      for (const bad of [0, -5, 3.5, '60000', null, true]) {
+        const configPath = path.join(tempDir, 'mcp.json');
+        const config = {
+          mcpServers: {
+            srv: {
+              type: 'stdio',
+              command: 'node',
+              description: 'Test server',
+              timeout: { [key]: bad },
+            },
+          },
+        };
+        await fs.writeFile(configPath, JSON.stringify(config));
+
+        await expect(loadConfig(configPath)).rejects.toThrow(
+          new RegExp(`Server "srv": timeout\\.${key} must be a positive integer`),
+        );
+      }
+    }
+  });
+
+  it('prefers the per-server value and falls back to the environment for the missing key', async () => {
+    process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = '9000';
+    process.env.MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS = '900000';
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        srv: {
+          type: 'stdio',
+          command: 'node',
+          description: 'Test server',
+          timeout: { startup: 1000 },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const servers = await loadConfig(configPath);
+    expect(servers[0].timeout).toEqual({ startup: 1000, execution: 900000 });
   });
 
   it('rejects streamable-http server missing url field', async () => {

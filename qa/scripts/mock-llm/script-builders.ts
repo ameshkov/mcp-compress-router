@@ -129,7 +129,7 @@ export function toolListSteps(server: string): ScriptStep[] {
       expect: {
         toolsContain: ['get_tool_schema', 'invoke_tool'],
         toolsAbsent: DOWNSTREAM_TOOLS,
-        catalogIncludes: [`- ${server} (5 tools)`],
+        catalogIncludes: [`- ${server} (6 tools)`],
       },
       respond: { tool: { name: ROUTER_GET_SCHEMA, arguments: { server } } },
     },
@@ -153,7 +153,7 @@ export const RETRY_STEPS: ScriptStep[] = [
   {
     expect: {
       toolsContain: ['invoke_tool'],
-      catalogIncludes: ['- stdio-mock (5 tools)'],
+      catalogIncludes: ['- stdio-mock (6 tools)'],
     },
     respond: {
       tool: {
@@ -188,7 +188,7 @@ export const FAIL_STEPS: ScriptStep[] = [
   {
     expect: {
       toolsContain: ['invoke_tool'],
-      catalogIncludes: ['- stdio-mock (5 tools)'],
+      catalogIncludes: ['- stdio-mock (6 tools)'],
     },
     respond: {
       tool: {
@@ -221,7 +221,7 @@ export function descriptionSteps(): ScriptStep[] {
       expect: {
         toolsContain: ['get_tool_schema', 'invoke_tool'],
         toolsAbsent: DOWNSTREAM_TOOLS,
-        catalogIncludes: ['- stdio-mock (5 tools)'],
+        catalogIncludes: ['- stdio-mock (6 tools)'],
         catalogExcludes: DOWNSTREAM_TOOLS,
       },
       respond: {
@@ -268,7 +268,7 @@ export function longDescriptionSteps(server: string): ScriptStep[] {
       expect: {
         toolsContain: ['get_tool_schema', 'invoke_tool'],
         toolsAbsent: DOWNSTREAM_TOOLS,
-        catalogIncludes: [`- ${server} (5 tools)`],
+        catalogIncludes: [`- ${server} (6 tools)`],
         catalogExcludes: [LONG_DESCRIPTION_HEAD, LONG_DESCRIPTION_TAIL],
       },
       respond: {

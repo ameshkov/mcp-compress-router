@@ -73,6 +73,9 @@ describe('MCP Compress Router E2E — startup with a hanging downstream server',
             type: 'streamable-http',
             url: hangingFixture.url,
             description: 'Hanging HTTP server',
+            // Bound the hanging server's discovery so it degrades within
+            // this test's assertions instead of at the 30s default.
+            timeout: { startup: 4000 },
           },
         },
       };

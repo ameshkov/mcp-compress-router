@@ -97,7 +97,7 @@ const BUILT_IN_SCRIPTS: MockLlmScript[] = [
   {
     name: 'stdio-catalog',
     description: 'Verify the stdio mock catalog and the two router tools, then list its tools.',
-    steps: catalogSteps('stdio-mock', 5, STDIO_TOOL_SIGNATURES),
+    steps: catalogSteps('stdio-mock', 6, STDIO_TOOL_SIGNATURES),
   },
   {
     name: 'stdio-roundtrip',
@@ -113,7 +113,7 @@ const BUILT_IN_SCRIPTS: MockLlmScript[] = [
     name: 'http-catalog',
     description:
       'Verify the streamable-http mock catalog and the two router tools, then list its tools.',
-    steps: catalogSteps('http-mock', 6, HTTP_TOOL_SIGNATURES, HTTP_DOWNSTREAM_TOOLS),
+    steps: catalogSteps('http-mock', 7, HTTP_TOOL_SIGNATURES, HTTP_DOWNSTREAM_TOOLS),
   },
   {
     name: 'http-roundtrip',
@@ -124,7 +124,7 @@ const BUILT_IN_SCRIPTS: MockLlmScript[] = [
     name: 'oauth-catalog',
     description:
       'Verify the OAuth-protected mock catalog and the two router tools, then list its tools.',
-    steps: catalogSteps('oauth-mock', 6, HTTP_TOOL_SIGNATURES, HTTP_DOWNSTREAM_TOOLS),
+    steps: catalogSteps('oauth-mock', 7, HTTP_TOOL_SIGNATURES, HTTP_DOWNSTREAM_TOOLS),
   },
   {
     name: 'oauth-roundtrip',

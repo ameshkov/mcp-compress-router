@@ -20,6 +20,12 @@
       "headers": {
         "Authorization": "Bearer ${MY_SERVER_TOKEN}"
       },
+      // Optional per-server timeout overrides in milliseconds: `startup`
+      // bounds the discovery phase (spawn, connect, initialize,
+      // tools/list, token refresh), `execution` caps each tool call.
+      // Omitted keys fall back to the environment variables and the
+      // built-in defaults (startup 30000, execution 3600000).
+      "timeout": { "startup": 60000, "execution": 7200000 },
       "description": "My custom MCP server for internal project data."
     },
     // OAuth example — dynamic client registration with a client identity

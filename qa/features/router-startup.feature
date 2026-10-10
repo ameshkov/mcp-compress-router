@@ -17,7 +17,7 @@ Scenario: The router exposes exactly two tools
 @TC-STARTUP-2
 Scenario: The catalog describes the stdio server compactly
   When I list the router tools with "pnpm qa:probe --list"
-  Then the "get_tool_schema" description contains the bullet "- stdio-mock (5 tools) - QA stdio mock"
+  Then the "get_tool_schema" description contains the bullet "- stdio-mock (6 tools) - QA stdio mock"
   And the description ends with the list-mode hint "Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(stdio-mock)"
   And the description lists no tool names
 
@@ -31,6 +31,6 @@ Scenario: A disabled downstream server stays out of the catalog
 Scenario: A server without a description does not stop the router
   Given I removed the server descriptions with "sed -i '/description/d' qa/home/mcp.jsonc"
   When I list the router tools with "pnpm qa:probe --list"
-  Then the "get_tool_schema" description contains the bullet "- stdio-mock (5 tools)"
+  Then the "get_tool_schema" description contains the bullet "- stdio-mock (6 tools)"
   And that bullet has no description after the tool count
   And the description lists no tool names

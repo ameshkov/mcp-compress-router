@@ -1,4 +1,27 @@
-import { ensureConfigDir, readConfigFile } from './config-io.js';
+import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
+
+/**
+ * Renders the `Timeout:` block for the `get` output. Only the keys
+ * present in the raw entry are shown; an absent or empty block renders
+ * nothing.
+ *
+ * @param entry - Raw server entry from mcp.json.
+ * @returns The block lines, or an empty array when nothing is configured.
+ */
+function formatTimeoutBlock(entry: RawServerEntry): string[] {
+  const { startup, execution } = entry.timeout ?? {};
+  const keys: Array<[string, number]> = [];
+  if (startup !== undefined) {
+    keys.push(['startup', startup]);
+  }
+  if (execution !== undefined) {
+    keys.push(['execution', execution]);
+  }
+  if (keys.length === 0) {
+    return [];
+  }
+  return ['Timeout:', ...keys.map(([key, value]) => `  ${key}: ${value}`)];
+}
 
 /**
  * Handles the `get <name>` subcommand: prints details for one server.
@@ -50,6 +73,7 @@ export async function handleGet(configPath: string, name: string): Promise<strin
       lines.push(`  ${k}: ${v}`);
     }
   }
+  lines.push(...formatTimeoutBlock(entry));
 
   return lines.join('\n');
 }

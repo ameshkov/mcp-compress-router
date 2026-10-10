@@ -4,7 +4,6 @@ import type {
   OAuthClientInformationMixed,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { getDownstreamTimeoutMs } from '../utils/index.js';
 import { requestTokenRefresh } from './oauth-token-refresh.js';
 
 // Hoisted mocks for the OAuth discovery and SDK refresh functions.
@@ -89,7 +88,7 @@ function createContext(
     clientInformation: vi.fn(async () => clientInformation),
   } as unknown as OAuthClientProvider;
   return {
-    context: { serverUrl, provider, setIssuer, saveTokens },
+    context: { serverUrl, provider, setIssuer, saveTokens, startupTimeoutMs: 12_345 },
     setIssuer,
     saveTokens,
   };
@@ -186,9 +185,9 @@ describe('requestTokenRefresh', () => {
       }),
     );
     // A hung token endpoint must not hold the caller forever: the
-    // refresh must install the fetch built with the downstream timeout,
-    // not the bare global fetch.
-    expect(createTimeoutFetchMock).toHaveBeenCalledWith(getDownstreamTimeoutMs());
+    // refresh must install the fetch built with the context's startup
+    // budget, not the bare global fetch.
+    expect(createTimeoutFetchMock).toHaveBeenCalledWith(12_345);
     expect(options.fetchFn).toBe(BOUNDED_FETCH);
     // The issuer is recorded so a stored entry from a different
     // authorization server is never reused.

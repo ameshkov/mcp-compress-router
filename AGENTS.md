@@ -196,14 +196,28 @@ Universal design principles this codebase follows:
   validation to prevent illegal combinations at compile time.
 - **Bounded Startup Latency** — network-bound startup phases (e.g.
   downstream connects and OAuth metadata probes) MUST run concurrently,
-  never stacked sequentially, and each default timeout MUST stay well
-  below the host's startup budget (typically 30 s) so a hung downstream
-  dependency degrades fast instead of blocking initialization. Every
-  await in the connect phase MUST be bounded, including the ones the
-  SDK leaves unbounded: the stdio child-process spawn, the HTTP SSE
-  session GET, and the OAuth metadata/token handshakes (bounded at the
-  response-header phase only — long-lived SSE bodies and long-running
-  tool-call POSTs must NOT be capped).
+  never stacked sequentially, and the default startup budget MUST stay
+  within the host's startup budget (typically 30 s) so a hung
+  downstream dependency degrades fast instead of blocking
+  initialization. The budget is configurable per server
+  (`timeout.startup`, overridable globally with
+  `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS`); raising it above the
+  host's own budget is the operator's trade-off. Every await in the
+  connect phase MUST be bounded, including the ones the SDK leaves
+  unbounded: the stdio child-process spawn, the HTTP SSE session GET,
+  and the OAuth metadata/token handshakes (bounded at the
+  response-header phase only — long-lived SSE bodies and
+  transport-phase JSON message POSTs must NOT be capped).
+- **Bounded Tool Execution** — every tool call MUST pass the server's
+  resolved execution budget (`timeout.execution`, default
+  3 600 000 ms, overridable globally with
+  `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS`) as the SDK request
+  timeout for `tools/call`, and the connection layer MUST convert the
+  SDK's `RequestTimeout` into an error naming the tool, the server, and
+  the budget. A call that hits this timeout MUST NOT be retried or
+  reconnected — it may already have had side effects. The cap lives at
+  the SDK request layer and applies to `tools/call` only;
+  transport-phase POSTs and every other request type stay uncapped.
 - **Host first, downstream second** — the router MUST answer the host's
   `initialize` before any downstream has connected, and MUST install its
   shutdown triggers (stdin EOF / signals) and connection-cleanup hook

@@ -89,7 +89,7 @@ describe('MCP Compress Router E2E — get_tool_schema list mode', () => {
     const { text, isError } = await callGetToolSchema(c, { server: 'fixture' });
 
     expect(isError).toBeUndefined();
-    expect(text).toContain('Tools provided by "fixture" (6):');
+    expect(text).toContain('Tools provided by "fixture" (7):');
     expect(text).toContain('echo(message)');
     expect(text).toContain('add(a, b)');
     expect(text).toContain('crash()');

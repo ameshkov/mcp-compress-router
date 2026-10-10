@@ -17,9 +17,30 @@ Concurrency alone is not enough: the MCP SDK leaves several awaits in
 the connect path unbounded, and a hung dependency would stall startup
 forever. The stdio child-process spawn, the HTTP SSE session GET, and
 the OAuth metadata and token handshakes are therefore bounded — but
-only at the response-header phase. Once a stream or a long-running
-tool call has started, capping it would break legitimate work, so SSE
-bodies and tool-call POSTs are never capped.
+only at the response-header phase. Once a stream has started, capping
+it would break legitimate work, so SSE bodies are never capped at the
+transport layer; a `tools/call` request is bounded separately, at the
+SDK request layer (see below).
+
+## The two budgets
+
+Discovery and execution are bounded separately, because they answer
+different questions:
+
+- **Startup** (`timeout.startup`, default 30 s) bounds every
+  discovery-phase await for one server: the stdio spawn, the HTTP
+  connect fetch, the `initialize` handshake, the `tools/list` call, and
+  token refresh — in router startup, self-recovery reconnects, CLI
+  `tools`, and post-`login` discovery. The default stays within the
+  host's startup budget, and the value is configurable per server, so
+  one slow starter can be granted more time without changing every
+  other server.
+- **Execution** (`timeout.execution`, default 1 h) bounds one
+  `invoke_tool` call, applied as the SDK request timeout for
+  `tools/call` only. A call that exceeds it fails with an error naming
+  the tool, the server, and the budget, and is never retried: a
+  timed-out call may already have had side effects, so the router
+  neither reconnects nor replays it.
 
 ## Host first, downstream second
 

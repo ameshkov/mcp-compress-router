@@ -33,3 +33,10 @@ Scenario: Invalid arguments are rejected without calling the server
   Then the call reports an error
   And the error mentions Missing required argument: "b"
   And the error shows the expected shape of "add"
+
+@TC-INVOKE-5
+Scenario: A tool call that exceeds the execution timeout fails descriptively
+  Given I set the stdio mock's execution timeout to 300 ms with "sed -i 's|"QA stdio mock"|"QA stdio mock", "timeout": { "execution": 300 }|' qa/home/mcp.jsonc"
+  When I run "pnpm qa:probe --tool invoke_tool --args '{"server":"stdio-mock","tool":"slow_tool","arguments":{"delay_ms":2000}}'"
+  Then the call is an error result
+  And the result text is 'Error: Tool "slow_tool" on server "stdio-mock" timed out after 300 ms (timeout.execution)'

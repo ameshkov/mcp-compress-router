@@ -61,6 +61,65 @@ describe('handleGet', () => {
     expect(result).toContain('Authorization');
   });
 
+  it('prints a Timeout block with every configured key', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        slow: {
+          type: 'http',
+          url: 'https://mcp.example.com/mcp',
+          timeout: { startup: 60000, execution: 3600000 },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const result = await handleGet(configPath, 'slow');
+    const lines = result.split('\n');
+    expect(lines).toContain('Timeout:');
+    expect(lines).toContain('  startup: 60000');
+    expect(lines).toContain('  execution: 3600000');
+  });
+
+  it('prints only the keys present in the raw entry', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const config = {
+      mcpServers: {
+        slow: {
+          type: 'http',
+          url: 'https://mcp.example.com/mcp',
+          timeout: { execution: 900000 },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const result = await handleGet(configPath, 'slow');
+    const lines = result.split('\n');
+    expect(lines).toContain('Timeout:');
+    expect(lines).toContain('  execution: 900000');
+    expect(result).not.toContain('startup');
+  });
+
+  it('omits the Timeout block when no keys are configured', async () => {
+    const configPath = path.join(tempDir, 'mcp.json');
+    const withoutBlock = {
+      mcpServers: {
+        plain: { type: 'stdio', command: 'node' },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(withoutBlock));
+    expect(await handleGet(configPath, 'plain')).not.toContain('Timeout:');
+
+    const withEmptyBlock = {
+      mcpServers: {
+        plain: { type: 'stdio', command: 'node', timeout: {} },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(withEmptyBlock));
+    expect(await handleGet(configPath, 'plain')).not.toContain('Timeout:');
+  });
+
   it('throws when the server does not exist', async () => {
     const configPath = path.join(tempDir, 'mcp.json');
     await fs.writeFile(configPath, JSON.stringify({ mcpServers: {} }));

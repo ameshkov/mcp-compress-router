@@ -6,7 +6,7 @@ import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { createAuthRetryFetch } from './auth-retry-fetch.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { writeCredentials } from '../cli/config-io.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/index.js';
 
 // Hoisted mocks for the OAuth discovery and SDK refresh functions, so
@@ -45,6 +45,7 @@ const server: DownstreamServerConfig = {
   description: 'Test OAuth server',
   type: 'http',
   url: 'https://example.com/mcp',
+  timeout: resolveServerTimeouts(),
 };
 
 const MCP_URL = 'https://example.com/mcp';

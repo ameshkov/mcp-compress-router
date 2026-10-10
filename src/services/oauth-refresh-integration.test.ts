@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { OAuthCredentialManager } from './oauth.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import { createAuthFixtureServer, type AuthFixtureServer } from '../../test/fixture-auth-server.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 describe('OAuthCredentialManager refresh against a real authorization server', () => {
@@ -23,6 +24,7 @@ describe('OAuthCredentialManager refresh against a real authorization server', (
       description: 'OAuth fixture server',
       type: 'http',
       url: `${fixture.url}/mcp`,
+      timeout: resolveServerTimeouts(),
     };
   });
 

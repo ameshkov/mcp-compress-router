@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { OAuthCredentialManager, OAUTH_CALLBACK_PATH, OAUTH_LOOPBACK_URI } from './oauth.js';
 import { GuidedAuthError } from './index.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 describe('OAuthCredentialManager', () => {
@@ -26,6 +27,7 @@ describe('OAuthCredentialManager', () => {
     description: 'Test OAuth server',
     type: 'http',
     url: 'https://example.com/mcp',
+    timeout: resolveServerTimeouts(),
   };
 
   it('redirectUrl returns loopback URL with actual port after setActualPort', () => {

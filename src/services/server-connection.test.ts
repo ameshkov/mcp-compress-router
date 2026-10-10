@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as http from 'node:http';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { ServerConnection } from './server-connection.js';
 import { saveToolCache } from './tool-cache.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig, ToolDescriptor } from '../utils/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,7 @@ describe('ServerConnection — connect (success)', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -71,6 +73,7 @@ describe('ServerConnection — connect (success)', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -81,7 +84,7 @@ describe('ServerConnection — connect (success)', () => {
     const cachePath = path.join(path.dirname(configPath), 'tools-cache.json');
     const raw = JSON.parse(await fs.readFile(cachePath, 'utf-8'));
     expect(raw.fixture).toBeDefined();
-    expect(raw.fixture.tools).toHaveLength(6);
+    expect(raw.fixture.tools).toHaveLength(7);
     expect(raw.fixture.cachedAt).toBeDefined();
 
     await fs.rm(path.dirname(configPath), { recursive: true, force: true });
@@ -95,6 +98,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
       description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     await saveToolCache(configPath, 'dead', sampleCachedTools);
@@ -120,6 +124,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
       description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -134,6 +139,7 @@ describe('ServerConnection — connect (failure with warm cache)', () => {
       description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     await saveToolCache(configPath, 'dead', sampleCachedTools);
@@ -187,6 +193,7 @@ describe('ServerConnection — connect (auth failure classification)', () => {
       description: 'Notion-like server rejecting tokens',
       type: 'http',
       url: `http://localhost:${port}/mcp`,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     await saveToolCache(configPath, 'notion-like', sampleCachedTools);
@@ -214,6 +221,7 @@ describe('ServerConnection — reconnect', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -234,6 +242,7 @@ describe('ServerConnection — reconnect', () => {
       description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     await saveToolCache(configPath, 'dead', sampleCachedTools);
@@ -253,6 +262,7 @@ describe('ServerConnection — reconnect', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -277,6 +287,7 @@ describe('ServerConnection — reconnect', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -306,6 +317,7 @@ describe('ServerConnection — reconnect', () => {
       description: 'Unreachable server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -328,6 +340,7 @@ describe('ServerConnection — reconnect', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -362,13 +375,14 @@ describe('ServerConnection — connect (timeout on hung server)', () => {
       hanging.on('error', reject);
     });
 
-    const prev = process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
-    process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = '500';
+    const prev = process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
+    process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = '500';
     const config: DownstreamServerConfig = {
       name: 'hanging',
       description: 'Hanging HTTP server',
       type: 'http',
       url: `http://localhost:${port}/mcp`,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -381,8 +395,8 @@ describe('ServerConnection — connect (timeout on hung server)', () => {
     // the SDK's 60s default.
     expect(elapsed).toBeLessThan(5000);
 
-    if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
-    else process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = prev;
+    if (prev === undefined) delete process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
+    else process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = prev;
     await conn.close();
     hanging.closeAllConnections();
     await new Promise<void>((resolve) => hanging.close(() => resolve()));
@@ -399,6 +413,7 @@ describe('ServerConnection — invokeTool', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));
@@ -412,6 +427,42 @@ describe('ServerConnection — invokeTool', () => {
     await fs.rm(path.dirname(configPath), { recursive: true, force: true });
   });
 
+  it('fails a hanging tool call within the configured execution budget with a descriptive error', async () => {
+    const resolved = await resolveCommand();
+    const config: DownstreamServerConfig = {
+      name: 'fixture',
+      description: 'Test fixture server',
+      type: 'stdio',
+      command: resolved.command,
+      args: resolved.args,
+      timeout: { startup: 30_000, execution: 300 },
+    };
+    const configPath = await makeTempConfigPath();
+    const conn = new ServerConnection(config, configPath, new Logger('error'));
+    await conn.connect();
+
+    const start = Date.now();
+    let caught: unknown;
+    try {
+      await conn.invokeTool('hang', {});
+    } catch (err) {
+      caught = err;
+    }
+    const elapsed = Date.now() - start;
+
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error;
+    expect(err.message).toMatch(
+      /Tool "hang" on server "fixture" timed out after 300 ms \(timeout\.execution\)/,
+    );
+    expect(err.cause).toBeInstanceOf(McpError);
+    expect((err.cause as McpError).code).toBe(ErrorCode.RequestTimeout);
+    expect(elapsed).toBeLessThan(5000);
+
+    await conn.close();
+    await fs.rm(path.dirname(configPath), { recursive: true, force: true });
+  });
+
   it('throws when no client is connected', async () => {
     const resolved = await resolveCommand();
     const config: DownstreamServerConfig = {
@@ -420,6 +471,7 @@ describe('ServerConnection — invokeTool', () => {
       type: 'stdio',
       command: resolved.command,
       args: resolved.args,
+      timeout: resolveServerTimeouts(),
     };
     const configPath = await makeTempConfigPath();
     const conn = new ServerConnection(config, configPath, new Logger('error'));

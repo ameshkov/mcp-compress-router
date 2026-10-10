@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildGuidedError, GuidedAuthError } from './index.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/index.js';
 
 const httpServer: DownstreamServerConfig = {
@@ -7,6 +8,7 @@ const httpServer: DownstreamServerConfig = {
   description: 'Figma design tools',
   type: 'http',
   url: 'https://api.figma.com/mcp',
+  timeout: resolveServerTimeouts(),
 };
 
 const stdioServer: DownstreamServerConfig = {
@@ -15,6 +17,7 @@ const stdioServer: DownstreamServerConfig = {
   type: 'stdio',
   command: 'npx',
   args: ['@some/mcp-server'],
+  timeout: resolveServerTimeouts(),
 };
 
 describe('buildGuidedError', () => {
@@ -59,6 +62,7 @@ describe('buildGuidedError', () => {
         description: 'Notion workspace tools',
         type: 'http',
         url: 'https://mcp.notion.com/mcp',
+        timeout: resolveServerTimeouts(),
       },
       underlying,
       'unauthorized',

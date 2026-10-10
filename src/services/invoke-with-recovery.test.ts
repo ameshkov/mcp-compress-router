@@ -246,6 +246,33 @@ describe('invokeWithRecovery — OK server', () => {
 
     expect(conn.reconnect).not.toHaveBeenCalled();
   });
+
+  it('does not retry a tool call that hit its execution timeout', async () => {
+    const catalog = makeCatalog();
+    const timeoutError = new Error(
+      'Tool "echo" on server "srv" timed out after 200 ms (timeout.execution)',
+    );
+    const conn = makeMockConn({
+      invokeTool: vi.fn().mockRejectedValue(timeoutError),
+    } as Partial<ServerConnection>);
+    const connections = new Map([['srv', conn]]);
+
+    await expect(
+      invokeWithRecovery(
+        'srv',
+        'echo',
+        {},
+        catalog,
+        connections,
+        new Map<string, ToolSelection>(),
+        new Logger('error'),
+      ),
+    ).rejects.toThrow('Tool "echo" on server "srv" timed out after 200 ms (timeout.execution)');
+
+    expect(conn.reconnect).not.toHaveBeenCalled();
+    expect(conn.invokeTool).toHaveBeenCalledTimes(1);
+    expect(isRecoverable(timeoutError)).toBe(false);
+  });
 });
 
 describe('invokeWithRecovery — degraded server', () => {

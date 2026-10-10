@@ -61,7 +61,7 @@ describe('MCP Compress Router E2E — compact catalog', () => {
     const c = await startRouter();
     const description = await getCatalogDescription(c);
 
-    expect(description).toContain('- fixture (6 tools) - A test fixture server');
+    expect(description).toContain('- fixture (7 tools) - A test fixture server');
     expect(description).toContain(
       'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(fixture)',
     );
@@ -74,7 +74,7 @@ describe('MCP Compress Router E2E — compact catalog', () => {
     const c = await startRouter(false);
     const description = await getCatalogDescription(c);
 
-    expect(description).toContain('- fixture (6 tools)');
+    expect(description).toContain('- fixture (7 tools)');
     expect(description).not.toContain('A test fixture server');
   });
 
@@ -86,7 +86,7 @@ describe('MCP Compress Router E2E — compact catalog', () => {
     });
     const text = (resp.result as { content: Array<{ text: string }> }).content[0].text;
 
-    expect(text).toContain('Tools provided by "fixture" (6):');
+    expect(text).toContain('Tools provided by "fixture" (7):');
     expect(text).toContain('echo(message)');
     expect(text).toContain('add(a, b)');
   });

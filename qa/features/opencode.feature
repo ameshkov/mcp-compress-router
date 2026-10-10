@@ -34,7 +34,7 @@ Scenario: The model sees the router tools and the compact stdio catalog
   When I run the coding agent with "pnpm qa:agent --prompt 'Test the stdio mcp server'"
   And I show the mock LLM log with "pnpm qa:llm log"
   Then the mock LLM log shows the request tools "get_tool_schema" and "invoke_tool"
-  And the mock LLM log shows the catalog bullet "- stdio-mock (5 tools)"
+  And the mock LLM log shows the catalog bullet "- stdio-mock (6 tools)"
   And the mock LLM log shows the catalog hint "Call get_tool_schema with the server name to list all tools"
   And the mock LLM log shows no downstream tool "echo" in the request tools
   And the mock LLM log shows a passed "catalogExcludes" check for "echo"

@@ -8,7 +8,7 @@ import { probeAuthRequirement, computeAuthStatus, persistAuthRequirements } from
 import { createAuthFixtureServer } from '../../test/fixture-auth-server.js';
 import { createHttpFixtureServer } from '../../test/fixture-http-server.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig, StoredCredentials } from '../utils/index.js';
 
 /** Resolves once the given HTTP server has fully closed. */
@@ -81,6 +81,7 @@ describe('probeAuthRequirement', () => {
       description: 'OAuth auth fixture server',
       type: 'http',
       url: authFixture.url,
+      timeout: resolveServerTimeouts(),
     };
     expect(await probeAuthRequirement(server)).toBe('oauth');
   });
@@ -91,6 +92,7 @@ describe('probeAuthRequirement', () => {
       description: 'Plain HTTP fixture server',
       type: 'http',
       url: httpUrl,
+      timeout: resolveServerTimeouts(),
     };
     expect(await probeAuthRequirement(server)).toBe('none');
   });
@@ -101,6 +103,7 @@ describe('probeAuthRequirement', () => {
       description: 'Server that always errors',
       type: 'http',
       url: erroring.url,
+      timeout: resolveServerTimeouts(),
     };
     expect(await probeAuthRequirement(server)).toBe('unknown');
   });
@@ -113,6 +116,7 @@ describe('probeAuthRequirement', () => {
       description: 'Server returning HTML',
       type: 'http',
       url: html.url,
+      timeout: resolveServerTimeouts(),
     };
     expect(await probeAuthRequirement(server)).toBe('none');
   });
@@ -123,6 +127,7 @@ describe('probeAuthRequirement', () => {
       description: 'Local stdio server',
       type: 'stdio',
       command: 'echo',
+      timeout: resolveServerTimeouts(),
     };
     expect(await probeAuthRequirement(server)).toBe('none');
   });
@@ -134,12 +139,14 @@ describe('computeAuthStatus', () => {
     description: 'Example HTTP API server',
     type: 'http',
     url: 'https://example.com/mcp',
+    timeout: resolveServerTimeouts(),
   };
   const stdioServer: DownstreamServerConfig = {
     name: 'fs',
     description: 'Example stdio filesystem server',
     type: 'stdio',
     command: 'npx',
+    timeout: resolveServerTimeouts(),
   };
 
   it('returns "none" for stdio servers regardless of stored state', () => {
@@ -230,6 +237,7 @@ describe('persistAuthRequirements', () => {
       description: 'OAuth auth fixture server',
       type: 'http',
       url: authFixture.url,
+      timeout: resolveServerTimeouts(),
     };
   }
 

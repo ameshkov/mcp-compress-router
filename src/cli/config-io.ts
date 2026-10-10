@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Logger } from '../utils/logger.js';
-import type { CredentialsStore, StoredCredentials } from '../utils/types.js';
+import type { CredentialsStore, ServerTimeoutInput, StoredCredentials } from '../utils/types.js';
 import { atomicWriteFile, parseJsonc, withFileLock, type FileLockOptions } from '../utils/index.js';
 
 /**
@@ -41,8 +41,8 @@ const CREDENTIALS_LOCK_OPTIONS: FileLockOptions = {
 /**
  * Lock options for the cross-process OAuth refresh lock. Its critical
  * section includes authorization-server discovery and the token request,
- * both bounded by the downstream timeout, so waiters get a larger window
- * than for plain file mutations.
+ * both bounded by the server's resolved startup budget, so waiters get a
+ * larger window than for plain file mutations.
  */
 const REFRESH_LOCK_OPTIONS: FileLockOptions = {
   timeoutMs: 30_000,
@@ -105,6 +105,8 @@ export interface RawServerEntry {
   allowedTools?: string[];
   /** Glob patterns denylisting tool names; wins over allowedTools. */
   disabledTools?: string[];
+  /** Optional per-server startup/execution timeout overrides (ms). */
+  timeout?: ServerTimeoutInput;
   /** OAuth client overrides (clientId/clientSecret/scope/callbackPort). */
   oauth?: Record<string, unknown>;
 }

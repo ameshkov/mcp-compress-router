@@ -9,6 +9,7 @@ import {
   OAuthCredentialManager,
 } from './oauth.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 // Hoisted mocks for the OAuth discovery and SDK refresh functions, so
@@ -49,6 +50,7 @@ const server: DownstreamServerConfig = {
   description: 'Test OAuth server',
   type: 'http',
   url: 'https://example.com/mcp',
+  timeout: resolveServerTimeouts(),
 };
 
 /** Absolute expiry of the seeded stale access token (in the past). */

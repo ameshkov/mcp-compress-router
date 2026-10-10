@@ -60,7 +60,7 @@ describe('MCP Compress Router E2E — stdio', () => {
       }
     ).tools;
     const gts = tools.find((t) => t.name === 'get_tool_schema')!;
-    expect(gts.description).toContain('- fixture (6 tools) - A test fixture server');
+    expect(gts.description).toContain('- fixture (7 tools) - A test fixture server');
     expect(gts.description).toContain(
       'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(fixture)',
     );
@@ -543,7 +543,7 @@ describe('MCP Compress Router E2E — stdio', () => {
         }
       ).tools;
       const gts = tools.find((t) => t.name === 'get_tool_schema')!;
-      expect(gts.description).toContain('- on (6 tools) - Enabled fixture');
+      expect(gts.description).toContain('- on (7 tools) - Enabled fixture');
       expect(gts.description).toContain(
         'Call get_tool_schema with the server name to list all tools, i.e. get_tool_schema(on)',
       );

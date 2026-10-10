@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { discoverSingleServer } from './index.js';
 import type { DownstreamServerConfig } from '../utils/index.js';
-import { Logger } from '../utils/index.js';
+import { Logger, resolveServerTimeouts } from '../utils/index.js';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs/promises';
@@ -43,13 +43,22 @@ describe('discoverSingleServer', () => {
       command: resolved.command,
       args: resolved.args,
       enabled: false,
+      timeout: resolveServerTimeouts(),
     };
 
     const server = await discoverSingleServer(disabled, new Logger('error'));
     expect(server.name).toBe('off');
     expect(server.tools.length).toBeGreaterThan(0);
     const toolNames = server.tools.map((t) => t.name).sort();
-    expect(toolNames).toEqual(['add', 'crash', 'echo', 'echo_env', 'failing_tool', 'multi_block']);
+    expect(toolNames).toEqual([
+      'add',
+      'crash',
+      'echo',
+      'echo_env',
+      'failing_tool',
+      'hang',
+      'multi_block',
+    ]);
   });
 
   it('includes status ok on a successful discovery', async () => {
@@ -61,6 +70,7 @@ describe('discoverSingleServer', () => {
       command: resolved.command,
       args: resolved.args,
       enabled: true,
+      timeout: resolveServerTimeouts(),
     };
 
     const server = await discoverSingleServer(config, new Logger('error'));
@@ -73,6 +83,7 @@ describe('discoverSingleServer', () => {
       description: 'Unreachable fixture server',
       type: 'stdio',
       command: '/nonexistent/command',
+      timeout: resolveServerTimeouts(),
     };
     await expect(discoverSingleServer(dead, new Logger('error'))).rejects.toThrow(/dead/);
   });

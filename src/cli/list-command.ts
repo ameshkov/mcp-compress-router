@@ -1,5 +1,6 @@
 import { ensureConfigDir, readConfigFile, readCredentials } from './config-io.js';
 import { computeAuthStatus } from '../services/index.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { AuthStatus, DownstreamServerConfig, ServerTransportType } from '../utils/index.js';
 
 /** A single rendered row in the `list` table. */
@@ -135,6 +136,7 @@ export async function handleList(configPath: string): Promise<string> {
       enabled: entry.enabled,
       allowedTools: entry.allowedTools,
       disabledTools: entry.disabledTools,
+      timeout: resolveServerTimeouts(entry.timeout),
     };
     return {
       name,

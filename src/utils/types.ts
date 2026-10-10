@@ -4,6 +4,30 @@
 export type ServerTransportType = 'stdio' | 'http' | 'streamable-http';
 
 /**
+ * Optional per-server timeout overrides from an mcp.json server entry,
+ * in milliseconds. Both keys are optional positive integers; unknown
+ * keys inside the block are ignored by the loader.
+ */
+export interface ServerTimeoutInput {
+  /** Optional startup-phase budget in milliseconds. */
+  startup?: number;
+  /** Optional tool-execution budget in milliseconds. */
+  execution?: number;
+}
+
+/**
+ * Resolved per-server timeouts, always carrying both budgets. Built once
+ * at config load with precedence per-server value > environment variable
+ * > built-in default.
+ */
+export interface ServerTimeoutConfig {
+  /** Resolved startup-phase budget in milliseconds. */
+  startup: number;
+  /** Resolved tool-execution budget in milliseconds. */
+  execution: number;
+}
+
+/**
  * Runtime status of a downstream server connection.
  *
  * - `'ok'` — connected, client is live.
@@ -37,6 +61,12 @@ export interface DownstreamServerConfig {
    * omit it.
    */
   description?: string;
+  /**
+   * Resolved startup and execution budgets for this server. Always
+   * present: config load merges the per-server `timeout` block with the
+   * environment variables and the built-in defaults.
+   */
+  timeout: ServerTimeoutConfig;
   /** Optional OAuth client configuration overrides, with ${VAR} expansion. */
   oauth?: OAuthConfig;
   /** Whether this server is connected at startup. Defaults to `true` when omitted. */

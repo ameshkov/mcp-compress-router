@@ -614,6 +614,7 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       {
         serverUrl: this._server.url,
         provider: this,
+        startupTimeoutMs: this._server.timeout.startup,
         setIssuer: (issuer) => this.setIssuer(issuer),
         saveTokens: (tokens) => this.saveTokens(tokens),
       },

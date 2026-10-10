@@ -15,6 +15,7 @@
  * - `multi_block(prefix)` — returns three content blocks.
  * - `failing_tool(message)` — returns an `isError` result.
  * - `documented_tool(input)` — a deliberately long description.
+ * - `slow_tool(delay_ms)` — waits for the requested delay.
  * - `whoami()` — reports whether the request was authenticated.
  *
  * With `MOCK_MCP_TOOLS=weather` it serves the lifelike weather tools
@@ -194,7 +195,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       issuer: ISSUER,
       tools: WEATHER_TOOLS
         ? WEATHER_TOOL_NAMES
-        : ['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool', 'whoami'],
+        : ['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool', 'slow_tool', 'whoami'],
     });
     return;
   }

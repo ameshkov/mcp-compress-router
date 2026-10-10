@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { OAuthCredentialManager } from '../services/oauth.js';
 import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
 import type { PasteReader } from './login-paste.js';
+import { resolveServerTimeouts } from '../utils/index.js';
 import type { DownstreamServerConfig } from '../utils/types.js';
 
 const server: DownstreamServerConfig = {
@@ -9,6 +10,7 @@ const server: DownstreamServerConfig = {
   description: 'Test OAuth server',
   type: 'http',
   url: 'https://example.com/mcp',
+  timeout: resolveServerTimeouts(),
 };
 
 /** Captures what `beginAuthorization` observes once the port is bound. */

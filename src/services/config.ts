@@ -6,10 +6,12 @@ import {
   expandEnvField,
   normalizeDescription,
   parseJsonc,
+  resolveServerTimeouts,
   validateGlobPattern,
   validateOAuthClientName,
   validateOAuthClientUri,
 } from '../utils/index.js';
+import { parseTimeoutBlock } from './config-timeout.js';
 
 /** Recognized MCP transport types. */
 const VALID_TYPES = new Set<string>(['stdio', 'http', 'streamable-http']);
@@ -422,6 +424,7 @@ function parseServerEntry(
   const enabled = validateEnabled(name, server);
   const allowedTools = validateToolList(name, 'allowedTools', server.allowedTools);
   const disabledTools = validateToolList(name, 'disabledTools', server.disabledTools);
+  const timeout = resolveServerTimeouts(parseTimeoutBlock(name, server.timeout));
 
   return {
     name,
@@ -432,6 +435,7 @@ function parseServerEntry(
     enabled,
     allowedTools,
     disabledTools,
+    timeout,
   };
 }
 

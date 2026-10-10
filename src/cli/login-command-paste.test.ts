@@ -94,20 +94,20 @@ function startAuthServer(): Promise<{ server: http.Server; url: string }> {
 describe('handleLogin --no-browser', () => {
   let tmpDir: string;
   let configPath: string;
-  const originalTimeout = process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
+  const originalTimeout = process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = '500';
+    process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = '500';
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-login-paste-'));
     configPath = path.join(tmpDir, 'mcp.json');
   });
 
   afterEach(async () => {
     if (originalTimeout === undefined) {
-      delete process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS;
+      delete process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS;
     } else {
-      process.env.MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS = originalTimeout;
+      process.env.MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS = originalTimeout;
     }
     await fs.rm(tmpDir, { recursive: true, force: true });
   });

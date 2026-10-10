@@ -1,10 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { createTransport, listToolsOrEmpty } from './discovery.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { saveToolCache, loadToolCache } from './tool-cache.js';
 import { isAuthError } from './index.js';
-import { getDownstreamTimeoutMs } from '../utils/index.js';
 import type {
   DownstreamServerConfig,
   Logger,
@@ -261,10 +261,11 @@ export class ServerConnection {
       this.logger,
     );
 
-    // Cap the initialize handshake and tools/list call so a hung
-    // downstream server fails fast instead of stalling startup (or
-    // self-recovery) for the SDK's 60s default.
-    const requestOptions: RequestOptions = { timeout: getDownstreamTimeoutMs() };
+    // Cap the initialize handshake and tools/list call at this server's
+    // resolved startup budget so a hung downstream server fails fast
+    // instead of stalling startup (or self-recovery) for the SDK's 60s
+    // default.
+    const requestOptions: RequestOptions = { timeout: this.server.timeout.startup };
 
     await this.client.connect(transport, requestOptions);
     const listResult = await listToolsOrEmpty(this.client, requestOptions);
@@ -308,20 +309,35 @@ export class ServerConnection {
   /**
    * Invokes a tool on the downstream server via the live client.
    *
+   * The call is capped by this server's resolved execution timeout. When
+   * that budget fires, the SDK's `RequestTimeout` error is rethrown as a
+   * descriptive error naming the tool, the server, and the budget; every
+   * other error passes through unchanged.
+   *
    * @param tool - The tool name to invoke.
    * @param args - The arguments to pass to the tool.
    * @returns The downstream call result verbatim.
-   * @throws When no client is connected or the downstream call fails.
+   * @throws When no client is connected, the downstream call fails, or
+   *   the call exceeds the configured execution timeout.
    */
   async invokeTool(tool: string, args: Record<string, unknown>): Promise<InvokeResult> {
     if (!this.client) {
       throw new Error(`Server "${this.server.name}" has no active client connection.`);
     }
-    const result = (await this.client.callTool({
-      name: tool,
-      arguments: args,
-    })) as InvokeResult;
-    return result;
+    try {
+      const result = (await this.client.callTool({ name: tool, arguments: args }, undefined, {
+        timeout: this.server.timeout.execution,
+      })) as InvokeResult;
+      return result;
+    } catch (err) {
+      if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
+        throw new Error(
+          `Tool "${tool}" on server "${this.server.name}" timed out after ${this.server.timeout.execution} ms (timeout.execution)`,
+          { cause: err },
+        );
+      }
+      throw err;
+    }
   }
 
   /**

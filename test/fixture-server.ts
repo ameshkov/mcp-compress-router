@@ -109,6 +109,20 @@ function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    'hang',
+    {
+      title: 'Hanging Tool',
+      description: 'Never returns, simulating a tool call that hangs indefinitely.',
+      inputSchema: {},
+    },
+    () =>
+      new Promise<never>(() => {
+        // Never settles: the caller's configured execution timeout is the
+        // only thing that can end this call.
+      }),
+  );
+
+  server.registerTool(
     'crash',
     {
       title: 'Crash Tool',

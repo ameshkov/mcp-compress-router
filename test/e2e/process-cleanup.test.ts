@@ -133,7 +133,7 @@ describe('MCP Compress Router E2E — process tree cleanup', () => {
       env: {
         ...process.env,
         MCP_COMPRESS_ROUTER_HOME: tempDir,
-        MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS: '2000',
+        MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS: '2000',
       },
     });
     spawned.push(proc);

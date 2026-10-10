@@ -75,7 +75,7 @@ describe('MCP Compress Router E2E — startup resilience', () => {
     const startedAt = Date.now();
     await client.start('node', [routerPath, '--config', configPath], {
       MCP_COMPRESS_ROUTER_HOME: tempDir,
-      MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS: '4000',
+      MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS: '4000',
     });
     const initMs = Date.now() - startedAt;
 

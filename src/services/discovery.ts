@@ -3,7 +3,7 @@ import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { getDownstreamTimeoutMs, killProcessTree } from '../utils/index.js';
+import { killProcessTree } from '../utils/index.js';
 import { createAuthRetryFetch } from './auth-retry-fetch.js';
 import { createDedicatedFetch, createConnectTimeoutFetch } from './dedicated-fetch.js';
 import type { OAuthCredentialManager } from './oauth.js';
@@ -185,11 +185,11 @@ export async function discoverSingleServer(
 
   const transport = createTransport(server, getAuthProvider, logger);
 
-  // Cap the initialize handshake and tools/list call so a server that
-  // accepts the connection but never replies surfaces a clear error
-  // instead of hanging the command indefinitely (the SDK's own default
-  // is 60s; we use a shorter, configurable budget).
-  const requestOptions: RequestOptions = { timeout: getDownstreamTimeoutMs() };
+  // Cap the initialize handshake and tools/list call at this server's
+  // resolved startup budget so a server that accepts the connection but
+  // never replies surfaces a clear error instead of hanging the command
+  // indefinitely (the SDK's own default is 60s).
+  const requestOptions: RequestOptions = { timeout: server.timeout.startup };
 
   try {
     await client.connect(transport, requestOptions);
@@ -255,7 +255,7 @@ export function createTransport(
         args: server.args,
         env: server.env,
       },
-      getDownstreamTimeoutMs(),
+      server.timeout.startup,
     );
   }
 
@@ -279,7 +279,7 @@ export function createTransport(
     // retry wraps the timeout fetch so each retry gets a fresh connect
     // timeout.
     fetch: createAuthRetryFetch(
-      createConnectTimeoutFetch(createDedicatedFetch(), getDownstreamTimeoutMs()),
+      createConnectTimeoutFetch(createDedicatedFetch(), server.timeout.startup),
       authProvider,
       logger,
     ),

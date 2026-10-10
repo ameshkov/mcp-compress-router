@@ -317,18 +317,20 @@ with PASS/FAIL, and the scripted response, for example:
 
 | Server | Transport | Tools |
 | --- | --- | --- |
-| `qa/scripts/mock-mcp-stdio/` (in the workspace) | stdio | `echo`, `add`, `multi_block`, `failing_tool`, `documented_tool` (or the weather tools with `MOCK_MCP_TOOLS=weather`) |
-| `mock-mcp-http` (own container) | streamable-http | The same five tools plus `whoami` |
-| `mock-mcp-http-oauth` (own container) | streamable-http + bearer token | The same five tools plus `whoami` |
+| `qa/scripts/mock-mcp-stdio/` (in the workspace) | stdio | `echo`, `add`, `multi_block`, `failing_tool`, `documented_tool`, `slow_tool` (or the weather tools with `MOCK_MCP_TOOLS=weather`) |
+| `mock-mcp-http` (own container) | streamable-http | The same six tools plus `whoami` |
+| `mock-mcp-http-oauth` (own container) | streamable-http + bearer token | The same six tools plus `whoami` |
 | `mock-mcp-weather` (own container) | streamable-http | The weather tools (`MOCK_MCP_TOOLS=weather`) |
 
 The shared tools live in `qa/scripts/mock-mcp-tools.ts`: `echo` returns
 `echo: <message>` so a round trip is distinguishable from the request
 arguments, `add` returns the sum, `multi_block` returns a text, a
 resource, and a text block, `failing_tool` returns an `isError` result,
-and `documented_tool` carries a deliberately long description (about
+`documented_tool` carries a deliberately long description (about
 3.4 KB, bounded by the `LONG-DESCRIPTION-HEAD` and
-`LONG-DESCRIPTION-TAIL` markers). The catalog never shows tool
+`LONG-DESCRIPTION-TAIL` markers), and `slow_tool` waits for its
+`delay_ms` argument before returning, which the execution-timeout plan
+uses to exceed a short configured budget. The catalog never shows tool
 descriptions; the description plans verify that the complete text
 arrives through the `get_tool_schema` result.
 `pnpm --silent qa:long-description` prints the same text for use as a
@@ -379,7 +381,7 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | --- | --- | --- |
 | `router-startup.feature` | `STARTUP` | Two-tool surface, compact catalog, disabled servers, startup without a server description |
 | `tool-schema.feature` | `SCHEMA` | `get_tool_schema` results, list mode, and guided errors |
-| `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation |
+| `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation, execution timeout |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
 | `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the DCR client identity, the RFC 9207 issuer, the RFC 8707 resource indicator, and the `--no-browser` paste-back login |

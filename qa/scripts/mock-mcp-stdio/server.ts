@@ -8,9 +8,9 @@
  * catalog, round trips, and error passthrough over both transports.
  *
  * Tools: `echo`, `add`, `multi_block`, `failing_tool`,
- * `documented_tool`. With `MOCK_MCP_TOOLS=weather` it serves the
- * lifelike weather tools (`mock-mcp-weather.ts`) instead, which is what
- * the real-LLM plans use.
+ * `documented_tool`, `slow_tool`. With `MOCK_MCP_TOOLS=weather` it
+ * serves the lifelike weather tools (`mock-mcp-weather.ts`) instead,
+ * which is what the real-LLM plans use.
  *
  * Environment:
  * - `MOCK_STARTUP_DELAY_MS` — delay before connecting, for

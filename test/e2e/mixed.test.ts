@@ -78,7 +78,7 @@ describe('MCP Compress Router E2E — mixed transports', () => {
 
     // Both servers appear in the catalog description, each with its own
     // tool count; the tool names are not rendered in the catalog.
-    expect(gts.description).toContain('- stdio-fixture (6 tools)');
+    expect(gts.description).toContain('- stdio-fixture (7 tools)');
     expect(gts.description).toContain('- http-fixture (5 tools)');
     expect(gts.description).not.toContain('echo');
     expect(gts.description).not.toContain('check_auth');

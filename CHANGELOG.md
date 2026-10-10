@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added a per-server `timeout` block to `mcp.json`
+  (`{ "startup": <ms>, "execution": <ms> }`). `startup` bounds the
+  discovery phase (stdio spawn, HTTP connect fetch, `initialize`,
+  `tools/list`, token refresh) and `execution` caps each `invoke_tool`
+  call; both keys are optional positive integers, omitted keys fall
+  back to the environment variables and built-in defaults, and a
+  per-server value wins over the environment.
+- Added `MCP_COMPRESS_ROUTER_EXECUTION_TIMEOUT_MS` (default `3600000`,
+  1 hour) to override the per-call tool execution budget globally. It
+  replaces the MCP SDK's 60 s default, so long-running tools are no
+  longer cut short; a call that exceeds the budget fails with an error
+  naming the tool, the server, and the budget, and is never retried.
+
+### Changed
+
+- The default startup budget is now 30 seconds (was 10 seconds),
+  matching the startup budget most MCP hosts allow for initialization.
+  The value is configurable per server with `timeout.startup`.
+
+### Removed
+
+- **Breaking:** removed `MCP_COMPRESS_ROUTER_DOWNSTREAM_TIMEOUT_MS`;
+  the variable is no longer read. Rename it to
+  `MCP_COMPRESS_ROUTER_STARTUP_TIMEOUT_MS` in any setup that uses it.
+
 ## [v3.2.1] - 2026-10-04
 
 ### Fixed
@@ -604,6 +633,7 @@ The changes below are based on
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v3.2.1...HEAD
 [v3.2.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.1
 [v3.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.0
 [v3.1.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.1.0

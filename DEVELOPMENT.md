@@ -61,7 +61,7 @@ credentials. Replace the contents of `dev-home/mcp.jsonc` with:
       "type": "stdio",
       "command": "npx",
       "args": ["tsx", "test/fixture-server.ts"],
-      "description": "Local fixture tools (echo, add, multi_block)"
+      "description": "Local fixture tools (echo, add, multi_block, hang)"
     }
   }
 }
@@ -69,7 +69,7 @@ credentials. Replace the contents of `dev-home/mcp.jsonc` with:
 
 Run the router from the repository root so the relative `test/...` path
 resolves. The fixture exposes `echo`, `add`, `multi_block`,
-`failing_tool`, `echo_env`, and `crash`.
+`failing_tool`, `hang`, `echo_env`, and `crash`.
 
 ## Build
 
@@ -118,7 +118,7 @@ export MCP_COMPRESS_ROUTER_HOME="$PWD/dev-home"
 node build/index.js list
 node build/index.js get fixture
 node build/index.js add fixture \
-  --description "Local fixture tools (echo, add, multi_block)" \
+  --description "Local fixture tools (echo, add, multi_block, hang)" \
   -- npx tsx test/fixture-server.ts
 node build/index.js add my-http http://localhost:3100/mcp \
   --description "My custom HTTP MCP server" \

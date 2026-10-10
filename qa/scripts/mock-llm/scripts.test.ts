@@ -58,12 +58,20 @@ describe('built-in mock LLM scripts', () => {
     const script = getScript('stdio-catalog');
     expect(script).toBeDefined();
     const first = script!.steps[0].expect;
-    expect(first?.catalogIncludes).toContain('- stdio-mock (5 tools)');
+    expect(first?.catalogIncludes).toContain('- stdio-mock (6 tools)');
     expect(first?.catalogExcludes).toEqual(
-      expect.arrayContaining(['echo', 'add', 'multi_block', 'failing_tool', 'documented_tool']),
+      expect.arrayContaining([
+        'echo',
+        'add',
+        'multi_block',
+        'failing_tool',
+        'documented_tool',
+        'slow_tool',
+      ]),
     );
     expect(script!.steps[1].expect?.messagesInclude).toContain('echo(message)');
     expect(script!.steps[1].expect?.messagesInclude).toContain('documented_tool(input)');
+    expect(script!.steps[1].expect?.messagesInclude).toContain('slow_tool(delay_ms)');
   });
 
   it('derives the HTTP downstream tool names from the signatures', () => {
@@ -75,7 +83,7 @@ describe('built-in mock LLM scripts', () => {
     const script = getScript('http-catalog');
     expect(script).toBeDefined();
     const first = script!.steps[0].expect;
-    expect(first?.catalogIncludes).toContain('- http-mock (6 tools)');
+    expect(first?.catalogIncludes).toContain('- http-mock (7 tools)');
     expect(first?.catalogExcludes).toContain('whoami');
     expect(first?.toolsAbsent).toContain('whoami');
     expect(script!.steps[1].expect?.messagesInclude).toContain('whoami()');
