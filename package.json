@@ -73,7 +73,7 @@
     "@cucumber/messages": "34.2.1",
     "@types/node": "26.1.2",
     "@types/picomatch": "4.0.3",
-    "gherkin-lint": "4.2.4",
+    "gherkin-refine": "1.4.1",
     "husky": "9.1.7",
     "knip": "6.29.0",
     "markdownlint-cli2": "0.23.2",
