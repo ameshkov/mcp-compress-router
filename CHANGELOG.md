@@ -8,6 +8,10 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+* Replace `gherkin-lint@4.2.4`, last released on December 20, 2023, with the exactly pinned `gherkin-refine@1.4.1` dependency. The `pnpm lint:gherkin` command and rule configuration remain in place.
+
 ## [v4.0.0] - 2026-10-10
 
 ### Added
