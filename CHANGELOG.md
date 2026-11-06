@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v4.0.1] - 2026-11-06
+
 ### Fixed
 
 - Fixed OAuth token refresh failing permanently when the provider
@@ -645,7 +647,8 @@ The changes below are based on
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.0...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.1...HEAD
+[v4.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.1
 [v4.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.0
 [v3.2.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.1
 [v3.2.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.0
