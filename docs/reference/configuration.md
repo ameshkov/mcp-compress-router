@@ -391,9 +391,10 @@ Set them to an identity the provider has approved for your client:
 
 `login` re-registers automatically when the stored registration echoes a
 `client_name` or `client_uri` that no longer matches the configured
-value. A stored registration that carries neither field is reused as-is,
-so existing registrations keep working. Both fields are ignored when
-`clientId` is set, because no registration is performed.
+value, or when the registration's `client_secret_expires_at` has passed.
+A stored registration that carries neither identity field is reused as
+long as its client secret has not expired. Both identity fields are
+ignored when `clientId` is set, because no registration is performed.
 
 The `login` command starts a temporary local HTTP server and uses a
 loopback redirect URI (per RFC 8252):

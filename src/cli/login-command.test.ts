@@ -320,6 +320,42 @@ describe('handleLogin', () => {
     expect(registrations).toHaveLength(0);
   }, 10_000);
 
+  it('re-registers when the stored registration has an expired client secret', async () => {
+    process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS = '500';
+
+    const { server, url, registrations } = await startDiscoveryServer();
+
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          test: { type: 'http', url: url + '/mcp', description: 'Discovery test server' },
+        },
+      }),
+    );
+    // The registration still covers the loopback URI, but its client
+    // secret has expired: the authorization server rejects the token
+    // exchange with `invalid_client`, so login must register again.
+    await writeCredentials(configPath, 'test', {
+      clientRegistration: {
+        client_id: 'expired-client',
+        client_secret: 'expired-secret',
+        redirect_uris: [OAUTH_LOOPBACK_URI],
+        client_secret_expires_at: Math.floor(Date.now() / 1000) - 60,
+      },
+    });
+
+    try {
+      await expect(handleLogin(configPath, 'test')).rejects.toThrow(/timed out/);
+    } finally {
+      delete process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS;
+      server.close();
+    }
+
+    expect(registrations).toHaveLength(1);
+    expect(registrations[0]!.redirect_uris).toEqual([OAUTH_LOOPBACK_URI]);
+  }, 10_000);
+
   it('re-registers when the stored registration does not cover the loopback URI', async () => {
     process.env.MCP_COMPRESS_ROUTER_LOGIN_TIMEOUT_MS = '500';
 

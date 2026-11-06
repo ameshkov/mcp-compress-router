@@ -131,6 +131,7 @@ and using it re-introduces the port-conflict risk by choice.
 | `pnpm qa:router <args>` | Run the management CLI (`add`, `remove`, `list`, `tools`, `enable`, `disable`, `login`, `logout`) against the QA home. |
 | `pnpm qa:probe ...` | Spawn the compiled router over stdio, do the MCP handshake, and run one request (`--list`, `--tool <name> --args '<json>'`). Omit `tools` in the args to list a server's tools and their arguments. |
 | `pnpm qa:reject-token <name> [--keep-expiry]` | Mark a server's stored access token as expired and provider-rejected in the QA home (the refresh token stays valid), so the next router call must refresh the tokens. With `--keep-expiry` the stored expiry is left untouched, so the provider rejects the next call with 401 but proactive refresh cannot fire. |
+| `pnpm qa:expire-client <name>` | Move a server's stored dynamic client registration expiry (`client_secret_expires_at`) into the past in the QA home, so the next `login` must register a new client instead of reusing the dead registration. |
 | `pnpm qa:llm ...` | Control and inspect the mock LLM (`list`, `script`, `custom`, `status`, `log`, `reset`). |
 | `pnpm qa:agent ...` | Run a coding agent session (`--prompt '<text>'`, `--agent opencode\|copilot\|claude\|codex`) or `--mcp-list`, then report the mock LLM validation result. Add `--real-llm` to run opencode against OpenRouter with a real model instead (opt-in; see [Real-LLM plans](#real-llm-plans)) |
 | `pnpm qa:run ...` | The BDD runner that walks the plans and records verdicts. |

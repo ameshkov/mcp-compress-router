@@ -8,6 +8,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed OAuth token refresh failing permanently when the provider
+  expires the dynamic client registration. The router now treats a
+  stored registration whose `client_secret_expires_at` has passed as
+  absent. `login` then registers a new client instead of reusing the
+  dead registration, and a token refresh no longer sends a request that
+  the provider rejects with `invalid_client` (for example, "Client
+  secret has expired").
+
 ## [v4.0.0] - 2026-10-10
 
 ### Added

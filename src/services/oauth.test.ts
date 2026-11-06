@@ -87,6 +87,49 @@ describe('OAuthCredentialManager', () => {
     expect(loaded!.client_id).toBe('test-client');
   });
 
+  it('clientInformation hides a registration whose client secret has expired', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: {
+        client_id: 'expired-client',
+        client_secret: 'expired-secret',
+        client_secret_expires_at: Math.floor(Date.now() / 1000) - 60,
+      },
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    // An expired client secret cannot authenticate a token request: the
+    // authorization server rejects it with `invalid_client`. The
+    // registration is treated as absent so login re-registers.
+    expect(await mgr.clientInformation()).toBeUndefined();
+  });
+
+  it('clientInformation keeps a registration whose client secret has not expired', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: {
+        client_id: 'live-client',
+        client_secret: 'live-secret',
+        client_secret_expires_at: Math.floor(Date.now() / 1000) + 3600,
+      },
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    expect((await mgr.clientInformation())?.client_id).toBe('live-client');
+  });
+
+  it('clientInformation treats a zero client secret expiry as no expiry', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: {
+        client_id: 'perpetual-client',
+        client_secret: 'perpetual-secret',
+        // RFC 7591 §3.2.1: a zero value means the secret does not expire.
+        client_secret_expires_at: 0,
+      },
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    expect((await mgr.clientInformation())?.client_id).toBe('perpetual-client');
+  });
+
   it('tokens returns undefined when no credentials stored', async () => {
     const mgr = new OAuthCredentialManager(configPath, server);
     expect(await mgr.tokens()).toBeUndefined();

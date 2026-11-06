@@ -143,6 +143,33 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     expect(refreshAuthorizationMock).not.toHaveBeenCalled();
   });
 
+  it('does not attempt a token request when the stored client secret has expired', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: {
+        client_id: 'expired-client',
+        client_secret: 'expired-secret',
+        client_secret_expires_at: Math.floor(Date.now() / 1000) - 60,
+      },
+      tokens: {
+        access_token: 'stale-at',
+        token_type: 'Bearer',
+        refresh_token: 'stale-rt',
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    // The authorization server rejects an expired client secret with
+    // `invalid_client`, so the doomed request must not be sent; the
+    // reactive 401 path asks the user to log in again instead.
+    expect(refreshAuthorizationMock).not.toHaveBeenCalled();
+    expect((await mgr.tokens())?.access_token).toBe('stale-at');
+  });
+
   it('does nothing when the token is far from expiry', async () => {
     await seedTokens(new Date(Date.now() + 3600_000).toISOString());
 

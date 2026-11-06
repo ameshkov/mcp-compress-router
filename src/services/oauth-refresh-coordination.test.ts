@@ -224,6 +224,33 @@ describe('OAuthCredentialManager refresh coordination', () => {
     expect(refreshAuthorizationMock).not.toHaveBeenCalled();
   });
 
+  it('returns undefined without a token request when the stored client secret has expired', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: {
+        client_id: 'expired-client',
+        client_secret: 'expired-secret',
+        client_secret_expires_at: Math.floor(Date.now() / 1000) - 60,
+      },
+      tokens: {
+        access_token: 'stale-at',
+        token_type: 'Bearer',
+        refresh_token: 'stale-rt',
+        expires_at: STALE_EXPIRES_AT,
+      },
+      authRequirement: 'oauth',
+      checkedAt: '2026-06-22T12:00:00Z',
+    });
+    refreshAuthorizationMock.mockResolvedValue(FRESH_TOKENS);
+    const mgr = new OAuthCredentialManager(configPath, server);
+
+    // An expired client secret cannot authenticate a refresh request:
+    // the registration is treated as absent, so no adoption and no
+    // token request happen, and the 401 reaches the SDK's auth() flow.
+    await expect(mgr.refreshAfterUnauthorized('stale-at')).resolves.toBeUndefined();
+
+    expect(refreshAuthorizationMock).not.toHaveBeenCalled();
+  });
+
   it('returns undefined while the auth-failure backoff is active', async () => {
     await seedStaleTokens();
     const mgr = new OAuthCredentialManager(configPath, server);

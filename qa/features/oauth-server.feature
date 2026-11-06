@@ -20,7 +20,11 @@ Feature: Using an OAuth-protected streamable-http MCP server
   the mock invalidates one as soon as it is redeemed, so a stale refresh
   token presented by a second router instance is rejected with
   `invalid_grant` — the concurrent-instances plan proves such a rejection
-  never wipes the tokens the winning instance stored. One plan bypasses
+  never wipes the tokens the winning instance stored. Mock client
+  registrations never expire, so the expired-registration plan moves the
+  stored expiry into the past with `pnpm qa:expire-client`: a login that
+  succeeds and stores a different `client_id` proves the router replaced
+  the dead registration instead of reusing it. One plan bypasses
   qa-browser: `login --no-browser` prints the authorization URL, the
   tester resolves its redirect target with curl without following it, and
   pastes the resulting URL back at the prompt.
@@ -114,6 +118,15 @@ Scenario: Concurrent instances do not wipe each other's refreshed tokens
   And I run "pnpm qa:router list"
   And the output shows an "oauth-mock" row with auth "authenticated"
   And the stored "refresh_token" in "qa/home/credentials.json" is not empty
+
+@TC-OAUTH-12
+Scenario: An expired client registration is replaced at login
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  When I note the stored "client_id" in "qa/home/credentials.json"
+  And I run "pnpm qa:expire-client oauth-mock"
+  And I run "pnpm qa:router login oauth-mock"
+  Then the output reports "Successfully authenticated server "oauth-mock""
+  And the stored "client_id" in "qa/home/credentials.json" differs from the noted value
 
 @TC-OAUTH-11
 Scenario: A rejected access token recovers through a coordinated refresh

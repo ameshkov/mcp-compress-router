@@ -55,6 +55,14 @@ All `oauth` fields are optional; see the
 [OAuth configuration reference](../reference/configuration.md#oauth-configuration)
 for every one.
 
+A dynamic client registration can expire. Some providers return
+`client_secret_expires_at` with the registration. After that time the
+stored client secret is dead, and the provider rejects token refresh
+requests with `invalid_client` (for example, "Client secret has
+expired"). The router treats an expired registration as absent, so
+`login` registers a new client instead of reusing it. When the router
+reports that authentication is required, run `login` again.
+
 ## Resource indicator
 
 When the server publishes RFC 9728

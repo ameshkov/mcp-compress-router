@@ -234,6 +234,14 @@ Universal design principles this codebase follows:
   the SDK's own `auth()` path agree on the value. Omitting it breaks
   providers that bind tokens to a server: they reject the request with
   `invalid_target`.
+- **Honor client registration expiry**: a stored dynamic client
+  registration carries `client_secret_expires_at` when the provider
+  issues an expiring secret (RFC 7591 §3.2.1). Once that time has
+  passed, `OAuthCredentialManager.clientInformation()` MUST treat the
+  registration as absent, so `login` registers a new client instead of
+  reusing the dead one and a token refresh never sends a request the
+  provider rejects with `invalid_client` (for example, "Client secret
+  has expired"). A zero value means the secret does not expire.
 - **Keep It Boring** — prefer well-understood patterns over clever or
   novel solutions.
 

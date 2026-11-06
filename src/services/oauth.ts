@@ -7,6 +7,7 @@ import type {
 import type { DownstreamServerConfig, Logger, StoredCredentials } from '../utils/index.js';
 import { mutateCredentials, readCredentials, withRefreshLock } from '../cli/config-io.js';
 import { bindingFieldsFor, credentialsUsableFor } from './credential-binding.js';
+import { clientSecretExpired } from './client-registration.js';
 import {
   computeExpiresAt,
   dueRefreshToken,
@@ -200,13 +201,27 @@ export class OAuthCredentialManager implements OAuthClientProvider {
     this._issuer = issuer;
   }
 
+  /**
+   * Returns the client registration for the current flow. A static
+   * `oauth.clientId` override takes precedence over the stored dynamic
+   * registration. A stored registration whose client secret has expired
+   * is treated as absent: it cannot authenticate a token request, so
+   * the caller registers a new client instead of reusing it.
+   *
+   * @returns The usable client registration, or undefined when none is
+   *   stored or the stored one has expired.
+   */
   async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
     // Static overrides take precedence
     if (this._staticClientInfo) {
       return this._staticClientInfo;
     }
     const creds = await this._loadCredentials();
-    return creds?.clientRegistration as OAuthClientInformationMixed | undefined;
+    const client = creds?.clientRegistration as OAuthClientInformationMixed | undefined;
+    // An expired registration cannot authenticate a token request: the
+    // authorization server rejects it with `invalid_client`. Treat it as
+    // absent so login re-registers and refresh skips the doomed request.
+    return clientSecretExpired(client) ? undefined : client;
   }
 
   async saveClientInformation(clientInformation: OAuthClientInformationMixed): Promise<void> {
