@@ -251,7 +251,9 @@ function registerLoginCommand(program: Command): void {
 function registerLogoutCommand(program: Command): void {
   program
     .command('logout <name>')
-    .description('Revoke and remove OAuth credentials for a downstream server')
+    .description(
+      'Remove stored OAuth credentials for a downstream server (local sign-out; tokens are not revoked at the authorization server)',
+    )
     .option('-c, --config <path>', 'path to mcp.json configuration file')
     .action(
       guardedAction(async (name, options) => {

@@ -63,6 +63,18 @@ expired"). The router treats an expired registration as absent, so
 `login` registers a new client instead of reusing it. When the router
 reports that authentication is required, run `login` again.
 
+A provider can also forget or revoke a registration without recording an
+expiry. A token request that it rejects with `invalid_client` makes the
+router remove the stored registration: a rejected token refresh clears
+it automatically, and a `login` token exchange reports the rejection
+and asks you to run `login` again. A new client registration replaces
+the dead one: the runtime flow (the SDK's `auth()` retry) may register
+it during the same call, while the login token exchange leaves it to
+the next login. The next `login` succeeds either way. If the provider
+rejects the stored client on the authorization page, the browser shows
+an error such as "Invalid client_id" and the router cannot observe that
+page. Run `logout` and then `login` to clear the stuck registration.
+
 ## Resource indicator
 
 When the server publishes RFC 9728

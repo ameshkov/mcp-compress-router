@@ -396,6 +396,16 @@ A stored registration that carries neither identity field is reused as
 long as its client secret has not expired. Both identity fields are
 ignored when `clientId` is set, because no registration is performed.
 
+A provider can also forget or revoke a registration without an expiry.
+A token request rejected with `invalid_client` discards the stored
+registration, so a new client registration replaces the dead one: the
+runtime flow (the SDK's `auth()` retry) may register it during the same
+call, while the login token exchange leaves it to the next login. The
+next `login` succeeds either way. See
+[Authenticate with OAuth](../guides/oauth-login.md) for
+the recovery behavior, including the `logout` fallback when the
+provider rejects the client on the authorization page.
+
 The `login` command starts a temporary local HTTP server and uses a
 loopback redirect URI (per RFC 8252):
 
@@ -492,10 +502,21 @@ automatically — you do not edit it by hand.
   (`"oauth"`, `"none"`, or `"unknown"`). Set at router startup and on
   `add`.
 - `checkedAt` — ISO-8601 timestamp of the last probe.
-- An entry without `tokens` represents a server that was probed but
-  never logged in (or was since logged out). `logout` strips tokens but
-  preserves `authRequirement`, so the server still appears in `list`
-  with its auth status.
+- An entry without `tokens` can represent a server that was probed but
+  never logged in, or an invalidated entry. When a token request rejects
+  a stored client registration with `invalid_client`, the router's
+  discard step removes `clientRegistration` and keeps `tokens`; the
+  entry can therefore briefly carry stale tokens without a registration.
+  The SDK's follow-up processing can then invalidate those stale tokens:
+  in the runtime refresh path the entry can end with a replacement
+  client registration, the cached auth requirement, and no tokens.
+  These are intermediate and follow-up shapes of the same recovery, not
+  one guaranteed end state. When the SDK invalidates all credentials,
+  the entry keeps the cached `authRequirement` and `checkedAt` but
+  carries neither tokens nor a client registration. Do not treat every
+  token-less entry as "never logged in". `logout` removes the whole
+  entry; a later probe can recreate a probe-only entry that carries the
+  cached auth requirement but no tokens.
 - On Unix systems, `credentials.json` is created with `0600`
   permissions (owner read/write only).
 - On Windows, file permissions cannot be restricted; the router logs a
@@ -944,11 +965,14 @@ The `--client-name` and `--client-uri` overrides are not written to
 `credentials.json` and reused by later logins until `logout` — unless a
 later login enforces a different configured identity, or the stored
 entry is bound to a different server URL or authorization server
-issuer.
+issuer, or a token request to the authorization server rejects the
+registration with `invalid_client` (see
+[OAuth Configuration](#oauth-configuration)).
 
 ### `logout <name>`
 
-Revokes (best-effort) and removes stored credentials for a server.
+Removes the server's stored credentials from `credentials.json` (local
+sign-out). Tokens are not revoked at the authorization server.
 
 ## Global Options
 

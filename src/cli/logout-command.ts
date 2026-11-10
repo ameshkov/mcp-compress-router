@@ -8,8 +8,11 @@ import {
 /**
  * Handles the `logout <name>` subcommand.
  *
- * Attempts to revoke tokens with the authorization server (best-effort),
- * then removes stored credentials from credentials.json.
+ * Removes the server's whole entry from credentials.json: tokens, the
+ * dynamic client registration, the server and issuer bindings, and the
+ * cached auth requirement. The credentials file is deleted when no
+ * entries remain. Tokens are not revoked at the authorization server;
+ * this is a local sign-out. The server stays in mcp.json.
  *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to log out from.
@@ -36,11 +39,8 @@ export async function handleLogout(configPath: string, name: string): Promise<st
     return `No credentials stored for server "${name}".`;
   }
 
-  // Best-effort revocation: if the server's metadata includes a
-  // revocation_endpoint, attempt to revoke the tokens.
-  // For now, remove credentials directly. The SDK's auth infrastructure
-  // handles revocation when available.
-
+  // Local sign-out only: remove the stored credentials. Tokens are not
+  // revoked at the authorization server; the provider expires them.
   await removeCredentials(configPath, name);
 
   return `Removed credentials for server "${name}".`;

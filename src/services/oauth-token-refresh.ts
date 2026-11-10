@@ -6,6 +6,7 @@ import {
 import type { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { StoredCredentials } from '../utils/index.js';
 import { createTimeoutFetch } from '../utils/index.js';
+import { isInvalidClientError } from './client-registration.js';
 import { discoverAuth } from './oauth-discovery.js';
 
 /**
@@ -105,6 +106,13 @@ interface TokenRefreshContext {
   setIssuer(issuer: string): void;
   /** Persists the refreshed tokens (recomputing `expires_at`). */
   saveTokens(tokens: OAuthTokens): Promise<void>;
+  /**
+   * Discards a client registration the token endpoint rejected with
+   * `invalid_client`, so a new client registration replaces the dead
+   * one instead of the dead `client_id` being presented again. The
+   * runtime flow may register the replacement during the same call.
+   */
+  discardClientRegistration(clientId: string): Promise<void>;
 }
 
 /**
@@ -121,6 +129,14 @@ interface TokenRefreshContext {
  * tokens to a resource, and an unbound token is rejected as "not bound
  * to this server". Errors propagate; nothing is swallowed, so callers
  * can report the outcome.
+ *
+ * A token endpoint that rejects the client registration with
+ * `invalid_client` makes the request discard that registration through
+ * `context.discardClientRegistration` before the error propagates: the
+ * provider has declared the registration dead. A new client registration
+ * replaces it; the runtime flow (the SDK's `auth()` retry) may register
+ * the replacement during the same call, and the next login succeeds
+ * either way.
  *
  * @param context - The manager-supplied inputs for the request.
  * @param refreshToken - The refresh token to present.
@@ -160,16 +176,37 @@ export async function requestTokenRefresh(
     context.provider,
     discovered.resourceMetadata,
   );
-  const newTokens = await refreshAuthorization(discovered.authorizationServerUrl, {
-    metadata: discovered.serverMetadata,
-    clientInformation,
-    refreshToken,
-    resource,
-    // Bound the token request like the connect-time token exchange:
-    // a hung token endpoint must not hold the cross-process refresh
-    // lock (or the invoking tool call) indefinitely.
-    fetchFn: createTimeoutFetch(context.startupTimeoutMs),
-  });
+  let newTokens: OAuthTokens;
+  try {
+    newTokens = await refreshAuthorization(discovered.authorizationServerUrl, {
+      metadata: discovered.serverMetadata,
+      clientInformation,
+      refreshToken,
+      resource,
+      // Bound the token request like the connect-time token exchange:
+      // a hung token endpoint must not hold the cross-process refresh
+      // lock (or the invoking tool call) indefinitely.
+      fetchFn: createTimeoutFetch(context.startupTimeoutMs),
+    });
+  } catch (err) {
+    if (isInvalidClientError(err)) {
+      // The provider no longer knows this client registration. Discard
+      // it so a new client registration replaces the dead one instead of
+      // the dead `client_id` being sent again. The runtime flow (the
+      // SDK's `auth()` retry) may register the replacement during this
+      // same call, and the next login succeeds either way. A failed
+      // discard is best-effort: the original rejection is what the caller
+      // must report. A later login only checks the registration locally
+      // and does not probe the provider, so a retained registration must
+      // be cleared with `logout` before `login`.
+      try {
+        await context.discardClientRegistration(clientInformation.client_id);
+      } catch {
+        // Ignore: the provider rejection below stays the surfaced error.
+      }
+    }
+    throw err;
+  }
   await context.saveTokens(newTokens);
   return newTokens;
 }

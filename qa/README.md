@@ -119,8 +119,9 @@ docker compose -f qa/docker-compose.yml \
 
 The mocks are then on `127.0.0.1:8080`, `127.0.0.1:3100`, `127.0.0.1:3101`,
 and `127.0.0.1:3102`. Host-side QA commands additionally need
-`QA_LLM_URL=http://127.0.0.1:8080`. The plans never need the override,
-and using it re-introduces the port-conflict risk by choice.
+`QA_LLM_URL=http://127.0.0.1:8080`, and OAuth-mock commands need
+`QA_OAUTH_MOCK_URL=http://127.0.0.1:3101`. The plans never need the
+override, and using it re-introduces the port-conflict risk by choice.
 
 ## Tools provided in the workspace
 
@@ -132,6 +133,7 @@ and using it re-introduces the port-conflict risk by choice.
 | `pnpm qa:probe ...` | Spawn the compiled router over stdio, do the MCP handshake, and run one request (`--list`, `--tool <name> --args '<json>'`). Omit `tools` in the args to list a server's tools and their arguments. |
 | `pnpm qa:reject-token <name> [--keep-expiry]` | Mark a server's stored access token as expired and provider-rejected in the QA home (the refresh token stays valid), so the next router call must refresh the tokens. With `--keep-expiry` the stored expiry is left untouched, so the provider rejects the next call with 401 but proactive refresh cannot fire. |
 | `pnpm qa:expire-client <name>` | Move a server's stored dynamic client registration expiry (`client_secret_expires_at`) into the past in the QA home, so the next `login` must register a new client instead of reusing the dead registration. |
+| `pnpm qa:revoke-client <name>` | Make the mock OAuth provider forget a server's stored dynamic client registration: the mock then rejects that `client_id` with `invalid_client` at its authorization and token endpoints. A runtime token refresh discards the registration, and so does a login token exchange when the client is revoked after the authorization redirect. A new client registration replaces the dead one: the runtime flow may register it during the same call, while the login token exchange leaves it to the next login, which succeeds either way. Honors `QA_OAUTH_MOCK_URL` (defaults to the Compose service). |
 | `pnpm qa:llm ...` | Control and inspect the mock LLM (`list`, `script`, `custom`, `status`, `log`, `reset`). |
 | `pnpm qa:agent ...` | Run a coding agent session (`--prompt '<text>'`, `--agent opencode\|copilot\|claude\|codex`) or `--mcp-list`, then report the mock LLM validation result. Add `--real-llm` to run opencode against OpenRouter with a real model instead (opt-in; see [Real-LLM plans](#real-llm-plans)) |
 | `pnpm qa:run ...` | The BDD runner that walks the plans and records verdicts. |
@@ -140,9 +142,10 @@ The image also installs `qa-browser`, a curl-based "browser" the router
 uses for OAuth (`MCP_COMPRESS_ROUTER_BROWSER=qa-browser`). It fetches
 the authorization URL and follows the redirect to the router's loopback
 callback, so `add` and `login` complete headlessly. The `--no-browser`
-plan bypasses this helper: it captures the printed authorization URL,
+plans bypass this helper: each captures the printed authorization URL,
 resolves its redirect target with curl without following it, and pastes
-the URL back at the prompt.
+the URL back at the prompt. The revoked-client plan revokes the client
+between the redirect and the paste.
 
 ## Preparing the QA home
 
@@ -364,12 +367,25 @@ ignored — and advertises and echoes the RFC 9207 issuer (`iss`), so the
 login plans exercise the redirect-URI and issuer handling a real
 provider enforces. Like a strict provider, it also requires the RFC 8707
 `resource` parameter on the authorization and token requests, so the
-login plans exercise resource-bound token issuance. The OAuth container
-advertises itself as `http://mock-mcp-http-oauth:3101`, the in-network
-name the router can resolve. Its container log shows the registered
-client identity (`client_name` / `client_uri`), the registered redirect
-URIs, each authorization redirect with its issuer and resource, each
-token issuance with its resource, and the authenticated tool calls:
+login plans exercise resource-bound token issuance. Refresh tokens are
+single-use and bound to the client that requested them: the mock rejects
+a refresh token presented by a different `client_id` with `invalid_grant`
+and does not consume it. Authorization codes are bound to the client
+they were issued to: a code redeemed by another `client_id` is rejected
+with `invalid_grant` and stays available to its client. A QA control
+endpoint marks a registered `client_id` as revoked: the mock then
+rejects it with `invalid_client` at the authorization and token
+endpoints. A runtime token refresh discards the registration; when the
+client is revoked after the authorization redirect, the login token
+exchange discards it instead. A new client registration replaces the
+dead one: the runtime flow may register it during the same call, while
+the login token exchange leaves it to the next login, which succeeds
+either way. The OAuth container advertises itself as
+`http://mock-mcp-http-oauth:3101`, the in-network name the router can
+resolve. Its container log shows the registered client identity
+(`client_name` / `client_uri`), the registered redirect URIs, each
+authorization redirect with its issuer and resource, each token issuance
+with its resource, and the authenticated tool calls:
 
 ```bash
 docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth
@@ -385,7 +401,7 @@ docker compose -f qa/docker-compose.yml logs mock-mcp-http
 | `tool-invocation.feature` | `INVOKE` | `invoke_tool` round trips, error passthrough, validation, execution timeout |
 | `cli-management.feature` | `CLI` | `list`, `tools`, and enable/disable |
 | `http-server.feature` | `HTTP` | Adding a streamable-http server and its catalog |
-| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the DCR client identity, the RFC 9207 issuer, the RFC 8707 resource indicator, and the `--no-browser` paste-back login |
+| `oauth-server.feature` | `OAUTH` | Auto-login, logout, login again, the loopback callback URI, the DCR client identity, the RFC 9207 issuer, the RFC 8707 resource indicator, replacement of an expired or provider-revoked client registration through a runtime refresh and a login token exchange, and the `--no-browser` paste-back login |
 | `opencode.feature` | `OPENCODE` | Discovery, compact catalog, descriptions through the schema result, stdio/http/oauth round trips, recovery, cleanup |
 | `copilot.feature` | `COPILOT` | The same checks for GitHub Copilot CLI (offline BYOK) |
 | `claude.feature` | `CLAUDE` | Discovery, compact catalog, the long-description result path, the 2048-character truncation cap, round trips, recovery, cleanup |

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { InvalidClientError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { OAuthCredentialManager } from './oauth.js';
 import { readCredentials, writeCredentials } from '../cli/config-io.js';
 import { Logger, resolveServerTimeouts } from '../utils/index.js';
@@ -168,6 +169,23 @@ describe('OAuthCredentialManager.refreshIfNeeded', () => {
     // reactive 401 path asks the user to log in again instead.
     expect(refreshAuthorizationMock).not.toHaveBeenCalled();
     expect((await mgr.tokens())?.access_token).toBe('stale-at');
+  });
+
+  it('discards the client registration when the provider rejects it as invalid_client', async () => {
+    await seedTokens(new Date(Date.now() - 1000).toISOString());
+    refreshAuthorizationMock.mockRejectedValue(new InvalidClientError('Invalid client_id'));
+
+    const mgr = new OAuthCredentialManager(configPath, server);
+    await mgr.refreshIfNeeded();
+
+    // The provider no longer recognizes the registration. Keeping it
+    // would make every later login present the same rejected client id,
+    // so the refresh path must discard it. The tokens are left in place:
+    // another process may still be using them, and a successful login
+    // replaces them.
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.clientRegistration).toBeUndefined();
+    expect(store[server.name]?.tokens?.access_token).toBe('stale-at');
   });
 
   it('does nothing when the token is far from expiry', async () => {

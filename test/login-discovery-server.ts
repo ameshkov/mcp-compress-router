@@ -10,6 +10,10 @@ import * as http from 'node:http';
  * Protected Resource Metadata pointing at its own `/mcp` endpoint, so the
  * login flow derives and sends the RFC 8707 `resource` indicator.
  *
+ * With `tokenError`, the token endpoint answers every request with that
+ * OAuth error, modelling a provider that validates the client only at
+ * the token exchange.
+ *
  * Shared by the `login` command tests; the registration bodies captured
  * here are the evidence for the DCR client-identity overrides.
  *
@@ -17,7 +21,10 @@ import * as http from 'node:http';
  * @returns The running server, its base URL, and every registration body.
  */
 export function startDiscoveryServer(
-  options: { withProtectedResourceMetadata?: boolean } = {},
+  options: {
+    withProtectedResourceMetadata?: boolean;
+    tokenError?: { error: string; error_description: string };
+  } = {},
 ): Promise<{
   server: http.Server;
   url: string;
@@ -79,6 +86,16 @@ export function startDiscoveryServer(
               redirect_uris: parsed.redirect_uris ?? [],
             }),
           );
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/token' && options.tokenError) {
+        // Drain the request body before answering.
+        req.on('data', () => {});
+        req.on('end', () => {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(options.tokenError));
         });
         return;
       }

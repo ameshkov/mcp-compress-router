@@ -16,18 +16,36 @@ Feature: Using an OAuth-protected streamable-http MCP server
   parameter on the authorization and token requests and logs the value:
   the router derives it from the mock's protected resource metadata, so
   a login completing proves the router sent the per-server resource
-  indicator a strict provider demands. Refresh tokens are single-use:
-  the mock invalidates one as soon as it is redeemed, so a stale refresh
-  token presented by a second router instance is rejected with
-  `invalid_grant` — the concurrent-instances plan proves such a rejection
+  indicator a strict provider demands. Refresh tokens are single-use and
+  bound to the client that requested them: the mock invalidates one as
+  soon as it is redeemed, and it rejects a token presented by a client
+  that does not own it with `invalid_grant` without consuming the token.
+  Authorization codes are bound the same way: the mock rejects a code
+  redeemed by another `client_id` with `invalid_grant` and leaves it
+  available to the client it was issued to.
+  A stale refresh token presented by a second router instance is rejected
+  the same way — the concurrent-instances plan proves such a rejection
   never wipes the tokens the winning instance stored. Mock client
   registrations never expire, so the expired-registration plan moves the
   stored expiry into the past with `pnpm qa:expire-client`: a login that
   succeeds and stores a different `client_id` proves the router replaced
-  the dead registration instead of reusing it. One plan bypasses
-  qa-browser: `login --no-browser` prints the authorization URL, the
-  tester resolves its redirect target with curl without following it, and
-  pastes the resulting URL back at the prompt.
+  the dead registration instead of reusing it. The mock also has a QA
+  control endpoint that makes the provider forget a registration
+  entirely: `pnpm qa:revoke-client` marks the stored `client_id` as
+  revoked, and the mock then rejects it with `invalid_client` at its
+  authorization and token endpoints. A token request rejected with
+  `invalid_client` must discard the stored registration, so a new client
+  registration replaces the dead one: the runtime flow (the SDK's
+  `auth()` retry) may register it during the same call, while the
+  `--no-browser` login token exchange leaves it to the next login, which
+  succeeds either way. Two plans prove that recovery: the runtime
+  token-refresh plan forces a token request, and the `--no-browser` plan
+  revokes the client after the authorization redirect is obtained, so the
+  login token exchange observes the rejection. Together they prove the
+  router recovers from a provider-side rejection, not only from a locally
+  expired secret. Two plans bypass qa-browser: `login --no-browser` prints
+  the authorization URL, the tester resolves its redirect target with curl
+  without following it, and pastes the resulting URL back at the prompt.
 
 Background:
   Given the QA stack is running and I am in the workspace shell
@@ -137,3 +155,33 @@ Scenario: A rejected access token recovers through a coordinated refresh
   And the result text is "echo: recover"
   And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "rejected unauthenticated MCP request" line
   And the same output shows an "issued tokens (refresh_token" line
+
+@TC-OAUTH-13
+Scenario: A provider-revoked client registration is cleared by a token refresh
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  When I note the stored "client_id" in "qa/home/credentials.json"
+  And I run "pnpm qa:revoke-client oauth-mock"
+  And I run "pnpm qa:reject-token oauth-mock"
+  And I run "pnpm qa:probe --tool invoke_tool --args '{"server":"oauth-mock","tool":"echo","arguments":{"message":"revoked"}}'"
+  Then the call is an error
+  And the host command "docker compose -f qa/docker-compose.yml logs mock-mcp-http-oauth" shows a "rejected revoked client" line
+  And the same output shows a "rejected refresh token issued to another client" line
+  When I run "pnpm qa:router login oauth-mock"
+  And I run "pnpm qa:router list"
+  Then the output reports "Successfully authenticated server "oauth-mock""
+  And the output shows an "oauth-mock" row with auth "authenticated"
+  And the stored "client_id" in "qa/home/credentials.json" differs from the noted value
+
+@TC-OAUTH-14
+Scenario: A provider-revoked client registration is cleared by the login token exchange
+  Given I added the OAuth mock server with "pnpm qa:router add oauth-mock --description 'QA OAuth mock' http://mock-mcp-http-oauth:3101/mcp"
+  When I note the stored "client_id" in "qa/home/credentials.json"
+  And I run "pnpm qa:router login oauth-mock --no-browser" and leave it waiting at the paste prompt
+  And I copy the printed authorization URL and, in another terminal, obtain its redirect target without following it with "curl -s -o /dev/null -w '%{redirect_url}' '<authorization URL>'"
+  And I run "pnpm qa:revoke-client oauth-mock"
+  And I paste the resulting redirect URL at the paste prompt
+  Then the output reports "Server "oauth-mock" rejected the stored OAuth client registration (invalid_client: Invalid client_id). Run "npx mcp-compress-router login oauth-mock" again to register a new client."
+  And the stored "client_id" in "qa/home/credentials.json" is absent
+  When I run "pnpm qa:router login oauth-mock"
+  Then the output reports "Successfully authenticated server "oauth-mock""
+  And the stored "client_id" in "qa/home/credentials.json" differs from the noted value

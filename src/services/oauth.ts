@@ -9,11 +9,12 @@ import { mutateCredentials, readCredentials, withRefreshLock } from '../cli/conf
 import { bindingFieldsFor, credentialsUsableFor } from './credential-binding.js';
 import { clientSecretExpired } from './client-registration.js';
 import {
-  computeExpiresAt,
-  dueRefreshToken,
-  requestTokenRefresh,
-  tokensNeedInvalidation,
-} from './oauth-token-refresh.js';
+  clearStoredCredentials,
+  discardStoredClientRegistration,
+  invalidateStoredCredentials,
+  type CredentialStoreContext,
+} from './oauth-credential-store.js';
+import { computeExpiresAt, dueRefreshToken, requestTokenRefresh } from './oauth-token-refresh.js';
 import { GuidedAuthError } from './index.js';
 
 /**
@@ -312,25 +313,16 @@ export class OAuthCredentialManager implements OAuthClientProvider {
   }
 
   /**
-   * Removes stored OAuth tokens and client registration for this server
-   * (used by logout). Preserves the cached auth requirement so the
-   * `list` command still shows the correct status (e.g. "requires
-   * login") after logout. When there is no cached auth requirement to
-   * keep, the entire entry is removed (and the credentials file deleted
-   * when it becomes empty).
+   * Removes stored OAuth tokens and client registration for this server.
+   * Called by the SDK's `invalidateCredentials('all')` path. Preserves
+   * the cached auth requirement so the `list` command still shows the
+   * correct status (e.g. "requires login"). When there is no cached auth
+   * requirement to keep, the entire entry is removed (and the
+   * credentials file deleted when it becomes empty).
    */
   async clearTokens(): Promise<void> {
     this._codeVerifier = undefined;
-    await mutateCredentials(this._configPath, this._server.name, (current) => {
-      const creds = this._usableEntry(current);
-      if (creds?.authRequirement) {
-        return {
-          authRequirement: creds.authRequirement,
-          checkedAt: creds.checkedAt,
-        };
-      }
-      return undefined;
-    });
+    await clearStoredCredentials(this._storeContext());
   }
 
   /**
@@ -363,35 +355,38 @@ export class OAuthCredentialManager implements OAuthClientProvider {
       await this.clearTokens();
       return;
     }
-    await mutateCredentials(this._configPath, this._server.name, (current) => {
-      const creds = this._usableEntry(current);
-      if (!creds) {
-        return current;
-      }
-      if (scope === 'tokens' && !tokensNeedInvalidation(creds.tokens)) {
-        // The stored tokens are not the stale ones this invalidation
-        // refers to: another process refreshed them while this one was
-        // failing, and clearing them would discard valid credentials.
-        return current;
-      }
-      const remaining: StoredCredentials = {
-        ...bindingFieldsFor(creds, this._server.url, this._issuer),
-        clientRegistration: scope === 'client' ? undefined : creds.clientRegistration,
-        tokens: scope === 'tokens' ? undefined : creds.tokens,
-        authRequirement: creds.authRequirement,
-        checkedAt: creds.checkedAt,
-      };
-      // Drop the entry entirely when nothing credential-like or
-      // probe-related remains, mirroring clearTokens' cleanup.
-      if (
-        remaining.clientRegistration === undefined &&
-        remaining.tokens === undefined &&
-        remaining.authRequirement === undefined
-      ) {
-        return undefined;
-      }
-      return remaining;
-    });
+    await invalidateStoredCredentials(this._storeContext(), scope);
+  }
+
+  /**
+   * Discards the stored dynamic client registration after the
+   * authorization server rejected its `client_id` with `invalid_client`.
+   *
+   * Local checks (secret expiry, redirect URI coverage, configured
+   * identity) cannot prove that the provider still knows a registration:
+   * a provider can forget or revoke a client without recording an
+   * expiry. When it does, every later login would present the same dead
+   * `client_id` and fail. Discarding the registration lets a new client
+   * registration replace the dead one: the runtime flow (the SDK's
+   * `auth()` retry) may register the replacement during the same call,
+   * while the login token exchange leaves it to the next login. The next
+   * login succeeds either way.
+   *
+   * The discard is scoped to the rejected `client_id` and runs as a
+   * fresh read-modify-write under the credentials lock: a registration
+   * another process stored in the meantime is a replacement, not the
+   * dead one, and is kept. Stored tokens are preserved — they may still
+   * be valid until expiry, and a successful login replaces them.
+   *
+   * @param rejectedClientId - The `client_id` the provider rejected.
+   */
+  async discardClientRegistration(rejectedClientId: string): Promise<void> {
+    if (this._staticClientInfo) {
+      // Static overrides are configuration, not stored state; never
+      // remove anything on their behalf.
+      return;
+    }
+    await discardStoredClientRegistration(this._storeContext(), rejectedClientId);
   }
 
   /**
@@ -632,9 +627,20 @@ export class OAuthCredentialManager implements OAuthClientProvider {
         startupTimeoutMs: this._server.timeout.startup,
         setIssuer: (issuer) => this.setIssuer(issuer),
         saveTokens: (tokens) => this.saveTokens(tokens),
+        discardClientRegistration: (clientId) => this.discardClientRegistration(clientId),
       },
       refreshToken,
     );
+  }
+
+  /**
+   * Builds the stored-credential context for this manager's server and
+   * issuer binding.
+   *
+   * @returns The context shared by the credential-store operations.
+   */
+  private _storeContext(): CredentialStoreContext {
+    return { configPath: this._configPath, server: this._server, issuer: this._issuer };
   }
 
   /**

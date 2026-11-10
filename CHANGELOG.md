@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed OAuth `login` and token refresh keeping a dynamic client
+  registration the provider no longer recognizes: a token request
+  rejected with `invalid_client` now discards the stored registration,
+  so the next `login` succeeds with a working client registration. Run
+  `logout` and then `login` when the provider rejects the client on the
+  authorization page, which the router cannot observe.
+- Corrected the `logout` help and reference documentation: it removes
+  stored credentials locally and does not revoke tokens at the
+  authorization server.
+
 ## [v4.0.1] - 2026-11-06
 
 ### Fixed

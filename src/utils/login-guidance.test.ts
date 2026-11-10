@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LOGIN_INTERACTIVE_NOTE, buildLoginCommand } from './login-guidance.js';
+import { LOGIN_INTERACTIVE_NOTE, buildLoginCommand, buildLogoutCommand } from './login-guidance.js';
 
 describe('buildLoginCommand', () => {
   it('builds the npx login command for a server name', () => {
@@ -8,6 +8,16 @@ describe('buildLoginCommand', () => {
 
   it('interpolates the server name verbatim', () => {
     expect(buildLoginCommand('my-server')).toBe('npx mcp-compress-router login my-server');
+  });
+});
+
+describe('buildLogoutCommand', () => {
+  it('builds the npx logout command for a server name', () => {
+    expect(buildLogoutCommand('figma')).toBe('npx mcp-compress-router logout figma');
+  });
+
+  it('interpolates the server name verbatim', () => {
+    expect(buildLogoutCommand('my-server')).toBe('npx mcp-compress-router logout my-server');
   });
 });
 

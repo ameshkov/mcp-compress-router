@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { InvalidClientError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
   OAuthClientInformationMixed,
@@ -76,7 +77,8 @@ const BOUNDED_FETCH = vi.fn() as unknown as typeof fetch;
  *   server has none.
  * @param clientInformation - The client registration the provider
  *   returns, or undefined when none is registered.
- * @returns The context plus the `setIssuer` and `saveTokens` spies.
+ * @returns The context plus the `setIssuer`, `saveTokens`, and
+ *   `discardClientRegistration` spies.
  */
 function createContext(
   serverUrl: string | undefined,
@@ -84,13 +86,22 @@ function createContext(
 ) {
   const setIssuer = vi.fn();
   const saveTokens = vi.fn(async (_tokens: OAuthTokens) => {});
+  const discardClientRegistration = vi.fn(async (_clientId: string) => {});
   const provider = {
     clientInformation: vi.fn(async () => clientInformation),
   } as unknown as OAuthClientProvider;
   return {
-    context: { serverUrl, provider, setIssuer, saveTokens, startupTimeoutMs: 12_345 },
+    context: {
+      serverUrl,
+      provider,
+      setIssuer,
+      saveTokens,
+      discardClientRegistration,
+      startupTimeoutMs: 12_345,
+    },
     setIssuer,
     saveTokens,
+    discardClientRegistration,
   };
 }
 
@@ -193,5 +204,41 @@ describe('requestTokenRefresh', () => {
     // authorization server is never reused.
     expect(setIssuer).toHaveBeenCalledWith(SERVER_METADATA.issuer);
     expect(saveTokens).toHaveBeenCalledWith(FRESH_TOKENS);
+  });
+
+  it('discards the registration the token endpoint rejects with invalid_client', async () => {
+    refreshAuthorizationMock.mockRejectedValue(new InvalidClientError('Invalid client_id'));
+    const { context, saveTokens, discardClientRegistration } = createContext(SERVER_URL, {
+      client_id: 'reg-id',
+    });
+
+    await expect(requestTokenRefresh(context, 'stale-rt')).rejects.toThrow('Invalid client_id');
+
+    // The provider declared the registration dead; a later login must
+    // register a new client instead of presenting the same client id.
+    expect(discardClientRegistration).toHaveBeenCalledWith('reg-id');
+    expect(saveTokens).not.toHaveBeenCalled();
+  });
+
+  it('keeps the registration when the token request fails for another reason', async () => {
+    refreshAuthorizationMock.mockRejectedValue(new Error('network down'));
+    const { context, discardClientRegistration } = createContext(SERVER_URL, {
+      client_id: 'reg-id',
+    });
+
+    await expect(requestTokenRefresh(context, 'stale-rt')).rejects.toThrow('network down');
+    expect(discardClientRegistration).not.toHaveBeenCalled();
+  });
+
+  it('keeps the provider rejection even when discarding the registration fails', async () => {
+    refreshAuthorizationMock.mockRejectedValue(new InvalidClientError('Invalid client_id'));
+    const { context, discardClientRegistration } = createContext(SERVER_URL, {
+      client_id: 'reg-id',
+    });
+    discardClientRegistration.mockRejectedValue(new Error('credentials lock timeout'));
+
+    // The provider's rejection is the error the caller reports; a failed
+    // cleanup must not replace it.
+    await expect(requestTokenRefresh(context, 'stale-rt')).rejects.toThrow('Invalid client_id');
   });
 });

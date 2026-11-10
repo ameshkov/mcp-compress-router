@@ -146,8 +146,13 @@ export type AuthStatus =
  * OAuth tokens and client registration for a single downstream server,
  * persisted in credentials.json.
  *
- * `tokens` is optional: an entry may exist only to cache the server's
- * auth requirement (the pre-login state, or the post-logout state).
+ * `tokens` and `clientRegistration` are independently optional. An entry
+ * may exist only to cache the server's auth requirement (the pre-login
+ * state or the post-logout state). A provider rejecting a stored client
+ * registration with `invalid_client` first removes only
+ * `clientRegistration` (the router's discard step, which keeps the stored
+ * tokens); follow-up SDK invalidation can then remove the stale tokens
+ * and leave a replacement registration without tokens.
  */
 export interface StoredCredentials {
   /**
@@ -170,13 +175,19 @@ export interface StoredCredentials {
   /**
    * The full dynamic client registration response.
    * undefined when oauth overrides are used (clientId/clientSecret
-   * provided in config).
+   * provided in config), when none is stored, or after the router
+   * discarded a registration the provider rejected with
+   * `invalid_client`. In that last case the runtime flow can store a
+   * replacement registration while the stale tokens are invalidated
+   * separately.
    */
   clientRegistration?: Record<string, unknown>;
   /**
    * OAuth tokens (access, refresh, expiry, scope, token_type).
    * Optional — may be absent for servers that were probed but never
-   * logged in (an entry exists only to cache `authRequirement`).
+   * logged in (an entry exists only to cache `authRequirement`), after
+   * logout, or after SDK invalidation removed stale tokens following a
+   * rejected client registration.
    */
   tokens?: {
     access_token: string;

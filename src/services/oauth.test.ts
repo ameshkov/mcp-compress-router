@@ -103,6 +103,28 @@ describe('OAuthCredentialManager', () => {
     expect(await mgr.clientInformation()).toBeUndefined();
   });
 
+  it('discardClientRegistration removes only the registration the provider rejected', async () => {
+    await writeCredentials(configPath, server.name, {
+      clientRegistration: { client_id: 'live-client', client_secret: 'live-secret' },
+      tokens: { access_token: 'stored-at', token_type: 'Bearer' },
+      authRequirement: 'oauth',
+    });
+    const mgr = new OAuthCredentialManager(configPath, server);
+
+    // A concurrent process already replaced the dead registration: the
+    // replacement must survive this attempt's invalidation.
+    await mgr.discardClientRegistration('stale-client');
+    expect((await readCredentials(configPath))[server.name]?.clientRegistration).toBeDefined();
+
+    await mgr.discardClientRegistration('live-client');
+    const store = await readCredentials(configPath);
+    expect(store[server.name]?.clientRegistration).toBeUndefined();
+    // Tokens bound to the dead client may still be valid until expiry;
+    // only the registration is discarded.
+    expect(store[server.name]?.tokens?.access_token).toBe('stored-at');
+    expect(store[server.name]?.authRequirement).toBe('oauth');
+  });
+
   it('clientInformation keeps a registration whose client secret has not expired', async () => {
     await writeCredentials(configPath, server.name, {
       clientRegistration: {
@@ -167,7 +189,7 @@ describe('OAuthCredentialManager', () => {
     expect(await mgr.clientInformation()).toBeUndefined();
   });
 
-  it('clearTokens preserves cached authRequirement on logout', async () => {
+  it('clearTokens preserves cached authRequirement for the SDK invalidation path', async () => {
     // Seed a fully authenticated entry that also carries a cached
     // auth requirement.
     await writeCredentials(configPath, server.name, {

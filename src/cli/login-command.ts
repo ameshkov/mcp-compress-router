@@ -3,22 +3,12 @@ import { Logger, validateOAuthClientName, validateOAuthClientUri } from '../util
 import { ensureConfigDir, readConfigFile, type RawServerEntry } from './config-io.js';
 import { loadConfig } from '../services/config.js';
 import { discoverAuth, discoverSingleServer, saveToolCache } from '../services/index.js';
-import { OAUTH_LOOPBACK_URI, OAuthCredentialManager } from '../services/oauth.js';
-import type {
-  OAuthClientInformationMixed,
-  OAuthProtectedResourceMetadata,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
-import { acquireAuthorizationCode, type AuthResult } from './login-callback-server.js';
+import { OAuthCredentialManager } from '../services/oauth.js';
+import type { OAuthProtectedResourceMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { beginAuthorization, exchangeAuthorizationCode } from './login-authorization.js';
+import { acquireAuthorizationCode } from './login-callback-server.js';
+import { getSdkAuth, type OAuthMetadata } from './login-sdk.js';
 import { createPasteReader, type PasteReader } from './login-paste.js';
-
-/** SDK OAuth metadata type (non-null after discovery). */
-type OAuthMetadata = NonNullable<
-  Awaited<
-    ReturnType<
-      typeof import('@modelcontextprotocol/sdk/client/auth.js').discoverAuthorizationServerMetadata
-    >
-  >
->;
 
 /**
  * Validates that a server exists in config and is eligible for OAuth login.
@@ -59,16 +49,6 @@ async function validateServerForLogin(
   }
 
   return { entry, targetServer };
-}
-
-// Cached lazy imports for SDK OAuth modules.
-let _sdkAuth: typeof import('@modelcontextprotocol/sdk/client/auth.js') | undefined;
-
-async function _getSdkAuth(): Promise<typeof import('@modelcontextprotocol/sdk/client/auth.js')> {
-  if (!_sdkAuth) {
-    _sdkAuth = await import('@modelcontextprotocol/sdk/client/auth.js');
-  }
-  return _sdkAuth;
 }
 
 // Cached lazy import for the browser launcher.
@@ -117,146 +97,6 @@ async function discoverOAuthMetadata(
     requireIssuer: discovered.authorizationResponseIssParameterSupported,
     resourceMetadata: discovered.resourceMetadata,
   };
-}
-
-/**
- * Whether a stored client registration covers the portless loopback
- * redirect URI. The comparison ignores the port (RFC 8252 §8.4 excludes
- * it from loopback redirect matching) but requires the scheme, host, and
- * path to match, so a registration for a different host (e.g.
- * `localhost`) is not reused.
- *
- * @param client - The stored client registration.
- * @returns True when at least one registered redirect URI matches
- *   {@link OAUTH_LOOPBACK_URI} ignoring the port.
- */
-function _registrationCoversLoopback(client: OAuthClientInformationMixed): boolean {
-  if (!('redirect_uris' in client) || client.redirect_uris.length === 0) {
-    return false;
-  }
-  const expected = new URL(OAUTH_LOOPBACK_URI);
-  return client.redirect_uris.some((entry) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(entry);
-    } catch {
-      return false;
-    }
-    return (
-      parsed.protocol === expected.protocol &&
-      parsed.hostname === expected.hostname &&
-      parsed.pathname === expected.pathname
-    );
-  });
-}
-
-/**
- * Whether a stored client registration can be reused for this login.
- *
- * The registered redirect URIs must cover the portless loopback callback
- * URI (see {@link _registrationCoversLoopback}). When the server
- * configures a `client_name` or `client_uri` override, the stored
- * registration must carry the same value for that field. Identity fields
- * the stored registration does not contain are ignored: legacy
- * registrations (and providers that do not echo the metadata) stay
- * reusable instead of being re-registered on every login.
- *
- * @param client - The stored client registration.
- * @param server - The effective downstream server configuration.
- * @returns True when the stored registration can be reused as-is.
- */
-function _registrationMatches(
-  client: OAuthClientInformationMixed,
-  server: DownstreamServerConfig,
-): boolean {
-  if (!_registrationCoversLoopback(client)) {
-    return false;
-  }
-  const { clientName, clientUri } = server.oauth ?? {};
-  if (clientName !== undefined && 'client_name' in client && client.client_name !== clientName) {
-    return false;
-  }
-  if (clientUri !== undefined && 'client_uri' in client && client.client_uri !== clientUri) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Registers a client through dynamic client registration (RFC 7591) unless
- * a static `oauth.clientId` override is configured or a stored registration
- * matches the loopback redirect URI and the configured client identity.
- * Registration does not depend on the callback port: the registered URI is
- * the portless {@link OAUTH_LOOPBACK_URI}, and RFC 8252 §8.4 excludes the
- * port from loopback redirect matching.
- *
- * @param mgr - OAuth credential manager for the target server.
- * @param metadata - Discovered OAuth metadata.
- * @param name - Server name (for error messages).
- * @param server - The effective downstream server configuration (config
- *   plus any `login` overrides), used for the identity comparison.
- * @throws If the server does not support dynamic client registration and no
- *   reusable registration or static client is available.
- */
-async function registerClientIfNeeded(
-  mgr: OAuthCredentialManager,
-  metadata: OAuthMetadata,
-  name: string,
-  server: DownstreamServerConfig,
-): Promise<void> {
-  if (mgr.hasStaticClient()) {
-    return;
-  }
-  const stored = await mgr.clientInformation();
-  if (stored && _registrationMatches(stored, server)) {
-    return;
-  }
-  if (!metadata.registration_endpoint) {
-    throw new Error(
-      `Server "${name}" does not support dynamic client registration. Configure an "oauth.clientId" override in mcp.json with a pre-registered client ID.`,
-    );
-  }
-  const { registerClient } = await _getSdkAuth();
-  const registration = await registerClient(new URL(metadata.registration_endpoint), {
-    metadata,
-    clientMetadata: mgr.clientMetadata,
-  });
-  await mgr.saveClientInformation(registration);
-}
-
-/**
- * Registers the client if needed and builds the authorization URL. Passed to
- * the callback server as its post-listen hook, so it runs once the real
- * callback port is known and the authorization request carries it.
- *
- * @param mgr - OAuth credential manager for the target server.
- * @param metadata - Discovered OAuth metadata.
- * @param targetServer - Typed downstream server configuration.
- * @param name - Server name (for error messages).
- * @param state - CSRF state generated for this login attempt.
- * @param resource - RFC 8707 resource indicator selected from the
- *   server's Protected Resource Metadata, or undefined when the server
- *   publishes none (the SDK then omits the `resource` parameter).
- * @returns The `startAuthorization` result.
- */
-async function beginAuthorization(
-  mgr: OAuthCredentialManager,
-  metadata: OAuthMetadata,
-  targetServer: DownstreamServerConfig,
-  name: string,
-  state: string,
-  resource: URL | undefined,
-): Promise<AuthResult> {
-  await registerClientIfNeeded(mgr, metadata, name, targetServer);
-  const { startAuthorization } = await _getSdkAuth();
-  return startAuthorization(new URL(metadata.authorization_endpoint!), {
-    metadata,
-    clientInformation: (await mgr.clientInformation())!,
-    redirectUrl: mgr.redirectUrl as string,
-    scope: targetServer.oauth?.scope,
-    state,
-    resource,
-  });
 }
 
 /**
@@ -408,11 +248,20 @@ function _createManualReader(): {
  * `--client-uri` overrides replace the configured `oauth.clientName` /
  * `oauth.clientUri` for this login only and are not persisted.
  *
+ * When the token endpoint rejects the stored dynamic client
+ * registration with `invalid_client`, the registration is discarded and
+ * the error names the login command to run again. The runtime refresh
+ * path discards a rejected registration too, so a new client
+ * registration replaces the dead one: the runtime flow (the SDK's
+ * `auth()` retry) may register it during the same call, while the login
+ * token exchange leaves it to the next login.
+ *
  * @param configPath - Absolute path to the mcp.json file.
  * @param name - Server name to authenticate.
  * @param options - Optional login options.
  * @returns Human-readable confirmation message.
- * @throws If the server name is not found or is not an HTTP type.
+ * @throws If the server name is not found, is not an HTTP type, or if
+ *   the provider rejects the configured or stored client.
  */
 export async function handleLogin(
   configPath: string,
@@ -439,7 +288,7 @@ export async function handleLogin(
   // different issuer must not be reused.
   mgr.setIssuer(metadata.issuer);
 
-  const { selectResourceURL, exchangeAuthorization } = await _getSdkAuth();
+  const { selectResourceURL } = await getSdkAuth();
 
   // RFC 8707 resource indicator, selected from the server's Protected
   // Resource Metadata the same way the SDK's auth() flow selects it.
@@ -460,13 +309,10 @@ export async function handleLogin(
       beginAuthorization(mgr, metadata, effectiveServer, name, state, resource),
   }).finally(manualReader.close);
 
-  const realRedirectUrl = mgr.redirectUrl as string;
-  const tokens = await exchangeAuthorization(new URL(metadata.token_endpoint!), {
-    metadata,
-    clientInformation: (await mgr.clientInformation())!,
+  const tokens = await exchangeAuthorizationCode(mgr, metadata, name, {
     authorizationCode,
     codeVerifier: authResult.codeVerifier,
-    redirectUri: realRedirectUrl,
+    redirectUri: mgr.redirectUrl as string,
     resource,
   });
 
@@ -477,7 +323,7 @@ export async function handleLogin(
 }
 
 /**
- * Best-effort tool discovery after a successful login: saves the fresh
+ * Best-effort tool discovery after a login completes: saves the fresh
  * tool list to the cache so the next router startup (or self-recovery)
  * has an up-to-date cache. Failures are ignored — the tokens are already
  * stored, and the cache refreshes on the next router startup.

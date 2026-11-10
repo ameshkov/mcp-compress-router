@@ -7,13 +7,16 @@
  * the authorization-code + PKCE flow for the router's `login` command
  * to work headlessly. Like a strict provider, it requires the RFC 8707
  * `resource` parameter on the authorization and token requests and logs
- * the value it received. The authorization endpoint auto-approves and
- * redirects straight back to the caller's loopback callback, so the QA
- * workspace only needs a tiny curl-based "browser" (`qa-browser`)
- * instead of a real one.
+ * the value it received. Authorization codes and refresh tokens are
+ * bound to the client they were issued to, so another client cannot
+ * redeem them. The authorization endpoint auto-approves and redirects
+ * straight back to the caller's loopback callback, so the QA workspace
+ * only needs a tiny curl-based "browser" (`qa-browser`) instead of a
+ * real one.
  */
-import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { handleToken } from './oauth-token.js';
+import { randomToken, sendJson } from './oauth-utils.js';
 
 /** Registered client and issued-token state of the mock AS. */
 export interface OAuthMockState {
@@ -21,12 +24,19 @@ export interface OAuthMockState {
   issuer: string;
   /** Dynamically registered clients by client id. */
   clients: Map<string, { clientSecret: string; redirectUris: string[] }>;
-  /** Issued authorization codes by code. */
+  /**
+   * Client ids the provider forgot or revoked. A revoked client id is
+   * rejected with `invalid_client` at the authorization and token
+   * endpoints, like a provider whose registration database no longer
+   * knows it.
+   */
+  revokedClients: Set<string>;
+  /** Issued authorization codes by code, each bound to the client that requested it. */
   codes: Map<string, { clientId: string; redirectUri: string }>;
   /** Valid access tokens. */
   accessTokens: Set<string>;
-  /** Valid refresh tokens. */
-  refreshTokens: Set<string>;
+  /** Valid refresh tokens, each bound to the client that requested it. */
+  refreshTokens: Map<string, string>;
 }
 
 /**
@@ -39,38 +49,11 @@ export function createOAuthState(issuer: string): OAuthMockState {
   return {
     issuer,
     clients: new Map(),
+    revokedClients: new Set(),
     codes: new Map(),
     accessTokens: new Set(),
-    refreshTokens: new Set(),
+    refreshTokens: new Map(),
   };
-}
-
-/**
- * Generates one opaque mock token.
- *
- * @param prefix - A readable prefix (`client`, `code`, `at`, `rt`).
- * @returns The token string.
- */
-function randomToken(prefix: string): string {
-  return `${prefix}-${randomBytes(12).toString('hex')}`;
-}
-
-/**
- * Writes one JSON response.
- *
- * @param res - The server response.
- * @param status - The HTTP status code.
- * @param body - The JSON body.
- * @param headers - Additional response headers.
- */
-function sendJson(
-  res: ServerResponse,
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {},
-): void {
-  res.writeHead(status, { 'content-type': 'application/json', ...headers });
-  res.end(JSON.stringify(body));
 }
 
 /**
@@ -197,6 +180,33 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
+ * Handles the QA control endpoint that makes the provider forget a
+ * registered client, like a provider whose registration database no
+ * longer knows it. Later authorization and token requests carrying that
+ * `client_id` are rejected with `invalid_client`.
+ *
+ * @param res - The server response.
+ * @param body - The raw JSON request body (`{ "client_id": "..." }`).
+ * @param state - The mock AS state.
+ */
+function handleRevokeClient(res: ServerResponse, body: string, state: OAuthMockState): void {
+  let clientId: string | undefined;
+  try {
+    const parsed = JSON.parse(body) as { client_id?: unknown };
+    clientId = typeof parsed.client_id === 'string' ? parsed.client_id : undefined;
+  } catch {
+    clientId = undefined;
+  }
+  if (!clientId) {
+    sendJson(res, 400, { error: 'invalid_request', error_description: 'missing client_id' });
+    return;
+  }
+  state.revokedClients.add(clientId);
+  console.log(`[mock-mcp-http-oauth] revoked client ${clientId}`);
+  sendJson(res, 200, { revoked: clientId });
+}
+
+/**
  * Handles the authorization endpoint (auto-approves and redirects).
  *
  * Matches `redirect_uri` against the client registration under the
@@ -215,6 +225,12 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
     sendJson(res, 400, { error: 'invalid_request', error_description: 'missing redirect_uri' });
     return;
   }
+  const clientId = url.searchParams.get('client_id') ?? '';
+  if (state.revokedClients.has(clientId)) {
+    console.log(`[mock-mcp-http-oauth] rejected revoked client ${clientId} at /authorize`);
+    sendJson(res, 400, { error: 'invalid_client', error_description: 'Invalid client_id' });
+    return;
+  }
   const resource = url.searchParams.get('resource');
   if (resource === null) {
     console.log('[mock-mcp-http-oauth] rejected authorize without resource (RFC 8707)');
@@ -224,7 +240,6 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
     });
     return;
   }
-  const clientId = url.searchParams.get('client_id') ?? '';
   const registered = state.clients.get(clientId);
   // A dynamically registered client must use one of its registered
   // redirect URIs; an unknown client is let through so a static client_id
@@ -255,58 +270,6 @@ function handleAuthorize(url: URL, res: ServerResponse, state: OAuthMockState): 
   );
   res.writeHead(302, { location: location.toString() });
   res.end();
-}
-
-/**
- * Handles the token endpoint for code exchange and refresh. Requires the
- * RFC 8707 `resource` parameter, like a strict provider.
- *
- * @param res - The server response.
- * @param body - The raw form-encoded request body.
- * @param state - The mock AS state.
- */
-function handleToken(res: ServerResponse, body: string, state: OAuthMockState): void {
-  const params = new URLSearchParams(body);
-  const grantType = params.get('grant_type');
-  const resource = params.get('resource');
-  if (resource === null) {
-    console.log('[mock-mcp-http-oauth] rejected token request without resource (RFC 8707)');
-    sendJson(res, 400, {
-      error: 'invalid_target',
-      error_description: 'The resource (RFC 8707) parameter is required',
-    });
-    return;
-  }
-  if (grantType === 'authorization_code') {
-    const code = params.get('code');
-    if (code === null || !state.codes.has(code)) {
-      sendJson(res, 400, { error: 'invalid_grant', error_description: 'unknown code' });
-      return;
-    }
-    state.codes.delete(code);
-  } else if (grantType === 'refresh_token') {
-    const refreshToken = params.get('refresh_token');
-    if (refreshToken === null || !state.refreshTokens.has(refreshToken)) {
-      sendJson(res, 400, { error: 'invalid_grant', error_description: 'unknown refresh token' });
-      return;
-    }
-    state.refreshTokens.delete(refreshToken);
-  } else {
-    sendJson(res, 400, { error: 'unsupported_grant_type' });
-    return;
-  }
-  const accessToken = randomToken('at');
-  const refreshToken = randomToken('rt');
-  state.accessTokens.add(accessToken);
-  state.refreshTokens.add(refreshToken);
-  console.log(`[mock-mcp-http-oauth] issued tokens (${grantType}, resource=${resource})`);
-  sendJson(res, 200, {
-    access_token: accessToken,
-    token_type: 'Bearer',
-    expires_in: 3600,
-    refresh_token: refreshToken,
-    scope: 'read write',
-  });
 }
 
 /**
@@ -356,6 +319,10 @@ export async function handleOAuthRequest(
   }
   if (method === 'POST' && url.pathname === '/register') {
     handleRegister(res, body, state);
+    return true;
+  }
+  if (method === 'POST' && url.pathname === '/test/revoke-client') {
+    handleRevokeClient(res, body, state);
     return true;
   }
   if (method === 'GET' && url.pathname === '/authorize') {
