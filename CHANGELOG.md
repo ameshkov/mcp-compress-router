@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v4.0.2] - 2026-11-10
+
 ### Fixed
 
 - Fixed OAuth `login` and token refresh keeping a dynamic client
@@ -660,6 +662,7 @@ The changes below are based on
 - JSON Schema argument validation for `invoke_tool`.
 
 [unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.1...HEAD
+[v4.0.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.2
 [v4.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.1
 [v4.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.0
 [v3.2.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v3.2.1
