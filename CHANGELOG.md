@@ -661,7 +661,7 @@ The changes below are based on
 - Compact catalog text renderer for tool listings.
 - JSON Schema argument validation for `invoke_tool`.
 
-[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.1...HEAD
+[unreleased]: https://github.com/ameshkov/mcp-compress-router/compare/v4.0.2...HEAD
 [v4.0.2]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.2
 [v4.0.1]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.1
 [v4.0.0]: https://github.com/ameshkov/mcp-compress-router/releases/tag/v4.0.0
